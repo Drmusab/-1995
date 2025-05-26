@@ -1,1556 +1,1368 @@
 """
-Advanced Session Management System for AI Assistant
+Advanced Plugin Management System
 Author: Drmusab
-Last Modified: 2025-05-26 15:59:42 UTC
+Last Modified: 2025-05-26 16:13:03 UTC
 
-This module provides comprehensive session management for the AI assistant,
-handling user sessions, state persistence, context management, and seamless
-integration with all core system components.
+This module provides comprehensive plugin lifecycle management for the AI assistant,
+including dynamic loading, sandboxing, dependency resolution, hot-reloading, and
+seamless integration with the core system components.
 """
 
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Set, Callable, Type, Union, AsyncGenerator, TypeVar
+from typing import Optional, Dict, Any, List, Set, Callable, Type, Union, AsyncGenerator, Protocol
 import asyncio
 import threading
 import time
-from datetime import datetime, timezone, timedelta
-from dataclasses import dataclass, field, asdict
+import importlib
+import importlib.util
+import sys
+import inspect
+import hashlib
+import json
+import subprocess
+from datetime import datetime, timezone
+from dataclasses import dataclass, field
 from enum import Enum
 from contextlib import asynccontextmanager
-import uuid
-import json
-import hashlib
-from collections import defaultdict, deque
+import logging
 import weakref
 from abc import ABC, abstractmethod
-import logging
-import pickle
-import base64
+import uuid
+import shutil
+import tempfile
+import zipfile
+import tarfile
 from concurrent.futures import ThreadPoolExecutor
 
 # Core imports
 from src.core.config.loader import ConfigLoader
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    SessionStarted, SessionEnded, SessionExpired, SessionRestored,
-    SessionContextUpdated, SessionStateChanged, SessionCleanupStarted,
-    SessionCleanupCompleted, UserJoinedSession, UserLeftSession,
-    SessionMigrated, SessionClusteringStarted, SessionHealthCheckFailed,
-    ErrorOccurred, SystemStateChanged, ComponentHealthChanged
+    PluginLoaded, PluginUnloaded, PluginEnabled, PluginDisabled,
+    PluginError, PluginDependencyResolved, PluginHotReloaded,
+    PluginSecurityViolation, PluginPerformanceWarning
 )
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.dependency_injection import Container
 from src.core.health_check import HealthCheck
 from src.core.security.authentication import AuthenticationManager
 from src.core.security.authorization import AuthorizationManager
-from src.core.security.encryption import EncryptionManager
+from src.core.security.sanitization import SecuritySanitizer
 
-# Memory and storage
-from src.memory.memory_manager import MemoryManager
-from src.memory.context_manager import ContextManager
-from src.memory.working_memory import WorkingMemory
-from src.memory.episodic_memory import EpisodicMemory
-from src.integrations.storage.database import DatabaseManager
-from src.integrations.cache.redis_cache import RedisCache
-from src.integrations.storage.backup_manager import BackupManager
+# Assistant components
+from src.assistant.component_manager import EnhancedComponentManager, ComponentMetadata, ComponentPriority
+from src.assistant.workflow_orchestrator import WorkflowOrchestrator, WorkflowDefinition
+from src.assistant.session_manager import EnhancedSessionManager
+from src.assistant.interaction_handler import InteractionHandler
 
-# Learning and adaptation
-from src.learning.continual_learning import ContinualLearner
-from src.learning.preference_learning import PreferenceLearner
-from src.learning.feedback_processor import FeedbackProcessor
+# Skills and processing
+from src.skills.skill_factory import SkillFactory
+from src.skills.skill_registry import SkillRegistry
+from src.skills.skill_validator import SkillValidator
 
 # Observability
 from src.observability.monitoring.metrics import MetricsCollector
 from src.observability.monitoring.tracing import TraceManager
 from src.observability.logging.config import get_logger
 
-# Type definitions
-T = TypeVar('T')
+# Memory and learning
+from src.memory.core_memory.memory_manager import MemoryManager
+from src.learning.feedback_processor import FeedbackProcessor
 
 
-class SessionState(Enum):
-    """Session lifecycle states."""
-    INITIALIZING = "initializing"
-    ACTIVE = "active"
-    IDLE = "idle"
-    PAUSED = "paused"
+class PluginState(Enum):
+    """Plugin lifecycle states."""
+    DISCOVERED = "discovered"
+    VALIDATED = "validated"
+    LOADED = "loaded"
+    INITIALIZED = "initialized"
+    ENABLED = "enabled"
+    DISABLED = "disabled"
     SUSPENDED = "suspended"
-    EXPIRING = "expiring"
-    EXPIRED = "expired"
-    TERMINATED = "terminated"
     ERROR = "error"
-    MIGRATING = "migrating"
+    UNLOADED = "unloaded"
+    UPDATING = "updating"
+    INSTALLING = "installing"
+    UNINSTALLING = "uninstalling"
 
 
-class SessionType(Enum):
-    """Types of sessions."""
-    INTERACTIVE = "interactive"      # Real-time user interaction
-    BATCH = "batch"                 # Batch processing session
-    API = "api"                     # API-based session
-    BACKGROUND = "background"       # Background processing
-    SYSTEM = "system"               # System maintenance session
-    GUEST = "guest"                 # Anonymous guest session
-    AUTHENTICATED = "authenticated" # Authenticated user session
+class PluginType(Enum):
+    """Types of plugins supported by the system."""
+    SKILL = "skill"                      # New AI skills
+    PROCESSOR = "processor"              # Data processors
+    INTEGRATION = "integration"          # External integrations
+    UI_COMPONENT = "ui_component"        # User interface components
+    WORKFLOW_EXTENSION = "workflow_extension"  # Workflow extensions
+    MEMORY_PROVIDER = "memory_provider"  # Memory providers
+    LEARNING_MODULE = "learning_module"  # Learning modules
+    SECURITY_MODULE = "security_module"  # Security modules
+    MIDDLEWARE = "middleware"            # API middleware
+    UTILITY = "utility"                  # Utility functions
+    THEME = "theme"                      # UI themes
+    LANGUAGE_PACK = "language_pack"      # Localization
 
 
-class SessionPriority(Enum):
-    """Session priority levels."""
-    LOW = 0
-    NORMAL = 1
-    HIGH = 2
-    CRITICAL = 3
-    SYSTEM = 4
+class PluginLoadMode(Enum):
+    """Plugin loading modes."""
+    EAGER = "eager"          # Load immediately
+    LAZY = "lazy"            # Load on first use
+    ON_DEMAND = "on_demand"  # Load when explicitly requested
+    SCHEDULED = "scheduled"  # Load at specific times
 
 
-class ClusterNode(Enum):
-    """Session clustering node types."""
-    PRIMARY = "primary"
-    SECONDARY = "secondary"
-    REPLICA = "replica"
-    BACKUP = "backup"
-
-
-@dataclass
-class SessionConfiguration:
-    """Configuration settings for a session."""
-    session_type: SessionType = SessionType.INTERACTIVE
-    priority: SessionPriority = SessionPriority.NORMAL
-    max_idle_time: float = 1800.0  # 30 minutes
-    max_session_time: float = 86400.0  # 24 hours
-    cleanup_on_expire: bool = True
-    persist_context: bool = True
-    enable_clustering: bool = False
-    enable_backup: bool = True
-    auto_save_interval: float = 300.0  # 5 minutes
-    context_window_size: int = 4096
-    memory_limit_mb: float = 512.0
-    cpu_limit_percent: float = 50.0
-    network_timeout: float = 30.0
-    encryption_enabled: bool = True
-    compression_enabled: bool = True
-    audit_logging: bool = True
-    analytics_enabled: bool = True
+class SecurityLevel(Enum):
+    """Plugin security levels."""
+    UNTRUSTED = "untrusted"      # No special permissions
+    SANDBOX = "sandbox"          # Limited sandbox environment
+    TRUSTED = "trusted"          # Full system access
+    SYSTEM = "system"            # System-level access
+    VERIFIED = "verified"        # Cryptographically verified
 
 
 @dataclass
-class SessionContext:
-    """Comprehensive session context data."""
-    session_id: str
-    user_id: Optional[str] = None
-    
-    # Session metadata
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_heartbeat: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    
-    # User information
-    user_profile: Dict[str, Any] = field(default_factory=dict)
-    user_preferences: Dict[str, Any] = field(default_factory=dict)
-    authentication_data: Dict[str, Any] = field(default_factory=dict)
-    
-    # Conversation state
-    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
-    current_topic: Optional[str] = None
-    conversation_flow: List[str] = field(default_factory=list)
-    
-    # Processing context
-    active_workflows: Set[str] = field(default_factory=set)
-    interaction_history: List[Dict[str, Any]] = field(default_factory=list)
-    processing_queue: List[Dict[str, Any]] = field(default_factory=list)
-    
-    # Memory context
-    working_memory_data: Dict[str, Any] = field(default_factory=dict)
-    episodic_memories: List[str] = field(default_factory=list)
-    semantic_context: Dict[str, Any] = field(default_factory=dict)
-    
-    # Environment context
-    device_info: Dict[str, Any] = field(default_factory=dict)
-    network_info: Dict[str, Any] = field(default_factory=dict)
-    location_info: Dict[str, Any] = field(default_factory=dict)
-    timezone_info: str = "UTC"
-    
-    # Technical context
-    api_keys: Dict[str, str] = field(default_factory=dict)
-    feature_flags: Dict[str, bool] = field(default_factory=dict)
-    experiments: Dict[str, Any] = field(default_factory=dict)
-    
-    # Performance context
-    performance_metrics: Dict[str, float] = field(default_factory=dict)
-    resource_usage: Dict[str, float] = field(default_factory=dict)
-    quality_settings: Dict[str, str] = field(default_factory=dict)
-    
-    # Custom data
-    custom_data: Dict[str, Any] = field(default_factory=dict)
-    tags: Set[str] = field(default_factory=set)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+class PluginDependency:
+    """Represents a plugin dependency."""
+    plugin_id: str
+    version_requirement: str = "*"  # Semantic version requirement
+    optional: bool = False
+    auto_install: bool = False
+    load_order: int = 0  # Loading order priority
 
 
 @dataclass
-class SessionInfo:
-    """Runtime session information."""
-    session_id: str
-    state: SessionState = SessionState.INITIALIZING
-    config: SessionConfiguration = field(default_factory=SessionConfiguration)
-    context: SessionContext = field(default_factory=lambda: SessionContext(""))
+class PluginCapability:
+    """Represents a capability provided by a plugin."""
+    name: str
+    version: str
+    interface: Type
+    description: Optional[str] = None
+    category: Optional[str] = None
+
+
+@dataclass
+class PluginMetadata:
+    """Comprehensive plugin metadata."""
+    plugin_id: str
+    name: str
+    version: str
+    description: str
+    author: str
     
-    # Lifecycle tracking
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    started_at: Optional[datetime] = None
-    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    expires_at: Optional[datetime] = None
+    # Plugin characteristics
+    plugin_type: PluginType
+    load_mode: PluginLoadMode = PluginLoadMode.EAGER
+    security_level: SecurityLevel = SecurityLevel.UNTRUSTED
     
-    # Resource tracking
-    memory_usage_mb: float = 0.0
-    cpu_usage_percent: float = 0.0
-    network_bytes_sent: int = 0
-    network_bytes_received: int = 0
+    # Dependencies and capabilities
+    dependencies: List[PluginDependency] = field(default_factory=list)
+    system_dependencies: List[str] = field(default_factory=list)
+    provides: List[PluginCapability] = field(default_factory=list)
     
-    # Health and performance
-    health_score: float = 1.0
-    response_time_avg: float = 0.0
+    # Entry points
+    main_class: Optional[str] = None
+    entry_points: Dict[str, str] = field(default_factory=dict)
+    
+    # Configuration
+    config_schema: Dict[str, Any] = field(default_factory=dict)
+    default_config: Dict[str, Any] = field(default_factory=dict)
+    
+    # Resource requirements
+    memory_limit_mb: float = 256.0
+    cpu_limit_percent: float = 10.0
+    network_access: bool = False
+    file_system_access: bool = False
+    
+    # Lifecycle hooks
+    install_hooks: List[str] = field(default_factory=list)
+    uninstall_hooks: List[str] = field(default_factory=list)
+    
+    # Metadata
+    homepage: Optional[str] = None
+    repository: Optional[str] = None
+    license: Optional[str] = None
+    keywords: List[str] = field(default_factory=list)
+    categories: List[str] = field(default_factory=list)
+    
+    # System integration
+    api_version: str = "1.0.0"
+    min_system_version: str = "1.0.0"
+    max_system_version: Optional[str] = None
+    
+    # Security
+    signature: Optional[str] = None
+    checksum: Optional[str] = None
+    permissions: Set[str] = field(default_factory=set)
+    
+    # Installation info
+    installation_date: Optional[datetime] = None
+    update_date: Optional[datetime] = None
+    source_url: Optional[str] = None
+
+
+@dataclass
+class PluginInfo:
+    """Runtime plugin information."""
+    metadata: PluginMetadata
+    state: PluginState = PluginState.DISCOVERED
+    
+    # Runtime data
+    module: Optional[Any] = None
+    instance: Optional[Any] = None
+    installation_path: Optional[Path] = None
+    
+    # Performance metrics
+    load_time: float = 0.0
+    memory_usage: float = 0.0
+    cpu_usage: float = 0.0
     error_count: int = 0
     warning_count: int = 0
     
-    # Clustering information
-    cluster_node: Optional[str] = None
-    primary_node: Optional[str] = None
-    replica_nodes: Set[str] = field(default_factory=set)
+    # Health information
+    last_health_check: Optional[datetime] = None
+    health_status: str = "unknown"
     
-    # Version and consistency
-    version: int = 1
-    checksum: Optional[str] = None
-    last_backup: Optional[datetime] = None
+    # Usage statistics
+    activation_count: int = 0
+    last_used: Optional[datetime] = None
+    usage_statistics: Dict[str, Any] = field(default_factory=dict)
     
-    # Statistics
-    interaction_count: int = 0
-    workflow_count: int = 0
-    message_count: int = 0
-    total_processing_time: float = 0.0
+    # Error tracking
+    last_error: Optional[Exception] = None
+    error_history: List[Dict[str, Any]] = field(default_factory=list)
 
 
-class SessionError(Exception):
-    """Custom exception for session management operations."""
+class PluginError(Exception):
+    """Custom exception for plugin management operations."""
     
-    def __init__(self, message: str, session_id: Optional[str] = None, 
-                 error_code: Optional[str] = None, user_id: Optional[str] = None):
+    def __init__(self, message: str, plugin_id: Optional[str] = None, 
+                 error_code: Optional[str] = None):
         super().__init__(message)
-        self.session_id = session_id
+        self.plugin_id = plugin_id
         self.error_code = error_code
-        self.user_id = user_id
         self.timestamp = datetime.now(timezone.utc)
 
 
-class SessionStore(ABC):
-    """Abstract interface for session storage backends."""
+class PluginInterface(Protocol):
+    """Base interface that all plugins should implement."""
     
-    @abstractmethod
-    async def store_session(self, session_info: SessionInfo) -> None:
-        """Store session information."""
-        pass
+    def get_metadata(self) -> PluginMetadata:
+        """Get plugin metadata."""
+        ...
     
-    @abstractmethod
-    async def load_session(self, session_id: str) -> Optional[SessionInfo]:
-        """Load session information."""
-        pass
+    async def initialize(self, container: Container) -> None:
+        """Initialize the plugin."""
+        ...
     
-    @abstractmethod
-    async def delete_session(self, session_id: str) -> None:
-        """Delete session information."""
-        pass
+    async def activate(self) -> None:
+        """Activate the plugin."""
+        ...
     
-    @abstractmethod
-    async def list_sessions(self, user_id: Optional[str] = None) -> List[str]:
-        """List session IDs."""
-        pass
+    async def deactivate(self) -> None:
+        """Deactivate the plugin."""
+        ...
     
-    @abstractmethod
-    async def cleanup_expired_sessions(self) -> int:
-        """Clean up expired sessions and return count."""
-        pass
+    async def cleanup(self) -> None:
+        """Cleanup plugin resources."""
+        ...
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Return plugin health status."""
+        ...
 
 
-class MemorySessionStore(SessionStore):
-    """In-memory session store for development and testing."""
+class PluginSandbox:
+    """Provides sandboxed execution environment for untrusted plugins."""
     
-    def __init__(self):
-        self.sessions: Dict[str, SessionInfo] = {}
-        self.user_sessions: Dict[str, Set[str]] = defaultdict(set)
-        self.lock = threading.Lock()
+    def __init__(self, plugin_id: str, security_level: SecurityLevel):
+        self.plugin_id = plugin_id
+        self.security_level = security_level
+        self.logger = get_logger(f"plugin_sandbox_{plugin_id}")
+        self._resource_limits = {}
+        self._allowed_modules = set()
+        self._restricted_attributes = set()
     
-    async def store_session(self, session_info: SessionInfo) -> None:
-        """Store session in memory."""
-        with self.lock:
-            self.sessions[session_info.session_id] = session_info
-            if session_info.context.user_id:
-                self.user_sessions[session_info.context.user_id].add(session_info.session_id)
+    def configure_sandbox(self, config: Dict[str, Any]) -> None:
+        """Configure sandbox restrictions."""
+        self._resource_limits = config.get('resource_limits', {})
+        self._allowed_modules = set(config.get('allowed_modules', []))
+        self._restricted_attributes = set(config.get('restricted_attributes', []))
     
-    async def load_session(self, session_id: str) -> Optional[SessionInfo]:
-        """Load session from memory."""
-        with self.lock:
-            return self.sessions.get(session_id)
-    
-    async def delete_session(self, session_id: str) -> None:
-        """Delete session from memory."""
-        with self.lock:
-            session_info = self.sessions.pop(session_id, None)
-            if session_info and session_info.context.user_id:
-                self.user_sessions[session_info.context.user_id].discard(session_id)
-    
-    async def list_sessions(self, user_id: Optional[str] = None) -> List[str]:
-        """List sessions in memory."""
-        with self.lock:
-            if user_id:
-                return list(self.user_sessions.get(user_id, set()))
-            return list(self.sessions.keys())
-    
-    async def cleanup_expired_sessions(self) -> int:
-        """Clean up expired sessions."""
-        current_time = datetime.now(timezone.utc)
-        expired_sessions = []
+    def execute_in_sandbox(self, func: Callable, *args, **kwargs) -> Any:
+        """Execute function in sandboxed environment."""
+        if self.security_level == SecurityLevel.TRUSTED:
+            return func(*args, **kwargs)
         
-        with self.lock:
-            for session_id, session_info in self.sessions.items():
-                if session_info.expires_at and current_time > session_info.expires_at:
-                    expired_sessions.append(session_id)
+        # Implement sandbox restrictions
+        original_import = __builtins__['__import__']
         
-        for session_id in expired_sessions:
-            await self.delete_session(session_id)
+        def restricted_import(name, *args, **kwargs):
+            if name not in self._allowed_modules and not name.startswith('src.'):
+                raise ImportError(f"Module {name} not allowed in sandbox")
+            return original_import(name, *args, **kwargs)
         
-        return len(expired_sessions)
+        try:
+            __builtins__['__import__'] = restricted_import
+            return func(*args, **kwargs)
+        finally:
+            __builtins__['__import__'] = original_import
 
 
-class DatabaseSessionStore(SessionStore):
-    """Database-backed session store for production."""
+class PluginLoader:
+    """Handles dynamic plugin loading and unloading."""
     
-    def __init__(self, database: DatabaseManager, encryption: Optional[EncryptionManager] = None):
-        self.database = database
-        self.encryption = encryption
-        self.logger = get_logger(__name__)
+    def __init__(self, logger):
+        self.logger = logger
+        self._loaded_modules: Dict[str, Any] = {}
+        self._module_paths: Dict[str, Path] = {}
     
-    async def store_session(self, session_info: SessionInfo) -> None:
-        """Store session in database."""
+    async def load_plugin_from_path(self, plugin_path: Path) -> Optional[Any]:
+        """Load a plugin from a file path."""
         try:
-            # Serialize session data
-            session_data = self._serialize_session(session_info)
+            # Read plugin metadata
+            metadata_file = plugin_path / "plugin.json"
+            if not metadata_file.exists():
+                raise PluginError(f"Plugin metadata not found: {metadata_file}")
             
-            # Encrypt if enabled
-            if self.encryption:
-                session_data = await self.encryption.encrypt(session_data)
+            with open(metadata_file, 'r') as f:
+                metadata_dict = json.load(f)
             
-            # Store in database
-            await self.database.execute(
-                """
-                INSERT INTO sessions (session_id, user_id, state, data, created_at, expires_at, checksum)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (session_id) DO UPDATE SET
-                    state = excluded.state,
-                    data = excluded.data,
-                    expires_at = excluded.expires_at,
-                    checksum = excluded.checksum,
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    session_info.session_id,
-                    session_info.context.user_id,
-                    session_info.state.value,
-                    session_data,
-                    session_info.created_at,
-                    session_info.expires_at,
-                    session_info.checksum
-                )
-            )
+            metadata = self._parse_metadata(metadata_dict)
             
-        except Exception as e:
-            self.logger.error(f"Failed to store session {session_info.session_id}: {str(e)}")
-            raise SessionError(f"Failed to store session: {str(e)}", session_info.session_id)
-    
-    async def load_session(self, session_id: str) -> Optional[SessionInfo]:
-        """Load session from database."""
-        try:
-            result = await self.database.fetch_one(
-                "SELECT data, checksum FROM sessions WHERE session_id = ? AND state != 'expired'",
-                (session_id,)
-            )
+            # Load the plugin module
+            module_path = plugin_path / "__init__.py"
+            if not module_path.exists():
+                module_path = plugin_path / f"{metadata.plugin_id}.py"
             
-            if not result:
-                return None
+            if not module_path.exists():
+                raise PluginError(f"Plugin entry point not found: {module_path}")
             
-            session_data, checksum = result
+            spec = importlib.util.spec_from_file_location(metadata.plugin_id, module_path)
+            if spec is None or spec.loader is None:
+                raise PluginError(f"Failed to create module spec for {metadata.plugin_id}")
             
-            # Decrypt if enabled
-            if self.encryption:
-                session_data = await self.encryption.decrypt(session_data)
+            module = importlib.util.module_from_spec(spec)
+            self._loaded_modules[metadata.plugin_id] = module
+            self._module_paths[metadata.plugin_id] = plugin_path
             
-            # Deserialize session
-            session_info = self._deserialize_session(session_data)
-            session_info.checksum = checksum
+            # Execute the module
+            spec.loader.exec_module(module)
             
-            return session_info
-            
-        except Exception as e:
-            self.logger.error(f"Failed to load session {session_id}: {str(e)}")
-            return None
-    
-    async def delete_session(self, session_id: str) -> None:
-        """Delete session from database."""
-        try:
-            await self.database.execute(
-                "UPDATE sessions SET state = 'expired', updated_at = CURRENT_TIMESTAMP WHERE session_id = ?",
-                (session_id,)
-            )
-            
-        except Exception as e:
-            self.logger.error(f"Failed to delete session {session_id}: {str(e)}")
-            raise SessionError(f"Failed to delete session: {str(e)}", session_id)
-    
-    async def list_sessions(self, user_id: Optional[str] = None) -> List[str]:
-        """List sessions from database."""
-        try:
-            if user_id:
-                results = await self.database.fetch_all(
-                    "SELECT session_id FROM sessions WHERE user_id = ? AND state != 'expired'",
-                    (user_id,)
-                )
+            # Get the main plugin class
+            if metadata.main_class:
+                plugin_class = getattr(module, metadata.main_class)
+                return plugin_class()
             else:
-                results = await self.database.fetch_all(
-                    "SELECT session_id FROM sessions WHERE state != 'expired'"
-                )
+                # Look for a class implementing PluginInterface
+                for name in dir(module):
+                    obj = getattr(module, name)
+                    if (inspect.isclass(obj) and 
+                        hasattr(obj, 'get_metadata') and 
+                        hasattr(obj, 'initialize')):
+                        return obj()
             
-            return [row[0] for row in results]
+            raise PluginError(f"No valid plugin class found in {metadata.plugin_id}")
             
         except Exception as e:
-            self.logger.error(f"Failed to list sessions: {str(e)}")
-            return []
+            self.logger.error(f"Failed to load plugin from {plugin_path}: {str(e)}")
+            raise PluginError(f"Plugin loading failed: {str(e)}")
     
-    async def cleanup_expired_sessions(self) -> int:
-        """Clean up expired sessions from database."""
-        try:
-            result = await self.database.execute(
-                """
-                UPDATE sessions 
-                SET state = 'expired', updated_at = CURRENT_TIMESTAMP 
-                WHERE expires_at < CURRENT_TIMESTAMP AND state != 'expired'
-                """
-            )
-            
-            # Delete old expired sessions
-            await self.database.execute(
-                """
-                DELETE FROM sessions 
-                WHERE state = 'expired' AND updated_at < datetime('now', '-7 days')
-                """
-            )
-            
-            return result.rowcount if result else 0
-            
-        except Exception as e:
-            self.logger.error(f"Failed to cleanup expired sessions: {str(e)}")
-            return 0
+    def _parse_metadata(self, metadata_dict: Dict[str, Any]) -> PluginMetadata:
+        """Parse plugin metadata from dictionary."""
+        # Convert dictionary to PluginMetadata with proper type conversion
+        return PluginMetadata(
+            plugin_id=metadata_dict['plugin_id'],
+            name=metadata_dict['name'],
+            version=metadata_dict['version'],
+            description=metadata_dict['description'],
+            author=metadata_dict['author'],
+            plugin_type=PluginType(metadata_dict.get('plugin_type', 'utility')),
+            load_mode=PluginLoadMode(metadata_dict.get('load_mode', 'eager')),
+            security_level=SecurityLevel(metadata_dict.get('security_level', 'untrusted')),
+            **{k: v for k, v in metadata_dict.items() 
+               if k not in ['plugin_id', 'name', 'version', 'description', 'author']}
+        )
     
-    def _serialize_session(self, session_info: SessionInfo) -> str:
-        """Serialize session info to string."""
-        try:
-            # Convert to dictionary
-            data = asdict(session_info)
+    async def unload_plugin(self, plugin_id: str) -> None:
+        """Unload a plugin module."""
+        if plugin_id in self._loaded_modules:
+            # Remove from sys.modules if present
+            module_name = f"plugin_{plugin_id}"
+            if module_name in sys.modules:
+                del sys.modules[module_name]
             
-            # Handle datetime objects
-            for key, value in data.items():
-                if isinstance(value, datetime):
-                    data[key] = value.isoformat()
-                elif isinstance(value, dict):
-                    for k, v in value.items():
-                        if isinstance(v, datetime):
-                            data[key][k] = v.isoformat()
+            del self._loaded_modules[plugin_id]
+            self._module_paths.pop(plugin_id, None)
             
-            # Convert to JSON and encode
-            json_data = json.dumps(data, default=str)
-            return base64.b64encode(json_data.encode()).decode()
-            
-        except Exception as e:
-            raise SessionError(f"Failed to serialize session: {str(e)}")
-    
-    def _deserialize_session(self, session_data: str) -> SessionInfo:
-        """Deserialize session info from string."""
-        try:
-            # Decode and parse JSON
-            json_data = base64.b64decode(session_data.encode()).decode()
-            data = json.loads(json_data)
-            
-            # Convert datetime strings back
-            datetime_fields = ['created_at', 'started_at', 'last_activity', 'expires_at', 'last_backup']
-            for field in datetime_fields:
-                if data.get(field):
-                    data[field] = datetime.fromisoformat(data[field])
-            
-            # Handle context datetime fields
-            context_data = data.get('context', {})
-            context_datetime_fields = ['created_at', 'last_activity', 'last_heartbeat']
-            for field in context_datetime_fields:
-                if context_data.get(field):
-                    context_data[field] = datetime.fromisoformat(context_data[field])
-            
-            # Convert enums
-            data['state'] = SessionState(data['state'])
-            if 'config' in data:
-                config_data = data['config']
-                config_data['session_type'] = SessionType(config_data['session_type'])
-                config_data['priority'] = SessionPriority(config_data['priority'])
-                data['config'] = SessionConfiguration(**config_data)
-            
-            # Reconstruct context
-            if 'context' in data:
-                data['context'] = SessionContext(**context_data)
-            
-            return SessionInfo(**data)
-            
-        except Exception as e:
-            raise SessionError(f"Failed to deserialize session: {str(e)}")
+            self.logger.info(f"Unloaded plugin module: {plugin_id}")
 
 
-class SessionCluster:
-    """Manages session clustering across multiple nodes."""
+class PluginRegistry:
+    """Manages plugin registration and discovery."""
     
-    def __init__(self, node_id: str, redis_cache: Optional[RedisCache] = None):
-        self.node_id = node_id
-        self.redis_cache = redis_cache
-        self.cluster_nodes: Dict[str, Dict[str, Any]] = {}
-        self.session_assignments: Dict[str, str] = {}  # session_id -> node_id
-        self.logger = get_logger(__name__)
+    def __init__(self, logger):
+        self.logger = logger
+        self._plugins: Dict[str, PluginInfo] = {}
+        self._capabilities: Dict[str, List[str]] = {}  # capability -> plugin_ids
+        self._categories: Dict[str, List[str]] = {}    # category -> plugin_ids
+        self._registry_lock = asyncio.Lock()
     
-    async def register_node(self, node_id: str, node_info: Dict[str, Any]) -> None:
-        """Register a cluster node."""
-        self.cluster_nodes[node_id] = {
-            **node_info,
-            'last_heartbeat': datetime.now(timezone.utc),
-            'status': 'active'
-        }
-        
-        if self.redis_cache:
-            await self.redis_cache.set(
-                f"cluster:node:{node_id}",
-                json.dumps(node_info, default=str),
-                ttl=60
-            )
-    
-    async def assign_session(self, session_id: str) -> str:
-        """Assign session to the best available node."""
-        # Simple round-robin assignment for now
-        active_nodes = [
-            node_id for node_id, info in self.cluster_nodes.items()
-            if info['status'] == 'active'
-        ]
-        
-        if not active_nodes:
-            return self.node_id  # Fallback to current node
-        
-        # Select node with least load
-        best_node = min(active_nodes, key=lambda n: self.cluster_nodes[n].get('load', 0))
-        self.session_assignments[session_id] = best_node
-        
-        if self.redis_cache:
-            await self.redis_cache.set(f"session:assignment:{session_id}", best_node)
-        
-        return best_node
-    
-    async def migrate_session(self, session_id: str, target_node: str) -> bool:
-        """Migrate session to target node."""
-        try:
-            # Implementation would depend on inter-node communication
-            # For now, just update assignment
-            self.session_assignments[session_id] = target_node
+    async def register_plugin(self, plugin_info: PluginInfo) -> None:
+        """Register a plugin in the registry."""
+        async with self._registry_lock:
+            plugin_id = plugin_info.metadata.plugin_id
             
-            if self.redis_cache:
-                await self.redis_cache.set(f"session:assignment:{session_id}", target_node)
+            if plugin_id in self._plugins:
+                raise PluginError(f"Plugin {plugin_id} is already registered")
             
-            return True
+            self._plugins[plugin_id] = plugin_info
             
-        except Exception as e:
-            self.logger.error(f"Failed to migrate session {session_id}: {str(e)}")
-            return False
+            # Index capabilities
+            for capability in plugin_info.metadata.provides:
+                if capability.name not in self._capabilities:
+                    self._capabilities[capability.name] = []
+                self._capabilities[capability.name].append(plugin_id)
+            
+            # Index categories
+            for category in plugin_info.metadata.categories:
+                if category not in self._categories:
+                    self._categories[category] = []
+                self._categories[category].append(plugin_id)
+            
+            self.logger.info(f"Registered plugin: {plugin_id}")
     
-    async def handle_node_failure(self, failed_node: str) -> None:
-        """Handle node failure by reassigning sessions."""
-        if failed_node in self.cluster_nodes:
-            self.cluster_nodes[failed_node]['status'] = 'failed'
+    async def unregister_plugin(self, plugin_id: str) -> None:
+        """Unregister a plugin from the registry."""
+        async with self._registry_lock:
+            if plugin_id not in self._plugins:
+                return
+            
+            plugin_info = self._plugins[plugin_id]
+            
+            # Remove from capability index
+            for capability in plugin_info.metadata.provides:
+                if capability.name in self._capabilities:
+                    self._capabilities[capability.name] = [
+                        pid for pid in self._capabilities[capability.name] 
+                        if pid != plugin_id
+                    ]
+                    if not self._capabilities[capability.name]:
+                        del self._capabilities[capability.name]
+            
+            # Remove from category index
+            for category in plugin_info.metadata.categories:
+                if category in self._categories:
+                    self._categories[category] = [
+                        pid for pid in self._categories[category] 
+                        if pid != plugin_id
+                    ]
+                    if not self._categories[category]:
+                        del self._categories[category]
+            
+            del self._plugins[plugin_id]
+            self.logger.info(f"Unregistered plugin: {plugin_id}")
+    
+    def get_plugin(self, plugin_id: str) -> Optional[PluginInfo]:
+        """Get plugin information by ID."""
+        return self._plugins.get(plugin_id)
+    
+    def list_plugins(self, 
+                    state: Optional[PluginState] = None,
+                    plugin_type: Optional[PluginType] = None,
+                    category: Optional[str] = None) -> List[PluginInfo]:
+        """List plugins with optional filtering."""
+        plugins = list(self._plugins.values())
         
-        # Reassign sessions from failed node
-        failed_sessions = [
-            session_id for session_id, node_id in self.session_assignments.items()
-            if node_id == failed_node
-        ]
+        if state:
+            plugins = [p for p in plugins if p.state == state]
         
-        for session_id in failed_sessions:
-            new_node = await self.assign_session(session_id)
-            self.logger.info(f"Reassigned session {session_id} from {failed_node} to {new_node}")
+        if plugin_type:
+            plugins = [p for p in plugins if p.metadata.plugin_type == plugin_type]
+        
+        if category:
+            plugins = [p for p in plugins if category in p.metadata.categories]
+        
+        return plugins
+    
+    def find_plugins_by_capability(self, capability: str) -> List[str]:
+        """Find plugins that provide a specific capability."""
+        return self._capabilities.get(capability, [])
 
 
-class EnhancedSessionManager:
+class EnhancedPluginManager:
     """
-    Advanced Session Management System for the AI Assistant.
+    Advanced Plugin Management System for the AI Assistant.
     
-    This manager provides comprehensive session handling including:
-    - Multi-user session support with isolation
-    - Session state persistence and recovery
-    - Context-aware session management
+    Features:
+    - Dynamic plugin loading and unloading
+    - Comprehensive dependency resolution
+    - Security sandboxing and validation
+    - Hot-reloading during development
+    - Performance monitoring and resource management
     - Integration with all core system components
-    - Session clustering for scalability
-    - Real-time monitoring and analytics
-    - Security and authentication integration
-    - Automatic cleanup and optimization
-    - Event-driven session lifecycle
-    - Memory and resource management
+    - Plugin marketplace and repository management
+    - Automatic updates and version management
+    - Event-driven plugin communication
+    - Plugin composition and orchestration
     """
     
     def __init__(self, container: Container):
         """
-        Initialize the enhanced session manager.
+        Initialize the enhanced plugin manager.
         
         Args:
             container: Dependency injection container
         """
         self.container = container
         self.logger = get_logger(__name__)
-        
-        # Core services
         self.config = container.get(ConfigLoader)
         self.event_bus = container.get(EventBus)
         self.error_handler = container.get(ErrorHandler)
         self.health_check = container.get(HealthCheck)
         
-        # Memory and storage
-        self.memory_manager = container.get(MemoryManager)
-        self.context_manager = container.get(ContextManager)
-        self.working_memory = container.get(WorkingMemory)
-        self.episodic_memory = container.get(EpisodicMemory)
+        # Core component integration
+        self.component_manager = container.get(EnhancedComponentManager)
+        self.workflow_orchestrator = container.get(WorkflowOrchestrator)
+        self.session_manager = container.get(EnhancedSessionManager)
+        self.interaction_handler = container.get(InteractionHandler)
         
-        # Security components
+        # Skills and processing
+        self.skill_factory = container.get(SkillFactory)
+        self.skill_registry = container.get(SkillRegistry)
+        self.skill_validator = container.get(SkillValidator)
+        
+        # Memory and learning
+        self.memory_manager = container.get(MemoryManager)
+        self.feedback_processor = container.get(FeedbackProcessor)
+        
+        # Security
         try:
             self.auth_manager = container.get(AuthenticationManager)
             self.authz_manager = container.get(AuthorizationManager)
-            self.encryption_manager = container.get(EncryptionManager)
+            self.security_sanitizer = container.get(SecuritySanitizer)
         except Exception:
+            self.logger.warning("Security components not available")
             self.auth_manager = None
             self.authz_manager = None
-            self.encryption_manager = None
+            self.security_sanitizer = None
         
-        # Storage and caching
-        try:
-            self.database = container.get(DatabaseManager)
-            self.redis_cache = container.get(RedisCache)
-            self.backup_manager = container.get(BackupManager)
-        except Exception:
-            self.database = None
-            self.redis_cache = None
-            self.backup_manager = None
-        
-        # Learning systems
-        try:
-            self.continual_learner = container.get(ContinualLearner)
-            self.preference_learner = container.get(PreferenceLearner)
-            self.feedback_processor = container.get(FeedbackProcessor)
-        except Exception:
-            self.continual_learner = None
-            self.preference_learner = None
-            self.feedback_processor = None
-        
-        # Observability
-        self.metrics = container.get(MetricsCollector)
-        self.tracer = container.get(TraceManager)
-        
-        # Session management
-        self.active_sessions: Dict[str, SessionInfo] = {}
-        self.session_locks: Dict[str, asyncio.Lock] = {}
-        self.user_sessions: Dict[str, Set[str]] = defaultdict(set)
-        
-        # Storage backend
-        self._setup_session_store()
-        
-        # Clustering support
-        self.node_id = self.config.get("sessions.node_id", f"node_{uuid.uuid4().hex[:8]}")
-        self.enable_clustering = self.config.get("sessions.enable_clustering", False)
-        if self.enable_clustering:
-            self.cluster = SessionCluster(self.node_id, self.redis_cache)
-        else:
-            self.cluster = None
+        # Setup plugin management components
+        self._setup_plugin_infrastructure()
+        self._setup_monitoring()
         
         # Configuration
-        self.default_config = SessionConfiguration(
-            max_idle_time=self.config.get("sessions.max_idle_time", 1800.0),
-            max_session_time=self.config.get("sessions.max_session_time", 86400.0),
-            cleanup_on_expire=self.config.get("sessions.cleanup_on_expire", True),
-            persist_context=self.config.get("sessions.persist_context", True),
-            enable_clustering=self.enable_clustering,
-            auto_save_interval=self.config.get("sessions.auto_save_interval", 300.0),
-            encryption_enabled=self.config.get("sessions.encryption_enabled", True),
-            audit_logging=self.config.get("sessions.audit_logging", True)
-        )
+        self._plugin_directories = self._get_plugin_directories()
+        self._auto_discovery_enabled = self.config.get("plugins.auto_discovery", True)
+        self._hot_reload_enabled = self.config.get("plugins.hot_reload", False)
+        self._security_validation_enabled = self.config.get("plugins.security_validation", True)
+        
+        # State management
+        self._initialization_lock = asyncio.Lock()
+        self._shutdown_event = asyncio.Event()
+        self._background_tasks: List[asyncio.Task] = []
         
         # Performance tracking
-        self.session_stats: Dict[str, Dict[str, Any]] = defaultdict(dict)
-        self.cleanup_stats: Dict[str, int] = defaultdict(int)
+        self._plugin_performance: Dict[str, Dict[str, float]] = {}
         
-        # Background tasks
-        self.cleanup_task: Optional[asyncio.Task] = None
-        self.heartbeat_task: Optional[asyncio.Task] = None
-        self.backup_task: Optional[asyncio.Task] = None
-        
-        # Setup monitoring and health checks
-        self._setup_monitoring()
-        self.health_check.register_component("session_manager", self._health_check_callback)
-        
-        self.logger.info("EnhancedSessionManager initialized successfully")
+        self.logger.info("EnhancedPluginManager initialized")
 
-    def _setup_session_store(self) -> None:
-        """Setup appropriate session storage backend."""
-        storage_type = self.config.get("sessions.storage_type", "memory")
+    def _setup_plugin_infrastructure(self) -> None:
+        """Setup plugin management infrastructure."""
+        self.plugin_loader = PluginLoader(self.logger)
+        self.plugin_registry = PluginRegistry(self.logger)
         
-        if storage_type == "database" and self.database:
-            self.session_store = DatabaseSessionStore(self.database, self.encryption_manager)
-        else:
-            self.session_store = MemorySessionStore()
-        
-        self.logger.info(f"Using {type(self.session_store).__name__} for session storage")
+        # Thread pool for plugin operations
+        self.thread_pool = ThreadPoolExecutor(
+            max_workers=4,
+            thread_name_prefix="plugin_manager"
+        )
 
     def _setup_monitoring(self) -> None:
-        """Setup monitoring and metrics."""
+        """Setup monitoring and metrics collection."""
         try:
-            # Register session metrics
-            self.metrics.register_counter("sessions_created_total")
-            self.metrics.register_counter("sessions_ended_total")
-            self.metrics.register_counter("sessions_expired_total")
-            self.metrics.register_gauge("active_sessions")
-            self.metrics.register_gauge("sessions_by_state")
-            self.metrics.register_histogram("session_duration_seconds")
-            self.metrics.register_histogram("session_memory_usage_mb")
-            self.metrics.register_counter("session_errors_total")
-            self.metrics.register_counter("session_migrations_total")
+            self.metrics = self.container.get(MetricsCollector)
+            self.tracer = self.container.get(TraceManager)
+            
+            # Register plugin metrics
+            self.metrics.register_counter("plugins_loaded_total")
+            self.metrics.register_counter("plugins_failed_total")
+            self.metrics.register_gauge("plugins_active")
+            self.metrics.register_histogram("plugin_load_duration_seconds")
+            self.metrics.register_histogram("plugin_execution_duration_seconds")
             
         except Exception as e:
             self.logger.warning(f"Failed to setup monitoring: {str(e)}")
+            self.metrics = None
+            self.tracer = None
+
+    def _get_plugin_directories(self) -> List[Path]:
+        """Get plugin directories from configuration."""
+        plugin_dirs = self.config.get("plugins.directories", [
+            "plugins/",
+            "src/plugins/",
+            "data/plugins/"
+        ])
+        
+        return [Path(d) for d in plugin_dirs]
 
     async def initialize(self) -> None:
-        """Initialize the session manager."""
-        try:
-            # Initialize session store
-            if hasattr(self.session_store, 'initialize'):
-                await self.session_store.initialize()
-            
-            # Initialize cluster if enabled
-            if self.cluster:
-                await self.cluster.register_node(self.node_id, {
-                    'hostname': self.config.get("hostname", "localhost"),
-                    'capacity': self.config.get("sessions.max_sessions_per_node", 1000),
-                    'load': 0
-                })
-            
-            # Start background tasks
-            self.cleanup_task = asyncio.create_task(self._cleanup_loop())
-            self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-            
-            if self.backup_manager:
-                self.backup_task = asyncio.create_task(self._backup_loop())
-            
-            # Register event handlers
-            await self._register_event_handlers()
-            
-            # Load existing sessions if recovering
-            await self._recover_sessions()
-            
-            self.logger.info("SessionManager initialization completed")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize SessionManager: {str(e)}")
-            raise SessionError(f"Initialization failed: {str(e)}")
+        """Initialize the plugin manager and discover plugins."""
+        async with self._initialization_lock:
+            try:
+                self.logger.info("Initializing plugin manager...")
+                
+                # Register event handlers
+                await self._register_event_handlers()
+                
+                # Setup health monitoring
+                self.health_check.register_component("plugin_manager", self._health_check_callback)
+                
+                # Discover and load plugins
+                if self._auto_discovery_enabled:
+                    await self.discover_plugins()
+                
+                # Start background tasks
+                await self._start_background_tasks()
+                
+                self.logger.info("Plugin manager initialized successfully")
+                
+            except Exception as e:
+                self.logger.error(f"Failed to initialize plugin manager: {str(e)}")
+                raise PluginError(f"Plugin manager initialization failed: {str(e)}")
 
     async def _register_event_handlers(self) -> None:
         """Register event handlers for system events."""
-        # Component health events
-        self.event_bus.subscribe("component_health_changed", self._handle_component_health_change)
+        # Component events
+        self.event_bus.subscribe("component_registered", self._handle_component_registered)
+        self.event_bus.subscribe("component_failed", self._handle_component_failed)
         
-        # System shutdown events
+        # Workflow events
+        self.event_bus.subscribe("workflow_completed", self._handle_workflow_completed)
+        
+        # Session events
+        self.event_bus.subscribe("session_started", self._handle_session_started)
+        self.event_bus.subscribe("session_ended", self._handle_session_ended)
+        
+        # System events
         self.event_bus.subscribe("system_shutdown_started", self._handle_system_shutdown)
-        
-        # User events
-        self.event_bus.subscribe("user_authenticated", self._handle_user_authentication)
-        self.event_bus.subscribe("user_logged_out", self._handle_user_logout)
 
-    async def _recover_sessions(self) -> None:
-        """Recover sessions after restart."""
-        try:
-            session_ids = await self.session_store.list_sessions()
-            recovered_count = 0
-            
-            for session_id in session_ids:
-                try:
-                    session_info = await self.session_store.load_session(session_id)
-                    if session_info and session_info.state in [SessionState.ACTIVE, SessionState.IDLE]:
-                        # Check if session should be expired
-                        if session_info.expires_at and datetime.now(timezone.utc) > session_info.expires_at:
-                            await self._expire_session(session_id)
-                        else:
-                            # Restore session
-                            self.active_sessions[session_id] = session_info
-                            self.session_locks[session_id] = asyncio.Lock()
-                            
-                            if session_info.context.user_id:
-                                self.user_sessions[session_info.context.user_id].add(session_id)
-                            
-                            recovered_count += 1
-                            
-                except Exception as e:
-                    self.logger.warning(f"Failed to recover session {session_id}: {str(e)}")
-            
-            self.logger.info(f"Recovered {recovered_count} active sessions")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to recover sessions: {str(e)}")
-
-    @handle_exceptions
-    async def create_session(
-        self,
-        user_id: Optional[str] = None,
-        session_config: Optional[SessionConfiguration] = None,
-        context_data: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """
-        Create a new session.
-        
-        Args:
-            user_id: Optional user identifier
-            session_config: Session configuration
-            context_data: Initial context data
-            
-        Returns:
-            Session ID
-        """
-        session_id = str(uuid.uuid4())
-        config = session_config or self.default_config
-        
-        # Create session context
-        context = SessionContext(
-            session_id=session_id,
-            user_id=user_id
+    async def _start_background_tasks(self) -> None:
+        """Start background maintenance tasks."""
+        # Plugin health monitoring
+        self._background_tasks.append(
+            asyncio.create_task(self._plugin_health_monitor_loop())
         )
         
-        if context_data:
-            context.custom_data.update(context_data)
+        # Hot reload monitoring
+        if self._hot_reload_enabled:
+            self._background_tasks.append(
+                asyncio.create_task(self._hot_reload_monitor_loop())
+            )
         
-        # Load user profile and preferences
-        if user_id:
-            await self._load_user_context(context)
-        
-        # Calculate expiration time
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=config.max_session_time)
-        
-        # Create session info
-        session_info = SessionInfo(
-            session_id=session_id,
-            state=SessionState.INITIALIZING,
-            config=config,
-            context=context,
-            expires_at=expires_at
+        # Performance monitoring
+        self._background_tasks.append(
+            asyncio.create_task(self._performance_monitor_loop())
         )
         
-        # Assign to cluster node if clustering enabled
-        if self.cluster:
-            target_node = await self.cluster.assign_session(session_id)
-            session_info.cluster_node = target_node
-            
-            if target_node != self.node_id:
-                # Session assigned to different node
-                await self.cluster.migrate_session(session_id, target_node)
-                return session_id
-        
-        # Store session
-        async with self._get_session_lock(session_id):
-            try:
-                # Initialize session state
-                session_info.state = SessionState.ACTIVE
-                session_info.started_at = datetime.now(timezone.utc)
-                
-                # Store in memory and persistence
-                self.active_sessions[session_id] = session_info
-                await self.session_store.store_session(session_info)
-                
-                # Track user sessions
-                if user_id:
-                    self.user_sessions[user_id].add(session_id)
-                
-                # Initialize working memory for session
-                await self.working_memory.initialize_session(session_id)
-                
-                # Emit session started event
-                await self.event_bus.emit(SessionStarted(
-                    session_id=session_id,
-                    user_id=user_id,
-                    session_type=config.session_type.value,
-                    created_at=session_info.created_at
-                ))
-                
-                # Update metrics
-                self.metrics.increment("sessions_created_total")
-                self.metrics.set("active_sessions", len(self.active_sessions))
-                
-                self.logger.info(f"Created session: {session_id} for user: {user_id}")
-                return session_id
-                
-            except Exception as e:
-                # Cleanup on failure
-                self.active_sessions.pop(session_id, None)
-                if user_id:
-                    self.user_sessions[user_id].discard(session_id)
-                
-                raise SessionError(f"Failed to create session: {str(e)}", session_id)
+        # Plugin cleanup
+        self._background_tasks.append(
+            asyncio.create_task(self._cleanup_monitor_loop())
+        )
 
-    async def _load_user_context(self, context: SessionContext) -> None:
-        """Load user profile and preferences into session context."""
+    @handle_exceptions
+    async def discover_plugins(self) -> List[str]:
+        """
+        Discover plugins in configured directories.
+        
+        Returns:
+            List of discovered plugin IDs
+        """
+        discovered_plugins = []
+        
+        with self.tracer.trace("plugin_discovery") if self.tracer else None:
+            for plugin_dir in self._plugin_directories:
+                if not plugin_dir.exists():
+                    continue
+                
+                self.logger.info(f"Discovering plugins in: {plugin_dir}")
+                
+                # Look for plugin directories
+                for item in plugin_dir.iterdir():
+                    if item.is_dir() and not item.name.startswith('.'):
+                        try:
+                            plugin_id = await self._discover_single_plugin(item)
+                            if plugin_id:
+                                discovered_plugins.append(plugin_id)
+                        except Exception as e:
+                            self.logger.warning(f"Failed to discover plugin in {item}: {str(e)}")
+                
+                # Look for plugin archives
+                for item in plugin_dir.iterdir():
+                    if item.is_file() and item.suffix in ['.zip', '.tar.gz']:
+                        try:
+                            plugin_id = await self._discover_plugin_archive(item)
+                            if plugin_id:
+                                discovered_plugins.append(plugin_id)
+                        except Exception as e:
+                            self.logger.warning(f"Failed to discover plugin archive {item}: {str(e)}")
+        
+        self.logger.info(f"Discovered {len(discovered_plugins)} plugins: {discovered_plugins}")
+        return discovered_plugins
+
+    async def _discover_single_plugin(self, plugin_path: Path) -> Optional[str]:
+        """Discover a single plugin from a directory."""
+        metadata_file = plugin_path / "plugin.json"
+        if not metadata_file.exists():
+            return None
+        
         try:
-            user_id = context.user_id
-            if not user_id:
-                return
+            with open(metadata_file, 'r') as f:
+                metadata_dict = json.load(f)
             
-            # Load user preferences
-            if self.preference_learner:
-                user_prefs = await self.preference_learner.get_user_preferences(user_id)
-                context.user_preferences.update(user_prefs or {})
+            metadata = self.plugin_loader._parse_metadata(metadata_dict)
             
-            # Load authentication data
-            if self.auth_manager:
-                auth_data = await self.auth_manager.get_user_info(user_id)
-                context.authentication_data.update(auth_data or {})
+            # Validate plugin
+            if self._security_validation_enabled:
+                await self._validate_plugin_security(plugin_path, metadata)
             
-            # Load user profile from memory
-            user_memories = await self.episodic_memory.get_user_memories(user_id, limit=10)
-            context.episodic_memories.extend([m.get('id') for m in user_memories if m.get('id')])
+            # Create plugin info
+            plugin_info = PluginInfo(
+                metadata=metadata,
+                state=PluginState.DISCOVERED,
+                installation_path=plugin_path
+            )
+            
+            # Register plugin
+            await self.plugin_registry.register_plugin(plugin_info)
+            
+            # Auto-load if configured
+            if metadata.load_mode == PluginLoadMode.EAGER:
+                await self.load_plugin(metadata.plugin_id)
+            
+            return metadata.plugin_id
             
         except Exception as e:
-            self.logger.warning(f"Failed to load user context for {context.user_id}: {str(e)}")
+            self.logger.error(f"Failed to discover plugin {plugin_path}: {str(e)}")
+            return None
 
-    def _get_session_lock(self, session_id: str) -> asyncio.Lock:
-        """Get or create a lock for session operations."""
-        if session_id not in self.session_locks:
-            self.session_locks[session_id] = asyncio.Lock()
-        return self.session_locks[session_id]
-
-    @handle_exceptions
-    async def get_session(self, session_id: str) -> Optional[SessionInfo]:
-        """
-        Get session information.
+    async def _discover_plugin_archive(self, archive_path: Path) -> Optional[str]:
+        """Discover a plugin from an archive file."""
+        temp_dir = Path(tempfile.mkdtemp(prefix="plugin_extract_"))
         
-        Args:
-            session_id: Session identifier
-            
-        Returns:
-            Session information or None if not found
-        """
-        # Check active sessions first
-        if session_id in self.active_sessions:
-            session_info = self.active_sessions[session_id]
-            await self._update_last_activity(session_info)
-            return session_info
-        
-        # Try to load from storage
-        session_info = await self.session_store.load_session(session_id)
-        if session_info:
-            # Check if session is still valid
-            if session_info.expires_at and datetime.now(timezone.utc) > session_info.expires_at:
-                await self._expire_session(session_id)
-                return None
-            
-            # Restore to active sessions
-            self.active_sessions[session_id] = session_info
-            self.session_locks[session_id] = asyncio.Lock()
-            
-            if session_info.context.user_id:
-                self.user_sessions[session_info.context.user_id].add(session_id)
-            
-            await self._update_last_activity(session_info)
-            return session_info
-        
-        return None
-
-    async def _update_last_activity(self, session_info: SessionInfo) -> None:
-        """Update session last activity timestamp."""
-        current_time = datetime.now(timezone.utc)
-        session_info.last_activity = current_time
-        session_info.context.last_activity = current_time
-        session_info.context.last_heartbeat = current_time
-        
-        # Save periodically to avoid too frequent writes
-        if hasattr(session_info, '_last_save'):
-            time_since_save = (current_time - session_info._last_save).total_seconds()
-            if time_since_save < 30:  # Don't save more than once per 30 seconds
-                return
-        
-        session_info._last_save = current_time
-        await self.session_store.store_session(session_info)
-
-    @handle_exceptions
-    async def update_session_context(
-        self,
-        session_id: str,
-        context_updates: Dict[str, Any]
-    ) -> None:
-        """
-        Update session context.
-        
-        Args:
-            session_id: Session identifier
-            context_updates: Context data to update
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            try:
-                # Update context
-                for key, value in context_updates.items():
-                    if hasattr(session_info.context, key):
-                        setattr(session_info.context, key, value)
-                    else:
-                        session_info.context.custom_data[key] = value
-                
-                # Update version and checksum
-                session_info.version += 1
-                session_info.checksum = self._calculate_checksum(session_info)
-                
-                # Save updated session
-                await self.session_store.store_session(session_info)
-                
-                # Emit context updated event
-                await self.event_bus.emit(SessionContextUpdated(
-                    session_id=session_id,
-                    user_id=session_info.context.user_id,
-                    updates=list(context_updates.keys())
-                ))
-                
-                self.logger.debug(f"Updated context for session: {session_id}")
-                
-            except Exception as e:
-                raise SessionError(f"Failed to update session context: {str(e)}", session_id)
-
-    def _calculate_checksum(self, session_info: SessionInfo) -> str:
-        """Calculate checksum for session data integrity."""
         try:
-            # Create a simplified representation for checksum
-            data = {
-                'session_id': session_info.session_id,
-                'version': session_info.version,
-                'state': session_info.state.value,
-                'context_size': len(str(session_info.context.custom_data))
-            }
-            return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
-        except Exception:
-            return "unknown"
+            # Extract archive
+            if archive_path.suffix == '.zip':
+                with zipfile.ZipFile(archive_path, 'r') as zip_file:
+                    zip_file.extractall(temp_dir)
+            elif archive_path.suffix == '.tar.gz':
+                with tarfile.open(archive_path, 'r:gz') as tar_file:
+                    tar_file.extractall(temp_dir)
+            
+            # Find plugin directory in extracted files
+            for item in temp_dir.iterdir():
+                if item.is_dir():
+                    plugin_id = await self._discover_single_plugin(item)
+                    if plugin_id:
+                        # Move to permanent location
+                        plugin_dir = self._plugin_directories[0] / plugin_id
+                        shutil.move(str(item), str(plugin_dir))
+                        
+                        # Update installation path
+                        plugin_info = self.plugin_registry.get_plugin(plugin_id)
+                        if plugin_info:
+                            plugin_info.installation_path = plugin_dir
+                        
+                        return plugin_id
+            
+            return None
+            
+        finally:
+            # Cleanup temp directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
-    @handle_exceptions
-    async def add_interaction(
-        self,
-        session_id: str,
-        interaction_data: Dict[str, Any]
-    ) -> None:
-        """
-        Add interaction data to session.
-        
-        Args:
-            session_id: Session identifier
-            interaction_data: Interaction data
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            # Add to interaction history
-            interaction_entry = {
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'data': interaction_data
-            }
-            
-            session_info.context.interaction_history.append(interaction_entry)
-            session_info.interaction_count += 1
-            
-            # Limit history size
-            max_history = session_info.config.context_window_size
-            if len(session_info.context.interaction_history) > max_history:
-                session_info.context.interaction_history = session_info.context.interaction_history[-max_history:]
-            
-            # Update performance metrics
-            if 'processing_time' in interaction_data:
-                session_info.total_processing_time += interaction_data['processing_time']
-                
-                # Update average response time
-                session_info.response_time_avg = (
-                    session_info.total_processing_time / session_info.interaction_count
-                )
-            
-            await self._update_last_activity(session_info)
-
-    @handle_exceptions
-    async def add_workflow(
-        self,
-        session_id: str,
-        workflow_id: str,
-        workflow_data: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """
-        Add workflow to session.
-        
-        Args:
-            session_id: Session identifier
-            workflow_id: Workflow identifier
-            workflow_data: Optional workflow data
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            session_info.context.active_workflows.add(workflow_id)
-            session_info.workflow_count += 1
-            
-            if workflow_data:
-                session_info.context.custom_data[f"workflow_{workflow_id}"] = workflow_data
-            
-            await self._update_last_activity(session_info)
-
-    @handle_exceptions
-    async def remove_workflow(
-        self,
-        session_id: str,
-        workflow_id: str
-    ) -> None:
-        """
-        Remove workflow from session.
-        
-        Args:
-            session_id: Session identifier
-            workflow_id: Workflow identifier
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
+    async def _validate_plugin_security(self, plugin_path: Path, metadata: PluginMetadata) -> None:
+        """Validate plugin security."""
+        if self.security_sanitizer is None:
             return
         
-        async with self._get_session_lock(session_id):
-            session_info.context.active_workflows.discard(workflow_id)
-            session_info.context.custom_data.pop(f"workflow_{workflow_id}", None)
-            
-            await self._update_last_activity(session_info)
+        # Check file permissions
+        for file_path in plugin_path.rglob("*"):
+            if file_path.is_file():
+                # Basic security checks
+                if file_path.suffix in ['.exe', '.bat', '.sh'] and metadata.security_level != SecurityLevel.TRUSTED:
+                    raise PluginError(f"Executable files not allowed in untrusted plugins: {file_path}")
+        
+        # Validate metadata signature if present
+        if metadata.signature and self.auth_manager:
+            # Implement signature validation
+            pass
 
     @handle_exceptions
-    async def end_session(
-        self,
-        session_id: str,
-        reason: str = "user_ended"
-    ) -> None:
+    async def load_plugin(self, plugin_id: str) -> None:
         """
-        End a session.
+        Load a plugin into the system.
         
         Args:
-            session_id: Session identifier
-            reason: Reason for ending the session
+            plugin_id: Plugin identifier
         """
-        session_info = await self.get_session(session_id)
-        if not session_info:
+        plugin_info = self.plugin_registry.get_plugin(plugin_id)
+        if not plugin_info:
+            raise PluginError(f"Plugin {plugin_id} not found in registry")
+        
+        if plugin_info.state in [PluginState.LOADED, PluginState.ENABLED]:
+            self.logger.warning(f"Plugin {plugin_id} is already loaded")
             return
         
-        async with self._get_session_lock(session_id):
-            try:
-                # Calculate session duration
-                duration = (
-                    datetime.now(timezone.utc) - session_info.created_at
-                ).total_seconds()
-                
-                # Update session state
-                session_info.state = SessionState.TERMINATED
-                
-                # Store final session state
-                await self.session_store.store_session(session_info)
-                
-                # Cleanup working memory
-                await self.working_memory.cleanup_session(session_id)
-                
-                # Store session in episodic memory for learning
-                if self.episodic_memory and session_info.context.user_id:
-                    session_memory = {
-                        'session_id': session_id,
-                        'user_id': session_info.context.user_id,
-                        'duration': duration,
-                        'interaction_count': session_info.interaction_count,
-                        'workflow_count': session_info.workflow_count,
-                        'total_processing_time': session_info.total_processing_time,
-                        'reason': reason,
-                        'context_summary': self._summarize_session_context(session_info.context)
-                    }
-                    
-                    await self.episodic_memory.store(session_memory)
-                
-                # Remove from active sessions
-                self.active_sessions.pop(session_id, None)
-                self.session_locks.pop(session_id, None)
-                
-                if session_info.context.user_id:
-                    self.user_sessions[session_info.context.user_id].discard(session_id)
-                
-                # Emit session ended event
-                await self.event_bus.emit(SessionEnded(
-                    session_id=session_id,
-                    user_id=session_info.context.user_id,
-                    duration=duration,
-                    interaction_count=session_info.interaction_count,
-                    reason=reason
-                ))
-                
-                # Update metrics
-                self.metrics.increment("sessions_ended_total")
-                self.metrics.record("session_duration_seconds", duration)
-                self.metrics.set("active_sessions", len(self.active_sessions))
-                
-                self.logger.info(f"Ended session: {session_id} (reason: {reason}, duration: {duration:.2f}s)")
-                
-            except Exception as e:
-                self.logger.error(f"Error ending session {session_id}: {str(e)}")
-                raise SessionError(f"Failed to end session: {str(e)}", session_id)
-
-    def _summarize_session_context(self, context: SessionContext) -> Dict[str, Any]:
-        """Create a summary of session context for memory storage."""
-        return {
-            'user_id': context.user_id,
-            'duration': (context.last_activity - context.created_at).total_seconds(),
-            'topics_discussed': list(set([
-                interaction.get('data', {}).get('topic', 'unknown')
-                for interaction in context.interaction_history
-                if isinstance(interaction, dict)
-            ])),
-            'interaction_count': len(context.interaction_history),
-            'active_workflows': len(context.active_workflows),
-            'device_type': context.device_info.get('type', 'unknown'),
-            'primary_language': context.user_preferences.get('language', 'en'),
-            'session_quality': 'high' if len(context.interaction_history) > 5 else 'low'
-        }
-
-    async def _expire_session(self, session_id: str) -> None:
-        """Expire a session due to timeout."""
+        start_time = time.time()
+        
         try:
-            session_info = self.active_sessions.get(session_id)
-            if session_info:
-                session_info.state = SessionState.EXPIRED
+            with self.tracer.trace("plugin_loading") if self.tracer else None:
+                self.logger.info(f"Loading plugin: {plugin_id}")
                 
-                # Store expired state
-                await self.session_store.store_session(session_info)
+                # Check dependencies
+                await self._resolve_plugin_dependencies(plugin_info)
                 
-                # Emit expiration event
-                await self.event_bus.emit(SessionExpired(
-                    session_id=session_id,
-                    user_id=session_info.context.user_id,
-                    duration=(datetime.now(timezone.utc) - session_info.created_at).total_seconds()
-                ))
-                
-                # Update metrics
-                self.metrics.increment("sessions_expired_total")
-            
-            # Clean up if configured
-            if session_info and session_info.config.cleanup_on_expire:
-                await self.end_session(session_id, "expired")
-            
-        except Exception as e:
-            self.logger.error(f"Error expiring session {session_id}: {str(e)}")
-
-    @handle_exceptions
-    async def pause_session(self, session_id: str) -> None:
-        """
-        Pause a session.
-        
-        Args:
-            session_id: Session identifier
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            if session_info.state == SessionState.ACTIVE:
-                session_info.state = SessionState.PAUSED
-                await self.session_store.store_session(session_info)
-                
-                await self.event_bus.emit(SessionStateChanged(
-                    session_id=session_id,
-                    old_state=SessionState.ACTIVE.value,
-                    new_state=SessionState.PAUSED.value
-                ))
-
-    @handle_exceptions
-    async def resume_session(self, session_id: str) -> None:
-        """
-        Resume a paused session.
-        
-        Args:
-            session_id: Session identifier
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            if session_info.state == SessionState.PAUSED:
-                session_info.state = SessionState.ACTIVE
-                await self.session_store.store_session(session_info)
-                
-                await self.event_bus.emit(SessionStateChanged(
-                    session_id=session_id,
-                    old_state=SessionState.PAUSED.value,
-                    new_state=SessionState.ACTIVE.value
-                ))
-
-    def list_user_sessions(self, user_id: str) -> List[str]:
-        """
-        List all sessions for a user.
-        
-        Args:
-            user_id: User identifier
-            
-        Returns:
-            List of session IDs
-        """
-        return list(self.user_sessions.get(user_id, set()))
-
-    def get_active_sessions(self) -> List[Dict[str, Any]]:
-        """Get information about all active sessions."""
-        sessions = []
-        
-        for session_id, session_info in self.active_sessions.items():
-            sessions.append({
-                'session_id': session_id,
-                'user_id': session_info.context.user_id,
-                'state': session_info.state.value,
-                'created_at': session_info.created_at.isoformat(),
-                'last_activity': session_info.last_activity.isoformat(),
-                'interaction_count': session_info.interaction_count,
-                'workflow_count': session_info.workflow_count,
-                'memory_usage_mb': session_info.memory_usage_mb,
-                'response_time_avg': session_info.response_time_avg,
-                'cluster_node': session_info.cluster_node
-            })
-        
-        return sessions
-
-    def get_session_statistics(self) -> Dict[str, Any]:
-        """Get comprehensive session statistics."""
-        total_sessions = len(self.active_sessions)
-        
-        states_count = defaultdict(int)
-        total_interactions = 0
-        total_workflows = 0
-        total_memory = 0.0
-        
-        for session_info in self.active_sessions.values():
-            states_count[session_info.state.value] += 1
-            total_interactions += session_info.interaction_count
-            total_workflows += session_info.workflow_count
-            total_memory += session_info.memory_usage_mb
-        
-        return {
-            'total_active_sessions': total_sessions,
-            'sessions_by_state': dict(states_count),
-            'total_interactions': total_interactions,
-            'total_workflows': total_workflows,
-            'total_memory_usage_mb': total_memory,
-            'average_memory_per_session_mb': total_memory / max(total_sessions, 1),
-            'cleanup_stats': dict(self.cleanup_stats),
-            'node_id': self.node_id,
-            'clustering_enabled': self.enable_clustering
-        }
-
-    async def _cleanup_loop(self) -> None:
-        """Background task for session cleanup."""
-        while True:
-            try:
-                current_time = datetime.now(timezone.utc)
-                expired_sessions = []
-                idle_sessions = []
-                
-                # Check for expired and idle sessions
-                for session_id, session_info in list(self.active_sessions.items()):
-                    # Check expiration
-                    if session_info.expires_at and current_time > session_info.expires_at:
-                        expired_sessions.append(session_id)
-                        continue
-                    
-                    # Check idle timeout
-                    idle_time = (current_time - session_info.last_activity).total_seconds()
-                    if idle_time > session_info.config.max_idle_time:
-                        if session_info.state == SessionState.ACTIVE:
-                            session_info.state = SessionState.IDLE
-                        elif session_info.state == SessionState.IDLE and idle_time > session_info.config.max_idle_time * 2:
-                            idle_sessions.append(session_id)
-                
-                # Clean up expired sessions
-                for session_id in expired_sessions:
-                    try:
-                        await self._expire_session(session_id)
-                        self.cleanup_stats['expired'] += 1
-                    except Exception as e:
-                        self.logger.error(f"Failed to expire session {session_id}: {str(e)}")
-                
-                # Clean up idle sessions
-                for session_id in idle_sessions:
-                    try:
-                        await self.end_session(session_id, "idle_timeout")
-                        self.cleanup_stats['idle_timeout'] += 1
-                    except Exception as e:
-                        self.logger.error(f"Failed to clean up idle session {session_id}: {str(e)}")
-                
-                # Clean up storage
-                storage_cleaned = await self.session_store.cleanup_expired_sessions()
-                self.cleanup_stats['storage_cleaned'] += storage_cleaned
-                
-                # Update metrics
-                self.metrics.set("active_sessions", len(self.active_sessions))
-                
-                if expired_sessions or idle_sessions or storage_cleaned:
-                    self.logger.info(
-                        f"Session cleanup: {len(expired_sessions)} expired, "
-                        f"{len(idle_sessions)} idle, {storage_cleaned} from storage"
+                # Load plugin module
+                if plugin_info.installation_path:
+                    instance = await self.plugin_loader.load_plugin_from_path(
+                        plugin_info.installation_path
                     )
+                    plugin_info.instance = instance
                 
-                await asyncio.sleep(60)  # Run cleanup every minute
+                # Initialize plugin
+                if hasattr(plugin_info.instance, 'initialize'):
+                    await plugin_info.instance.initialize(self.container)
+                
+                # Update state
+                plugin_info.state = PluginState.LOADED
+                plugin_info.load_time = time.time() - start_time
+                
+                # Register with component manager if it's a component
+                await self._register_plugin_as_component(plugin_info)
+                
+                # Register skills if it's a skill plugin
+                await self._register_plugin_skills(plugin_info)
+                
+                # Register workflows if it provides them
+                await self._register_plugin_workflows(plugin_info)
+                
+                # Emit event
+                await self.event_bus.emit(PluginLoaded(
+                    plugin_id=plugin_id,
+                    plugin_type=plugin_info.metadata.plugin_type.value,
+                    load_time=plugin_info.load_time
+                ))
+                
+                if self.metrics:
+                    self.metrics.increment("plugins_loaded_total")
+                    self.metrics.record("plugin_load_duration_seconds", plugin_info.load_time)
+                
+                self.logger.info(f"Successfully loaded plugin {plugin_id} in {plugin_info.load_time:.2f}s")
+                
+        except Exception as e:
+            plugin_info.state = PluginState.ERROR
+            plugin_info.last_error = e
+            plugin_info.error_count += 1
+            
+            await self.event_bus.emit(PluginError(
+                plugin_id=plugin_id,
+                error_message=str(e),
+                error_type=type(e).__name__
+            ))
+            
+            if self.metrics:
+                self.metrics.increment("plugins_failed_total")
+            
+            self.logger.error(f"Failed to load plugin {plugin_id}: {str(e)}")
+            raise PluginError(f"Failed to load plugin {plugin_id}: {str(e)}")
+
+    async def _resolve_plugin_dependencies(self, plugin_info: PluginInfo) -> None:
+        """Resolve plugin dependencies."""
+        for dependency in plugin_info.metadata.dependencies:
+            dep_plugin = self.plugin_registry.get_plugin(dependency.plugin_id)
+            
+            if not dep_plugin:
+                if dependency.auto_install:
+                    # Try to install dependency
+                    await self._auto_install_plugin(dependency.plugin_id)
+                elif not dependency.optional:
+                    raise PluginError(f"Required dependency {dependency.plugin_id} not found")
+            else:
+                # Ensure dependency is loaded
+                if dep_plugin.state not in [PluginState.LOADED, PluginState.ENABLED]:
+                    await self.load_plugin(dependency.plugin_id)
+
+    async def _auto_install_plugin(self, plugin_id: str) -> None:
+        """Auto-install a plugin dependency."""
+        # This would implement automatic plugin installation from repository
+        self.logger.warning(f"Auto-installation of {plugin_id} not implemented")
+
+    async def _register_plugin_as_component(self, plugin_info: PluginInfo) -> None:
+        """Register plugin as a system component."""
+        if plugin_info.metadata.plugin_type in [PluginType.PROCESSOR, PluginType.INTEGRATION]:
+            try:
+                metadata = ComponentMetadata(
+                    component_id=f"plugin_{plugin_info.metadata.plugin_id}",
+                    component_type=type(plugin_info.instance),
+                    priority=ComponentPriority.NORMAL,
+                    description=plugin_info.metadata.description
+                )
+                
+                self.component_manager.register_component(
+                    f"plugin_{plugin_info.metadata.plugin_id}",
+                    type(plugin_info.instance),
+                    ComponentPriority.NORMAL,
+                    []
+                )
                 
             except Exception as e:
-                self.logger.error(f"Error in cleanup loop: {str(e)}")
+                self.logger.warning(f"Failed to register plugin {plugin_info.metadata.plugin_id} as component: {str(e)}")
+
+    async def _register_plugin_skills(self, plugin_info: PluginInfo) -> None:
+        """Register skills provided by plugin."""
+        if plugin_info.metadata.plugin_type == PluginType.SKILL:
+            try:
+                if hasattr(plugin_info.instance, 'get_skills'):
+                    skills = plugin_info.instance.get_skills()
+                    for skill in skills:
+                        self.skill_registry.register_skill(skill)
+                        
+            except Exception as e:
+                self.logger.warning(f"Failed to register skills from plugin {plugin_info.metadata.plugin_id}: {str(e)}")
+
+    async def _register_plugin_workflows(self, plugin_info: PluginInfo) -> None:
+        """Register workflows provided by plugin."""
+        if plugin_info.metadata.plugin_type == PluginType.WORKFLOW_EXTENSION:
+            try:
+                if hasattr(plugin_info.instance, 'get_workflows'):
+                    workflows = plugin_info.instance.get_workflows()
+                    for workflow in workflows:
+                        self.workflow_orchestrator.register_workflow(workflow)
+                        
+            except Exception as e:
+                self.logger.warning(f"Failed to register workflows from plugin {plugin_info.metadata.plugin_id}: {str(e)}")
+
+    @handle_exceptions
+    async def enable_plugin(self, plugin_id: str) -> None:
+        """
+        Enable a loaded plugin.
+        
+        Args:
+            plugin_id: Plugin identifier
+        """
+        plugin_info = self.plugin_registry.get_plugin(plugin_id)
+        if not plugin_info:
+            raise PluginError(f"Plugin {plugin_id} not found")
+        
+        if plugin_info.state != PluginState.LOADED:
+            raise PluginError(f"Plugin {plugin_id} must be loaded before enabling")
+        
+        try:
+            # Activate plugin
+            if hasattr(plugin_info.instance, 'activate'):
+                await plugin_info.instance.activate()
+            
+            plugin_info.state = PluginState.ENABLED
+            plugin_info.activation_count += 1
+            plugin_info.last_used = datetime.now(timezone.utc)
+            
+            await self.event_bus.emit(PluginEnabled(
+                plugin_id=plugin_id,
+                plugin_type=plugin_info.metadata.plugin_type.value
+            ))
+            
+            self.logger.info(f"Enabled plugin: {plugin_id}")
+            
+        except Exception as e:
+            plugin_info.state = PluginState.ERROR
+            plugin_info.last_error = e
+            self.logger.error(f"Failed to enable plugin {plugin_id}: {str(e)}")
+            raise PluginError(f"Failed to enable plugin {plugin_id}: {str(e)}")
+
+    @handle_exceptions
+    async def disable_plugin(self, plugin_id: str) -> None:
+        """
+        Disable an enabled plugin.
+        
+        Args:
+            plugin_id: Plugin identifier
+        """
+        plugin_info = self.plugin_registry.get_plugin(plugin_id)
+        if not plugin_info:
+            raise PluginError(f"Plugin {plugin_id} not found")
+        
+        if plugin_info.state != PluginState.ENABLED:
+            self.logger.warning(f"Plugin {plugin_id} is not enabled")
+            return
+        
+        try:
+            # Deactivate plugin
+            if hasattr(plugin_info.instance, 'deactivate'):
+                await plugin_info.instance.deactivate()
+            
+            plugin_info.state = PluginState.DISABLED
+            
+            await self.event_bus.emit(PluginDisabled(
+                plugin_id=plugin_id,
+                plugin_type=plugin_info.metadata.plugin_type.value
+            ))
+            
+            self.logger.info(f"Disabled plugin: {plugin_id}")
+            
+        except Exception as e:
+            plugin_info.state = PluginState.ERROR
+            plugin_info.last_error = e
+            self.logger.error(f"Failed to disable plugin {plugin_id}: {str(e)}")
+            raise PluginError(f"Failed to disable plugin {plugin_id}: {str(e)}")
+
+    @handle_exceptions
+    async def unload_plugin(self, plugin_id: str, force: bool = False) -> None:
+        """
+        Unload a plugin from the system.
+        
+        Args:
+            plugin_id: Plugin identifier
+            force: Force unload even if plugin is in use
+        """
+        plugin_info = self.plugin_registry.get_plugin(plugin_id)
+        if not plugin_info:
+            self.logger.warning(f"Plugin {plugin_id} not found in registry")
+            return
+        
+        try:
+            # Disable plugin first if enabled
+            if plugin_info.state == PluginState.ENABLED:
+                await self.disable_plugin(plugin_id)
+            
+            # Cleanup plugin resources
+            if hasattr(plugin_info.instance, 'cleanup'):
+                await plugin_info.instance.cleanup()
+            
+            # Unload module
+            await self.plugin_loader.unload_plugin(plugin_id)
+            
+            # Update state
+            plugin_info.state = PluginState.UNLOADED
+            plugin_info.instance = None
+            plugin_info.module = None
+            
+            await self.event_bus.emit(PluginUnloaded(
+                plugin_id=plugin_id,
+                plugin_type=plugin_info.metadata.plugin_type.value
+            ))
+            
+            self.logger.info(f"Unloaded plugin: {plugin_id}")
+            
+        except Exception as e:
+            plugin_info.state = PluginState.ERROR
+            plugin_info.last_error = e
+            self.logger.error(f"Failed to unload plugin {plugin_id}: {str(e)}")
+            if not force:
+                raise PluginError(f"Failed to unload plugin {plugin_id}: {str(e)}")
+
+    async def hot_reload_plugin(self, plugin_id: str) -> None:
+        """
+        Hot-reload a plugin (unload and reload).
+        
+        Args:
+            plugin_id: Plugin identifier
+        """
+        plugin_info = self.plugin_registry.get_plugin(plugin_id)
+        if not plugin_info:
+            raise PluginError(f"Plugin {plugin_id} not found")
+        
+        self.logger.info(f"Hot-reloading plugin: {plugin_id}")
+        
+        # Save current state
+        was_enabled = plugin_info.state == PluginState.ENABLED
+        
+        try:
+            # Unload plugin
+            await self.unload_plugin(plugin_id)
+            
+            # Wait a moment
+            await asyncio.sleep(0.1)
+            
+            # Reload plugin
+            await self.load_plugin(plugin_id)
+            
+            # Re-enable if it was enabled
+            if was_enabled:
+                await self.enable_plugin(plugin_id)
+            
+            await self.event_bus.emit(PluginHotReloaded(
+                plugin_id=plugin_id,
+                plugin_type=plugin_info.metadata.plugin_type.value
+            ))
+            
+            self.logger.info(f"Successfully hot-reloaded plugin: {plugin_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to hot-reload plugin {plugin_id}: {str(e)}")
+            raise PluginError(f"Hot-reload failed for {plugin_id}: {str(e)}")
+
+    def get_plugin_info(self, plugin_id: str) -> Optional[PluginInfo]:
+        """Get plugin information."""
+        return self.plugin_registry.get_plugin(plugin_id)
+
+    def list_plugins(self, 
+                    state: Optional[PluginState] = None,
+                    plugin_type: Optional[PluginType] = None) -> List[Dict[str, Any]]:
+        """List plugins with optional filtering."""
+        plugins = self.plugin_registry.list_plugins(state, plugin_type)
+        
+        return [
+            {
+                "plugin_id": p.metadata.plugin_id,
+                "name": p.metadata.name,
+                "version": p.metadata.version,
+                "type": p.metadata.plugin_type.value,
+                "state": p.state.value,
+                "description": p.metadata.description,
+                "author": p.metadata.author,
+                "load_time": p.load_time,
+                "memory_usage": p.memory_usage,
+                "error_count": p.error_count,
+                "last_used": p.last_used.isoformat() if p.last_used else None
+            }
+            for p in plugins
+        ]
+
+    def get_plugin_capabilities(self) -> Dict[str, List[str]]:
+        """Get all available plugin capabilities."""
+        return dict(self.plugin_registry._capabilities)
+
+    async def get_plugin_status(self) -> Dict[str, Any]:
+        """Get comprehensive plugin system status."""
+        plugins = self.plugin_registry.list_plugins()
+        
+        return {
+            "total_plugins": len(plugins),
+            "loaded_plugins": len([p for p in plugins if p.state == PluginState.LOADED]),
+            "enabled_plugins": len([p for p in plugins if p.state == PluginState.ENABLED]),
+            "failed_plugins": len([p for p in plugins if p.state == PluginState.ERROR]),
+            "auto_discovery_enabled": self._auto_discovery_enabled,
+            "hot_reload_enabled": self._hot_reload_enabled,
+            "security_validation_enabled": self._security_validation_enabled,
+            "plugin_directories": [str(d) for d in self._plugin_directories]
+        }
+
+    async def _plugin_health_monitor_loop(self) -> None:
+        """Background task for plugin health monitoring."""
+        while not self._shutdown_event.is_set():
+            try:
+                plugins = self.plugin_registry.list_plugins(PluginState.ENABLED)
+                
+                for plugin_info in plugins:
+                    try:
+                        if hasattr(plugin_info.instance, 'health_check'):
+                            health_result = await plugin_info.instance.health_check()
+                            plugin_info.health_status = health_result.get('status', 'unknown')
+                            plugin_info.last_health_check = datetime.now(timezone.utc)
+                            
+                            # Check for performance issues
+                            if 'memory_usage' in health_result:
+                                plugin_info.memory_usage = health_result['memory_usage']
+                                
+                                if plugin_info.memory_usage > plugin_info.metadata.memory_limit_mb:
+                                    await self.event_bus.emit(PluginPerformanceWarning(
+                                        plugin_id=plugin_info.metadata.plugin_id,
+                                        metric="memory_usage",
+                                        value=plugin_info.memory_usage,
+                                        limit=plugin_info.metadata.memory_limit_mb
+                                    ))
+                    
+                    except Exception as e:
+                        plugin_info.error_count += 1
+                        plugin_info.last_error = e
+                        self.logger.warning(f"Health check failed for plugin {plugin_info.metadata.plugin_id}: {str(e)}")
+                
+                await asyncio.sleep(60)  # Check every minute
+                
+            except Exception as e:
+                self.logger.error(f"Plugin health monitoring error: {str(e)}")
                 await asyncio.sleep(60)
 
-    async def _heartbeat_loop(self) -> None:
-        """Background task for session heartbeat and health monitoring."""
-        while True:
-            try:
-                current_time = datetime.now(timezone.utc)
-                
-                # Update session health scores
-                for session_id, session_info in self.active_sessions.items():
-                    try:
-                        # Calculate health score based on various factors
-                        health_factors = {
-                            'activity': min(1.0, 300.0 / max(1.0, (current_time - session_info.last_activity).total_seconds())),
-                            'memory': max(0.0, 1.0 - (session_info.memory_usage_mb / session_info.config.memory_limit_mb)),
-                            'errors': max(0.0, 1.0 - (session_info.error_count / 10.0)),
-                            'performance': min(1.0, 5.0 / max(0.1, session_info.response_time_avg))
-                        }
-                        
-                        session_info.health_score = sum(health_factors.values()) / len(health_factors)
-                        
-                        # Update cluster if enabled
-                        if self.cluster and session_info.cluster_node == self.node_id:
-                            await self.cluster.register_node(self.node_id, {
-                                'load': len(self.active_sessions),
-                                'memory_usage': sum(s.memory_usage_mb for s in self.active_sessions.values()),
-                                'health_score': session_info.health_score
-                            })
-                    
-                    except Exception as e:
-                        self.logger.warning(f"Error updating health for session {session_id}: {str(e)}")
-                
-                await asyncio.sleep(30)  # Run heartbeat every 30 seconds
-                
-            except Exception as e:
-                self.logger.error(f"Error in heartbeat loop: {str(e)}")
-                await asyncio.sleep(30)
-
-    async def _backup_loop(self) -> None:
-        """Background task for session backup."""
-        if not self.backup_manager:
+    async def _hot_reload_monitor_loop(self) -> None:
+        """Background task for hot-reload monitoring."""
+        if not self._hot_reload_enabled:
             return
         
-        while True:
+        file_mtimes = {}
+        
+        while not self._shutdown_event.is_set():
             try:
-                backup_interval = self.default_config.auto_save_interval
+                plugins = self.plugin_registry.list_plugins()
                 
-                # Backup active sessions
-                for session_id, session_info in list(self.active_sessions.items()):
-                    try:
-                        if session_info.config.enable_backup:
-                            last_backup = session_info.last_backup
-                            current_time = datetime.now(timezone.utc)
-                            
-                            if not last_backup or (current_time - last_backup).total_seconds() > backup_interval:
-                                # Create backup
-                                backup_data = {
-                                    'session_info': asdict(session_info),
-                                    'timestamp': current_time.isoformat(),
-                                    'checksum': self._calculate_checksum(session_info)
-                                }
+                for plugin_info in plugins:
+                    if plugin_info.installation_path and plugin_info.installation_path.exists():
+                        # Check for file modifications
+                        for py_file in plugin_info.installation_path.rglob("*.py"):
+                            try:
+                                mtime = py_file.stat().st_mtime
+                                file_key = str(py_file)
                                 
-                                await self.backup_manager.backup_data(
-                                    f"session_{session_id}",
-                                    backup_data,
-                                    metadata={'type': 'session', 'user_id': session_info.context.user_id}
-                                )
+                                if file_key in file_mtimes and file_mtimes[file_key] != mtime:
+                                    self.logger.info(f"File modified: {py_file}, hot-reloading plugin {plugin_info.metadata.plugin_id}")
+                                    await self.hot_reload_plugin(plugin_info.metadata.plugin_id)
                                 
-                                session_info.last_backup = current_time
-                    
-                    except Exception as e:
-                        self.logger.warning(f"Failed to backup session {session_id}: {str(e)}")
+                                file_mtimes[file_key] = mtime
+                                
+                            except Exception as e:
+                                self.logger.warning(f"Error checking file {py_file}: {str(e)}")
                 
-                await asyncio.sleep(backup_interval)
+                await asyncio.sleep(2)  # Check every 2 seconds
                 
             except Exception as e:
-                self.logger.error(f"Error in backup loop: {str(e)}")
-                await asyncio.sleep(backup_interval)
+                self.logger.error(f"Hot-reload monitoring error: {str(e)}")
+                await asyncio.sleep(2)
 
-    async def _handle_component_health_change(self, event) -> None:
-        """Handle component health change events."""
-        if not event.healthy:
-            # Component is unhealthy, might need to adapt session handling
-            self.logger.warning(f"Component {event.component} is unhealthy, monitoring sessions")
+    async def _performance_monitor_loop(self) -> None:
+        """Background task for performance monitoring."""
+        while not self._shutdown_event.is_set():
+            try:
+                plugins = self.plugin_registry.list_plugins(PluginState.ENABLED)
+                
+                for plugin_info in plugins:
+                    # Update metrics
+                    if self.metrics:
+                        self.metrics.set(
+                            "plugin_memory_usage_mb",
+                            plugin_info.memory_usage,
+                            tags={'plugin_id': plugin_info.metadata.plugin_id}
+                        )
+                        
+                        self.metrics.set(
+                            "plugin_error_count",
+                            plugin_info.error_count,
+                            tags={'plugin_id': plugin_info.metadata.plugin_id}
+                        )
+                
+                # Update global metrics
+                if self.metrics:
+                    enabled_count = len([p for p in plugins if p.state == PluginState.ENABLED])
+                    self.metrics.set("plugins_active", enabled_count)
+                
+                await asyncio.sleep(30)  # Monitor every 30 seconds
+                
+            except Exception as e:
+                self.logger.error(f"Performance monitoring error: {str(e)}")
+                await asyncio.sleep(30)
+
+    async def _cleanup_monitor_loop(self) -> None:
+        """Background task for plugin cleanup."""
+        while not self._shutdown_event.is_set():
+            try:
+                # Cleanup failed plugins
+                failed_plugins = self.plugin_registry.list_plugins(PluginState.ERROR)
+                
+                for plugin_info in failed_plugins:
+                    # Auto-recovery for certain types of errors
+                    if plugin_info.error_count < 3:
+                        try:
+                            self.logger.info(f"Attempting recovery for failed plugin: {plugin_info.metadata.plugin_id}")
+                            await self.hot_reload_plugin(plugin_info.metadata.plugin_id)
+                        except Exception as e:
+                            self.logger.warning(f"Recovery failed for {plugin_info.metadata.plugin_id}: {str(e)}")
+                
+                await asyncio.sleep(300)  # Cleanup every 5 minutes
+                
+            except Exception as e:
+                self.logger.error(f"Cleanup monitoring error: {str(e)}")
+                await asyncio.sleep(300)
+
+    async def _handle_component_registered(self, event) -> None:
+        """Handle component registration events."""
+        # Check if any plugins are waiting for this component
+        pass
+
+    async def _handle_component_failed(self, event) -> None:
+        """Handle component failure events."""
+        # Check if this affects any plugins
+        pass
+
+    async def _handle_workflow_completed(self, event) -> None:
+        """Handle workflow completion events."""
+        # Update plugin usage statistics
+        pass
+
+    async def _handle_session_started(self, event) -> None:
+        """Handle session start events."""
+        # Initialize session-specific plugins
+        pass
+
+    async def _handle_session_ended(self, event) -> None:
+        """Handle session end events."""
+        # Cleanup session-specific plugin resources
+        pass
 
     async def _handle_system_shutdown(self, event) -> None:
-        """Handle system shutdown by cleaning up sessions."""
-        try:
-            # Save all active sessions
-            save_tasks = []
-            for session_info in self.active_sessions.values():
-                save_tasks.append(self.session_store.store_session(session_info))
-            
-            if save_tasks:
-                await asyncio.gather(*save_tasks, return_exceptions=True)
-            
-            self.logger.info(f"Saved {len(save_tasks)} sessions before shutdown")
-            
-        except Exception as e:
-            self.logger.error(f"Error saving sessions during shutdown: {str(e)}")
-
-    async def _handle_user_authentication(self, event) -> None:
-        """Handle user authentication events."""
-        # Update any guest sessions for this user
-        user_id = event.user_id
-        for session_id, session_info in list(self.active_sessions.items()):
-            if (session_info.context.user_id is None and 
-                session_info.config.session_type == SessionType.GUEST):
-                # Convert guest session to authenticated
-                session_info.context.user_id = user_id
-                session_info.config.session_type = SessionType.AUTHENTICATED
-                
-                # Load user context
-                await self._load_user_context(session_info.context)
-                
-                # Update storage
-                await self.session_store.store_session(session_info)
-                
-                # Update tracking
-                self.user_sessions[user_id].add(session_id)
-
-    async def _handle_user_logout(self, event) -> None:
-        """Handle user logout events."""
-        user_id = event.user_id
-        
-        # End all sessions for this user
-        user_session_ids = list(self.user_sessions.get(user_id, set()))
-        for session_id in user_session_ids:
-            try:
-                await self.end_session(session_id, "user_logout")
-            except Exception as e:
-                self.logger.error(f"Error ending session {session_id} on logout: {str(e)}")
+        """Handle system shutdown events."""
+        self._shutdown_event.set()
+        await self.shutdown()
 
     async def _health_check_callback(self) -> Dict[str, Any]:
-        """Health check callback for the session manager."""
+        """Health check callback for the plugin manager."""
+        try:
+            plugins = self.plugin_registry.list_plugins()
+            enabled_plugins = [p for p in plugins if p.state == PluginState.ENABLED]
+            failed_plugins = [p for p in plugins if p.state == PluginState.ERROR]
+            
+            return {
+                "status": "healthy" if len(failed_plugins) == 0 else "degraded",
+                "total_plugins": len(plugins),
+                "enabled_plugins": len(enabled_plugins),
+                "failed_plugins": len(failed_plugins),
+                "auto_discovery_enabled": self._auto_discovery_enabled,
+                "hot_reload_enabled": self._hot_reload_enabled
+            }
+            
+        except Exception as e:
+            return {
+                "status": "unhealthy",
+                "error": str(e)
+            }
+
+    async def shutdown(self) -> None:
+        """Gracefully shutdown the plugin manager."""
+        self.logger.info("Starting plugin manager shutdown...")
         
+        try:
+            # Cancel background tasks
+            for task in self._background_tasks:
+                task.cancel()
+            
+            if self._background_tasks:
+                await asyncio.gather(*self._background_tasks, return_exceptions=True)
+            
+            # Disable all enabled plugins
+            enabled_plugins = self.plugin_registry.list_plugins(PluginState.ENABLED)
+            for plugin_info in enabled_plugins:
+                try:
+                    await self.disable_plugin(plugin_info.metadata.plugin_id)
+                except Exception as e:
+                    self.logger.error(f"Error disabling plugin {plugin_info.metadata.plugin_id}: {str(e)}")
+            
+            # Unload all loaded plugins
+            loaded_plugins = self.plugin_registry.list_plugins(PluginState.LOADED)
+            for plugin_info in loaded_plugins:
+                try:
+                    await self.unload_plugin(plugin_info.metadata.plugin_id, force=True)
+                except Exception as e:
+                    self.logger.error(f"Error unloading plugin {plugin_info.metadata.plugin_id}: {str(e)}")
+            
+            # Shutdown thread pool
+            self.thread_pool.shutdown(wait=True)
+            
+            self.logger.info("Plugin manager shutdown completed")
+            
+        except Exception as e:
+            self.logger.error(f"Error during plugin manager shutdown: {str(e)}")
+            raise PluginError(f"Plugin manager shutdown failed: {str(e)}")
+
+    def __del__(self):
+        """Destructor to ensure cleanup."""
+        try:
+            if hasattr(self, 'thread_pool'):
+                self.thread_pool.shutdown(wait=False)
+        except Exception:
+            pass  # Ignore cleanup errors in destructor
