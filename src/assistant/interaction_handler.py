@@ -68,10 +68,9 @@ from src.processing.vision.image_analyzer import ImageAnalyzer
 from src.processing.vision.vision_processor import VisionProcessor
 
 # Memory systems
-from src.memory.memory_manager import MemoryManager
-from src.memory.context_manager import ContextManager
-from src.memory.working_memory import WorkingMemory
-from src.memory.episodic_memory import EpisodicMemory
+from src.memory.core_memory.memory_manager import MemoryManager
+from src.memory.operations.context_manager import ContextManager
+from src.memory.core_memory.memory_types import WorkingMemory, EpisodicMemory
 
 # Learning and adaptation
 from src.learning.continual_learning import ContinualLearner
