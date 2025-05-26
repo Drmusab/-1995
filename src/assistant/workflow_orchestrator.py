@@ -58,9 +58,9 @@ from src.skills.skill_registry import SkillRegistry
 from src.skills.skill_validator import SkillValidator
 
 # Memory systems
-from src.memory.memory_manager import MemoryManager
-from src.memory.context_manager import ContextManager
-from src.memory.working_memory import WorkingMemory
+from src.memory.core_memory.memory_manager import MemoryManager
+from src.memory.operations.context_manager import ContextManager
+from src.memory.core_memory.memory_types import WorkingMemory
 
 # Learning and adaptation
 from src.learning.continual_learning import ContinualLearner
@@ -1577,4 +1577,39 @@ class WorkflowOrchestrator:
                         # Check for global timeout
                         workflow_def = self.workflow_definitions.get(execution.workflow_id)
                         if workflow_def and runtime > workflow_def.timeout_seconds:
-                            execution.state = WorkflowState.
+                            execution.state = WorkflowState.FAILED
+                            execution.errors.append(f"Workflow execution timed out after {runtime:.2f}s")
+                            
+                            # Emit timeout event
+                            await self.event_bus.emit(WorkflowFailed(
+                                workflow_id=execution.workflow_id,
+                                execution_id=execution.execution_id,
+                                session_id=execution.session_id,
+                                error_message="Execution timed out",
+                                execution_time=runtime
+                            ))
+                            
+                            # Move to history
+                            execution.end_time = current_time
+                            execution.execution_time = runtime
+                            self.execution_history.append(execution)
+                            self.active_executions.pop(execution_id, None)
+                
+                # Update metrics
+                self.metrics.set("active_workflows", len(self.active_executions))
+                
+                await asyncio.sleep(5)  # Check every 5 seconds
+                
+            except Exception as e:
+                self.logger.error(f"Error in execution monitor: {str(e)}")
+                await asyncio.sleep(5)
+
+    async def _performance_optimization_loop(self) -> None:
+        """Background task for workflow performance optimization."""
+        while True:
+            try:
+                # Analyze step performance
+                for step_key, timings in self.step_performance.items():
+                    if len(timings) >= 10:  # Need enough data points
+                        avg_time = sum(timings) / len(timings)
+                        self.execution_stats[
