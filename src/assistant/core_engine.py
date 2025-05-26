@@ -84,12 +84,10 @@ from src.skills.skill_registry import SkillRegistry
 from src.skills.skill_validator import SkillValidator
 
 # Memory systems
-from src.memory.memory_manager import MemoryManager
-from src.memory.context_manager import ContextManager
-from src.memory.vector_store import VectorStore
-from src.memory.working_memory import WorkingMemory
-from src.memory.episodic_memory import EpisodicMemory
-from src.memory.semantic_memory import SemanticMemory
+from src.memory.core_memory.memory_manager import MemoryManager
+from src.memory.operations.context_manager import ContextManager
+from src.memory.storage.vector_store import VectorStore
+from src.memory.core_memory.memory_types import WorkingMemory, EpisodicMemory, SemanticMemory
 
 # Learning and adaptation
 from src.learning.continual_learning import ContinualLearner
