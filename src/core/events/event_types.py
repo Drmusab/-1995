@@ -770,6 +770,54 @@ class MemoryConsolidationCompleted(BaseEvent):
 
 
 @dataclass
+class MemoryProfilerStarted(BaseEvent):
+    """Memory profiler started event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    session_id: str = ""
+    session_name: str = ""
+    profiling_mode: str = ""
+
+
+@dataclass
+class MemoryProfilerStopped(BaseEvent):
+    """Memory profiler stopped event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    session_id: str = ""
+    duration: float = 0.0
+    peak_memory_mb: float = 0.0
+    memory_leaks_detected: int = 0
+
+
+@dataclass
+class MemoryLeakDetected(BaseEvent):
+    """Memory leak detected event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    component_id: str = ""
+    leak_size_mb: float = 0.0
+    leak_type: str = ""
+    severity: str = "warning"
+
+
+@dataclass
+class MemoryThresholdExceeded(BaseEvent):
+    """Memory threshold exceeded event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    threshold_type: str = ""  # heap, system, gpu
+    current_usage_mb: float = 0.0
+    threshold_mb: float = 0.0
+    component_id: Optional[str] = None
+
+
+@dataclass
+class MemoryOptimizationPerformed(BaseEvent):
+    """Memory optimization performed event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    optimization_type: str = ""  # gc, cleanup, defrag
+    memory_freed_mb: float = 0.0
+    component_id: Optional[str] = None
+
+
+@dataclass
 class ContextAdapted(BaseEvent):
     """Context adaptation event."""
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
@@ -1381,6 +1429,11 @@ EVENT_TYPES = {
     "MemoryRetrievalCompleted": MemoryRetrievalCompleted,
     "MemoryConsolidationStarted": MemoryConsolidationStarted,
     "MemoryConsolidationCompleted": MemoryConsolidationCompleted,
+    "MemoryProfilerStarted": MemoryProfilerStarted,
+    "MemoryProfilerStopped": MemoryProfilerStopped,
+    "MemoryLeakDetected": MemoryLeakDetected,
+    "MemoryThresholdExceeded": MemoryThresholdExceeded,
+    "MemoryOptimizationPerformed": MemoryOptimizationPerformed,
     "ContextAdapted": ContextAdapted,
     
     # Skill Events
