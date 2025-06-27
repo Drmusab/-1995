@@ -34,6 +34,7 @@ from src.core.health_check import HealthCheck
 # Observability
 from src.observability.monitoring.metrics import MetricsCollector
 from src.observability.monitoring.tracing import TraceManager
+from src.observability.profiling.memory_profiler import AdvancedMemoryProfiler
 from src.observability.logging.config import get_logger, setup_logging
 
 # Security components
@@ -181,6 +182,7 @@ class MonitoringConfig:
     metrics_enabled: bool = True
     tracing_enabled: bool = True
     profiling_enabled: bool = False
+    memory_profiling_enabled: bool = True
     health_check_interval: float = 30.0
     metrics_port: int = 9090
     metrics_path: str = "/metrics"
@@ -692,6 +694,13 @@ class BaseSettings:
                     jaeger_endpoint=self.monitoring.jaeger_endpoint,
                     sampling_rate=self.monitoring.log_sampling_rate
                 ),
+                lifecycle=ComponentLifecycle.SINGLETON.value
+            )
+        
+        # Memory profiler
+        if self.monitoring.memory_profiling_enabled:
+            self.container.register(
+                AdvancedMemoryProfiler,
                 lifecycle=ComponentLifecycle.SINGLETON.value
             )
 

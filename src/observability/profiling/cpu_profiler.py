@@ -36,9 +36,7 @@ import concurrent.futures
 from src.core.config.loader import ConfigLoader
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    PerformanceAlertTriggered, ProfilerStarted, ProfilerStopped,
-    ProfilingDataGenerated, BottleneckDetected, PerformanceThresholdExceeded,
-    ComponentHealthChanged, SystemStateChanged
+    PerformanceThresholdExceeded, ComponentHealthChanged, SystemStateChanged
 )
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.dependency_injection import Container
@@ -1076,12 +1074,11 @@ class EnhancedCPUProfiler:
             self.status = ProfilerStatus.RUNNING
             self.stop_profiling_event.clear()
             
-            # Emit profiler started event
-            await self.event_bus.emit(ProfilerStarted(
-                session_id=session_id,
-                session_name=session_name,
-                profiling_mode=config.mode.value,
-                profiling_level=config.level.value
+            # Emit profiler started event (using available event type)
+            await self.event_bus.emit(PerformanceThresholdExceeded(
+                metric_name="cpu_profiler_started",
+                current_value=1,
+                threshold=0
             ))
             
             # Update metrics
@@ -1360,12 +1357,11 @@ class EnhancedCPUProfiler:
                 self.profiling_sessions[session.session_id] = session
                 self.recent_sessions.append(session)
                 
-                # Emit profiler stopped event
-                await self.event_bus.emit(ProfilerStopped(
-                    session_id=session.session_id,
-                    duration=session.duration,
-                    functions_profiled=len(session.function_profiles),
-                    bottlenecks_detected=len(session.bottlenecks)
+                # Emit profiler stopped event (using available event type)
+                await self.event_bus.emit(PerformanceThresholdExceeded(
+                    metric_name="cpu_profiler_stopped",
+                    current_value=session.duration,
+                    threshold=0
                 ))
                 
                 # Update metrics

@@ -34,8 +34,8 @@ import resource
 from src.core.config.loader import ConfigLoader
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    PerformanceAlertTriggered, MemoryOperationStarted, MemoryOperationCompleted,
-    ComponentHealthChanged, SystemStateChanged, PerformanceThresholdExceeded
+    PerformanceThresholdExceeded, MemoryOperationStarted, MemoryOperationCompleted,
+    ComponentHealthChanged, SystemStateChanged
 )
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.dependency_injection import Container
@@ -305,12 +305,12 @@ class AdvancedMemoryProfiler:
         self.logger = get_logger(__name__)
         
         # Core dependencies
-        self.config_loader = self.container.get(ConfigLoader)
-        self.event_bus = self.container.get(EventBus)
-        self.metrics = self.container.get(MetricsCollector)
-        self.trace_manager = self.container.get(TraceManager)
-        self.health_check = self.container.get(HealthCheck)
-        self.error_handler = self.container.get(ErrorHandler)
+        self.config_loader = self.container.get('ConfigLoader') 
+        self.event_bus = self.container.get('EventBus')
+        self.metrics = self.container.get('MetricsCollector')
+        self.trace_manager = self.container.get('TraceManager')
+        self.health_check = self.container.get('HealthCheck')
+        self.error_handler = self.container.get('ErrorHandler')
         
         # Configuration
         self.config = self._load_config()
@@ -864,24 +864,20 @@ class AdvancedMemoryProfiler:
         try:
             # Check warning threshold
             if snapshot.rss_mb > self.config.memory_warning_threshold_mb:
-                await self.event_bus.emit(PerformanceAlertTriggered(
-                    alert_type="memory_warning",
-                    component="memory_profiler",
-                    message=f"Memory usage warning: {snapshot.rss_mb:.1f}MB exceeds threshold {self.config.memory_warning_threshold_mb}MB",
-                    severity="warning",
-                    value=snapshot.rss_mb,
-                    threshold=self.config.memory_warning_threshold_mb
+                await self.event_bus.emit(PerformanceThresholdExceeded(
+                    metric_name="memory_rss_mb",
+                    current_value=snapshot.rss_mb,
+                    threshold=self.config.memory_warning_threshold_mb,
+                    threshold_type="upper"
                 ))
             
             # Check critical threshold
             if snapshot.rss_mb > self.config.memory_critical_threshold_mb:
-                await self.event_bus.emit(PerformanceAlertTriggered(
-                    alert_type="memory_critical",
-                    component="memory_profiler",
-                    message=f"Critical memory usage: {snapshot.rss_mb:.1f}MB exceeds critical threshold {self.config.memory_critical_threshold_mb}MB",
-                    severity="critical",
-                    value=snapshot.rss_mb,
-                    threshold=self.config.memory_critical_threshold_mb
+                await self.event_bus.emit(PerformanceThresholdExceeded(
+                    metric_name="memory_rss_mb_critical",
+                    current_value=snapshot.rss_mb,
+                    threshold=self.config.memory_critical_threshold_mb,
+                    threshold_type="upper"
                 ))
             
             # Check memory growth rate
@@ -893,13 +889,11 @@ class AdvancedMemoryProfiler:
                     growth_rate = (snapshot.rss_mb - prev_snapshot.rss_mb) / time_diff
                     
                     if growth_rate > self.config.memory_growth_rate_threshold_mb_per_min:
-                        await self.event_bus.emit(PerformanceAlertTriggered(
-                            alert_type="memory_growth_rate",
-                            component="memory_profiler",
-                            message=f"High memory growth rate: {growth_rate:.2f}MB/min exceeds threshold {self.config.memory_growth_rate_threshold_mb_per_min}MB/min",
-                            severity="warning",
-                            value=growth_rate,
-                            threshold=self.config.memory_growth_rate_threshold_mb_per_min
+                        await self.event_bus.emit(PerformanceThresholdExceeded(
+                            metric_name="memory_growth_rate_mb_per_min",
+                            current_value=growth_rate,
+                            threshold=self.config.memory_growth_rate_threshold_mb_per_min,
+                            threshold_type="upper"
                         ))
         
         except Exception as e:
@@ -1023,13 +1017,10 @@ class AdvancedMemoryProfiler:
                 self.detected_leaks.append(leak)
                 
                 # Emit leak detection event
-                await self.event_bus.emit(PerformanceAlertTriggered(
-                    alert_type="memory_leak_detected",
-                    component=component,
-                    message=f"Memory leak detected in {component}: {growth_rate:.2f}MB/min growth rate",
-                    severity=severity,
-                    value=growth_rate,
-                    metadata={"leak_type": leak_type, "leak_id": leak.leak_id}
+                await self.event_bus.emit(PerformanceThresholdExceeded(
+                    metric_name="memory_leak_detected",
+                    current_value=growth_rate,
+                    threshold=self.config.memory_growth_rate_threshold_mb_per_min / 2
                 ))
                 
                 # Update metrics
@@ -1314,7 +1305,18 @@ class AdvancedMemoryProfiler:
     def get_current_memory_usage(self) -> Dict[str, float]:
         """Get current memory usage metrics."""
         try:
-            snapshot = asyncio.run(self._take_memory_snapshot())
+            # Use create_task instead of asyncio.run when in event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # If we're in an event loop, we need to schedule the coroutine differently
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self._take_memory_snapshot())
+                    snapshot = future.result(timeout=5.0)
+            except RuntimeError:
+                # No event loop running, safe to use asyncio.run
+                snapshot = asyncio.run(self._take_memory_snapshot())
+            
             return {
                 "rss_mb": snapshot.rss_mb,
                 "vms_mb": snapshot.vms_mb,
@@ -1435,13 +1437,10 @@ class AdvancedMemoryProfiler:
             self.logger.info(f"Forced GC: {stats}")
             
             # Emit GC event
-            await self.event_bus.emit(PerformanceAlertTriggered(
-                alert_type="manual_gc",
-                component="memory_profiler",
-                message=f"Manual garbage collection completed: {collected} objects collected",
-                severity="info",
-                value=collected,
-                metadata=stats
+            await self.event_bus.emit(PerformanceThresholdExceeded(
+                metric_name="manual_gc_triggered",
+                current_value=collected,
+                threshold=0
             ))
             
             return stats
