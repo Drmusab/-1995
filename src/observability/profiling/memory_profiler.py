@@ -27,22 +27,53 @@ import json
 import numpy as np
 import torch
 from pathlib import Path
+import functools
+import inspect
+from collections import defaultdict, deque
+import threading
+import traceback  # Add missing import
+from contextlib import nullcontext
 
-# Core imports
-from src.core.config.loader import ConfigLoader
-from src.core.events.event_bus import EventBus
-from src.core.events.event_types import (
-    MemoryThresholdExceeded, MemoryLeakDetected, MemorySnapshotCreated,
-    SystemStateChanged, ComponentHealthChanged, ErrorOccurred
-)
-from src.core.error_handling import ErrorHandler, handle_exceptions
-from src.core.dependency_injection import Container
-from src.core.health_check import HealthCheck
+# Delayed imports to avoid circular dependencies  
+from typing import TYPE_CHECKING
 
-# Observability
-from src.observability.monitoring.metrics import MetricsCollector
-from src.observability.monitoring.tracing import TraceManager
-from src.observability.logging.config import get_logger
+if TYPE_CHECKING:
+    from src.core.config.loader import ConfigLoader
+    from src.core.events.event_bus import EventBus
+    from src.core.error_handling import ErrorHandler
+    from src.core.dependency_injection import Container
+    from src.core.health_check import HealthCheck
+    from src.observability.monitoring.metrics import MetricsCollector
+    from src.observability.monitoring.tracing import TraceManager
+
+# Import handle_exceptions as a standalone function
+def handle_exceptions(func):
+    """Decorator to handle exceptions in async and sync functions."""
+    @functools.wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            # Simple logging fallback
+            print(f"Error in {func.__name__}: {e}")
+            raise
+    
+    @functools.wraps(func)
+    def sync_wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            # Simple logging fallback
+            print(f"Error in {func.__name__}: {e}")
+            raise
+    
+    return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
+
+# Simple logger fallback
+def get_logger(name):
+    """Simple logger fallback."""
+    import logging
+    return logging.getLogger(name)
 
 # Type definitions
 T = TypeVar('T')
@@ -161,6 +192,189 @@ class MemoryProfilerError(Exception):
         self.timestamp = datetime.now(timezone.utc)
 
 
+class MemoryPool:
+    """Memory pool for managing high-frequency allocations."""
+    
+    def __init__(self, pool_name: str, initial_size: int = 1000, max_size: int = 10000):
+        self.pool_name = pool_name
+        self.pool = deque(maxlen=max_size)
+        self.initial_size = initial_size
+        self.max_size = max_size
+        self.allocated_count = 0
+        self.reused_count = 0
+        self.created_count = 0
+        self._lock = threading.RLock()
+        
+        # Pre-allocate initial objects
+        for _ in range(initial_size):
+            self.pool.append(self._create_object())
+    
+    def _create_object(self):
+        """Override in subclasses to create specific object types."""
+        return {}
+    
+    def acquire(self):
+        """Get an object from the pool."""
+        with self._lock:
+            if self.pool:
+                obj = self.pool.popleft()
+                self.reused_count += 1
+            else:
+                obj = self._create_object()
+                self.created_count += 1
+            
+            self.allocated_count += 1
+            return obj
+    
+    def release(self, obj):
+        """Return an object to the pool."""
+        with self._lock:
+            if len(self.pool) < self.max_size:
+                # Clear object state if it's a dict
+                if isinstance(obj, dict):
+                    obj.clear()
+                self.pool.append(obj)
+            
+            self.allocated_count = max(0, self.allocated_count - 1)
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get pool statistics."""
+        with self._lock:
+            return {
+                "pool_name": self.pool_name,
+                "pool_size": len(self.pool),
+                "allocated_count": self.allocated_count,
+                "reused_count": self.reused_count,
+                "created_count": self.created_count,
+                "efficiency_percent": (self.reused_count / max(1, self.reused_count + self.created_count)) * 100
+            }
+
+
+def memory_aware(
+    component: Optional[str] = None,
+    track_allocations: bool = True,
+    track_peak: bool = True,
+    alert_threshold_mb: float = 100.0
+):
+    """
+    Decorator to add memory monitoring to functions.
+    
+    Args:
+        component: Component name for tracking
+        track_allocations: Whether to track memory allocations
+        track_peak: Whether to track peak memory usage
+        alert_threshold_mb: Alert if memory usage exceeds this threshold
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            # Get memory profiler instance if available
+            profiler = getattr(args[0], '_memory_profiler', None) if args else None
+            
+            if profiler and hasattr(profiler, 'profile_scope'):
+                async with profiler.profile_scope(
+                    name=func.__name__,
+                    component=component,
+                    session_id=getattr(args[0], 'session_id', None) if args else None
+                ):
+                    return await func(*args, **kwargs)
+            else:
+                # Fallback memory tracking
+                import psutil
+                process = psutil.Process()
+                initial_memory = process.memory_info().rss
+                
+                try:
+                    result = await func(*args, **kwargs)
+                    
+                    final_memory = process.memory_info().rss
+                    memory_delta = (final_memory - initial_memory) / (1024 * 1024)  # MB
+                    
+                    if memory_delta > alert_threshold_mb:
+                        print(f"Memory alert: {func.__name__} used {memory_delta:.2f} MB")
+                    
+                    return result
+                except Exception as e:
+                    final_memory = process.memory_info().rss
+                    memory_delta = (final_memory - initial_memory) / (1024 * 1024)  # MB
+                    print(f"Memory usage during error in {func.__name__}: {memory_delta:.2f} MB")
+                    raise
+        
+        @functools.wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            # Get memory profiler instance if available
+            profiler = getattr(args[0], '_memory_profiler', None) if args else None
+            
+            import psutil
+            process = psutil.Process()
+            initial_memory = process.memory_info().rss
+            
+            try:
+                result = func(*args, **kwargs)
+                
+                final_memory = process.memory_info().rss
+                memory_delta = (final_memory - initial_memory) / (1024 * 1024)  # MB
+                
+                if memory_delta > alert_threshold_mb:
+                    print(f"Memory alert: {func.__name__} used {memory_delta:.2f} MB")
+                
+                if profiler and track_allocations and memory_delta > 1.0:  # Track if > 1MB
+                    # Schedule allocation tracking
+                    asyncio.create_task(profiler.track_allocation(
+                        size_bytes=int(memory_delta * 1024 * 1024),
+                        object_type=func.__name__,
+                        component=component
+                    ))
+                
+                return result
+            except Exception as e:
+                final_memory = process.memory_info().rss
+                memory_delta = (final_memory - initial_memory) / (1024 * 1024)  # MB
+                print(f"Memory usage during error in {func.__name__}: {memory_delta:.2f} MB")
+                raise
+        
+        return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
+    
+    return decorator
+
+
+def track_tensor_memory(func):
+    """Decorator to track tensor memory usage in PyTorch operations."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if not torch.cuda.is_available():
+            return func(*args, **kwargs)
+        
+        # Clear cache and get initial memory
+        torch.cuda.empty_cache()
+        initial_allocated = torch.cuda.memory_allocated()
+        initial_cached = torch.cuda.memory_reserved()
+        
+        try:
+            result = func(*args, **kwargs)
+            
+            final_allocated = torch.cuda.memory_allocated()
+            final_cached = torch.cuda.memory_reserved()
+            
+            allocated_delta = (final_allocated - initial_allocated) / (1024 * 1024)  # MB
+            cached_delta = (final_cached - initial_cached) / (1024 * 1024)  # MB
+            
+            if allocated_delta > 10 or cached_delta > 10:  # Alert if > 10MB
+                print(f"GPU Memory - {func.__name__}: "
+                      f"Allocated: {allocated_delta:.2f} MB, "
+                      f"Cached: {cached_delta:.2f} MB")
+            
+            return result
+        except Exception as e:
+            # Check memory on error
+            final_allocated = torch.cuda.memory_allocated()
+            allocated_delta = (final_allocated - initial_allocated) / (1024 * 1024)
+            print(f"GPU Memory during error in {func.__name__}: {allocated_delta:.2f} MB")
+            raise
+    
+    return wrapper
+
+
 class MemoryProfiler:
     """
     Advanced Memory Profiling System for the AI Assistant.
@@ -178,7 +392,7 @@ class MemoryProfiler:
     - Memory optimization suggestions
     """
     
-    def __init__(self, container: Container):
+    def __init__(self, container: 'Container'):
         """
         Initialize the memory profiler.
         
@@ -188,48 +402,37 @@ class MemoryProfiler:
         self.container = container
         self.logger = get_logger(__name__)
         
-        # Core services
-        self.config = container.get(ConfigLoader)
-        self.event_bus = container.get(EventBus)
-        self.error_handler = container.get(ErrorHandler)
-        self.health_check = container.get(HealthCheck)
-        
-        # Observability
-        self.metrics = container.get(MetricsCollector)
-        self.tracer = container.get(TraceManager)
+        # Runtime dependency loading to avoid circular imports
+        self._load_dependencies()
         
         # Configuration
-        self.profiling_level = ProfilingLevel(
-            self.config.get("memory_profiler.level", "component")
-        )
-        self.snapshot_interval_seconds = self.config.get(
-            "memory_profiler.snapshot_interval", 300
-        )
-        self.retention_days = self.config.get("memory_profiler.retention_days", 7)
-        self.enable_leak_detection = self.config.get(
-            "memory_profiler.enable_leak_detection", True
-        )
-        self.enable_gpu_monitoring = self.config.get(
-            "memory_profiler.enable_gpu_monitoring", True
-        )
-        self.warning_threshold_percent = self.config.get(
-            "memory_profiler.warning_threshold", 70
-        )
-        self.critical_threshold_percent = self.config.get(
-            "memory_profiler.critical_threshold", 85
-        )
-        self.snapshot_dir = Path(self.config.get(
-            "memory_profiler.snapshot_dir", "data/profiling/memory"
-        ))
+        self.profiling_level = ProfilingLevel.COMPONENT
+        self.snapshot_interval_seconds = 300
+        self.retention_days = 7
+        self.enable_leak_detection = True
+        self.enable_gpu_monitoring = True
+        self.warning_threshold_percent = 70
+        self.critical_threshold_percent = 85
+        self.snapshot_dir = Path("data/profiling/memory")
+        
+        # Try to load configuration if possible
+        self._load_configuration()
         
         # State management
         self.is_running = False
         self.snapshot_task: Optional[asyncio.Task] = None
         self.monitor_task: Optional[asyncio.Task] = None
+        self.cleanup_task: Optional[asyncio.Task] = None
         self.snapshots: List[MemorySnapshot] = []
         self.allocations: Dict[int, MemoryAllocation] = {}
         self.component_memory: Dict[str, float] = {}
         self.process = psutil.Process()
+        
+        # Enhanced features
+        self.memory_pools: Dict[str, MemoryPool] = {}
+        self.async_operation_tracker: Dict[str, Dict[str, Any]] = {}
+        self.fragmentation_history: deque = deque(maxlen=100)
+        self.allocation_patterns: Dict[str, deque] = defaultdict(lambda: deque(maxlen=50))
         
         # Track start time for growth calculations
         self.start_time = datetime.now(timezone.utc)
@@ -247,12 +450,261 @@ class MemoryProfiler:
             self.snapshot_dir.mkdir(parents=True, exist_ok=True)
         
         # Register health check
-        self.health_check.register_component("memory_profiler", self._health_check_callback)
+        self._register_health_check()
         
-        self.logger.info(f"MemoryProfiler initialized with level: {self.profiling_level.value}")
+        self.logger.info(f"Enhanced MemoryProfiler initialized with level: {self.profiling_level.value}")
+
+    def _load_dependencies(self):
+        """Load dependencies at runtime to avoid circular imports."""
+        try:
+            from src.core.config.loader import ConfigLoader
+            self.config = self.container.get(ConfigLoader)
+        except Exception:
+            self.config = None
+        
+        try:
+            from src.core.events.event_bus import EventBus
+            self.event_bus = self.container.get(EventBus)
+        except Exception:
+            self.event_bus = None
+        
+        try:
+            from src.core.error_handling import ErrorHandler
+            self.error_handler = self.container.get(ErrorHandler)
+        except Exception:
+            self.error_handler = None
+        
+        try:
+            from src.core.health_check import HealthCheck
+            self.health_check = self.container.get(HealthCheck)
+        except Exception:
+            self.health_check = None
+        
+        try:
+            from src.observability.monitoring.metrics import MetricsCollector
+            self.metrics = self.container.get(MetricsCollector)
+        except Exception:
+            self.metrics = None
+        
+        try:
+            from src.observability.monitoring.tracing import TraceManager
+            self.tracer = self.container.get(TraceManager)
+        except Exception:
+            self.tracer = None
+
+    def _load_configuration(self):
+        """Load configuration if available."""
+        if self.config:
+            try:
+                self.profiling_level = ProfilingLevel(
+                    self.config.get("memory_profiler.level", "component")
+                )
+                self.snapshot_interval_seconds = self.config.get(
+                    "memory_profiler.snapshot_interval", 300
+                )
+                self.retention_days = self.config.get("memory_profiler.retention_days", 7)
+                self.enable_leak_detection = self.config.get(
+                    "memory_profiler.enable_leak_detection", True
+                )
+                self.enable_gpu_monitoring = self.config.get(
+                    "memory_profiler.enable_gpu_monitoring", True
+                )
+                self.warning_threshold_percent = self.config.get(
+                    "memory_profiler.warning_threshold", 70
+                )
+                self.critical_threshold_percent = self.config.get(
+                    "memory_profiler.critical_threshold", 85
+                )
+                self.snapshot_dir = Path(self.config.get(
+                    "memory_profiler.snapshot_dir", "data/profiling/memory"
+                ))
+            except Exception as e:
+                self.logger.warning(f"Failed to load configuration: {e}")
+
+    def _register_health_check(self):
+        """Register health check if available."""
+        if self.health_check:
+            try:
+                self.health_check.register_component("memory_profiler", self._health_check_callback)
+            except Exception as e:
+                self.logger.warning(f"Failed to register health check: {e}")
+
+    def create_memory_pool(self, pool_name: str, initial_size: int = 1000, max_size: int = 10000) -> MemoryPool:
+        """Create a memory pool for high-frequency allocations."""
+        if pool_name in self.memory_pools:
+            return self.memory_pools[pool_name]
+        
+        pool = MemoryPool(pool_name, initial_size, max_size)
+        self.memory_pools[pool_name] = pool
+        
+        self.logger.info(f"Created memory pool '{pool_name}' with initial size {initial_size}")
+        return pool
+
+    def get_memory_pool(self, pool_name: str) -> Optional[MemoryPool]:
+        """Get an existing memory pool."""
+        return self.memory_pools.get(pool_name)
+
+    def get_pool_stats(self) -> Dict[str, Dict[str, Any]]:
+        """Get statistics for all memory pools."""
+        return {name: pool.get_stats() for name, pool in self.memory_pools.items()}
+
+    @handle_exceptions
+    async def track_async_operation(
+        self,
+        operation_id: str,
+        operation_type: str,
+        component: Optional[str] = None,
+        session_id: Optional[str] = None
+    ):
+        """Start tracking an async operation's memory usage."""
+        initial_memory = self.process.memory_info().rss
+        
+        self.async_operation_tracker[operation_id] = {
+            "operation_type": operation_type,
+            "component": component,
+            "session_id": session_id,
+            "start_time": datetime.now(timezone.utc),
+            "initial_memory_bytes": initial_memory,
+            "peak_memory_bytes": initial_memory,
+            "allocations": []
+        }
+        
+        # Track allocation
+        allocation_id = await self.track_allocation(
+            size_bytes=0,  # Initial allocation
+            object_type=f"async_{operation_type}",
+            component=component,
+            session_id=session_id
+        )
+        
+        self.async_operation_tracker[operation_id]["allocation_id"] = allocation_id
+
+    @handle_exceptions
+    async def complete_async_operation(self, operation_id: str) -> Dict[str, Any]:
+        """Complete tracking of an async operation."""
+        if operation_id not in self.async_operation_tracker:
+            return {}
+        
+        operation = self.async_operation_tracker[operation_id]
+        final_memory = self.process.memory_info().rss
+        
+        # Calculate memory usage
+        memory_delta = final_memory - operation["initial_memory_bytes"]
+        duration = (datetime.now(timezone.utc) - operation["start_time"]).total_seconds()
+        
+        # Update allocation
+        if "allocation_id" in operation:
+            await self.track_deallocation(operation["allocation_id"])
+        
+        # Store operation results
+        result = {
+            "operation_id": operation_id,
+            "operation_type": operation["operation_type"],
+            "component": operation["component"],
+            "session_id": operation["session_id"],
+            "duration_seconds": duration,
+            "memory_delta_bytes": memory_delta,
+            "memory_delta_mb": memory_delta / (1024 * 1024),
+            "peak_memory_bytes": operation["peak_memory_bytes"],
+            "initial_memory_bytes": operation["initial_memory_bytes"],
+            "final_memory_bytes": final_memory
+        }
+        
+        # Clean up
+        del self.async_operation_tracker[operation_id]
+        
+        # Record metrics if available
+        if self.metrics:
+            self.metrics.record("memory_async_operation_duration", duration)
+            self.metrics.record("memory_async_operation_delta_mb", memory_delta / (1024 * 1024))
+        
+        return result
+
+    def analyze_memory_fragmentation(self) -> Dict[str, Any]:
+        """Analyze memory fragmentation patterns."""
+        try:
+            # Get current memory info
+            virtual_memory = psutil.virtual_memory()
+            process_memory = self.process.memory_info()
+            
+            # Calculate fragmentation metrics
+            fragmentation_ratio = 1.0 - (virtual_memory.available / virtual_memory.total)
+            
+            # Analyze allocation patterns
+            allocation_sizes = []
+            for allocation in self.allocations.values():
+                if not allocation.is_deallocated:
+                    allocation_sizes.append(allocation.size_bytes)
+            
+            # Calculate fragmentation statistics
+            fragmentation_stats = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "system_fragmentation_ratio": fragmentation_ratio,
+                "process_rss_mb": process_memory.rss / (1024 * 1024),
+                "process_vms_mb": process_memory.vms / (1024 * 1024),
+                "active_allocations": len(allocation_sizes),
+                "total_allocated_mb": sum(allocation_sizes) / (1024 * 1024) if allocation_sizes else 0,
+                "average_allocation_size_kb": np.mean(allocation_sizes) / 1024 if allocation_sizes else 0,
+                "median_allocation_size_kb": np.median(allocation_sizes) / 1024 if allocation_sizes else 0,
+                "max_allocation_size_mb": max(allocation_sizes) / (1024 * 1024) if allocation_sizes else 0,
+                "allocation_size_stddev_kb": np.std(allocation_sizes) / 1024 if allocation_sizes else 0
+            }
+            
+            # Store in history
+            self.fragmentation_history.append(fragmentation_stats)
+            
+            return fragmentation_stats
+            
+        except Exception as e:
+            self.logger.error(f"Error analyzing memory fragmentation: {e}")
+            return {"error": str(e)}
+
+    def get_fragmentation_trend(self, minutes: int = 30) -> Dict[str, Any]:
+        """Get fragmentation trend over time."""
+        if not self.fragmentation_history:
+            return {"error": "No fragmentation data available"}
+        
+        # Filter recent data
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        recent_data = [
+            data for data in self.fragmentation_history
+            if datetime.fromisoformat(data["timestamp"]) >= cutoff_time
+        ]
+        
+        if len(recent_data) < 2:
+            return {"error": "Insufficient data for trend analysis"}
+        
+        # Calculate trends
+        fragmentation_values = [data["system_fragmentation_ratio"] for data in recent_data]
+        memory_values = [data["process_rss_mb"] for data in recent_data]
+        
+        return {
+            "time_range_minutes": minutes,
+            "data_points": len(recent_data),
+            "fragmentation_trend": {
+                "start": fragmentation_values[0],
+                "end": fragmentation_values[-1],
+                "change": fragmentation_values[-1] - fragmentation_values[0],
+                "average": np.mean(fragmentation_values),
+                "max": np.max(fragmentation_values),
+                "min": np.min(fragmentation_values)
+            },
+            "memory_trend": {
+                "start_mb": memory_values[0],
+                "end_mb": memory_values[-1],
+                "change_mb": memory_values[-1] - memory_values[0],
+                "average_mb": np.mean(memory_values),
+                "max_mb": np.max(memory_values),
+                "min_mb": np.min(memory_values)
+            }
+        }
 
     def _register_metrics(self) -> None:
         """Register memory-related metrics with the metrics system."""
+        if not self.metrics:
+            self.logger.warning("Metrics collector not available, skipping metric registration")
+            return
+            
         try:
             # System memory metrics
             self.metrics.register_gauge("memory_system_total_mb")
@@ -267,6 +719,12 @@ class MemoryProfiler:
             
             # Component memory metrics
             self.metrics.register_gauge("memory_component_used_mb")
+            
+            # Enhanced metrics
+            self.metrics.register_gauge("memory_fragmentation_ratio")
+            self.metrics.register_histogram("memory_async_operation_duration")
+            self.metrics.register_histogram("memory_async_operation_delta_mb")
+            self.metrics.register_gauge("memory_pool_efficiency_percent")
             
             # GPU memory metrics if enabled
             if self.enable_gpu_monitoring:
@@ -303,6 +761,7 @@ class MemoryProfiler:
             # Start background tasks
             self.monitor_task = asyncio.create_task(self._memory_monitor_loop())
             self.snapshot_task = asyncio.create_task(self._snapshot_loop())
+            self.cleanup_task = asyncio.create_task(self._cleanup_loop())
             
             # Register event handlers
             self._register_event_handlers()
@@ -310,7 +769,7 @@ class MemoryProfiler:
             # Take initial snapshot
             await self.take_snapshot("startup")
             
-            self.logger.info("Memory profiler started successfully")
+            self.logger.info("Enhanced memory profiler started successfully")
             
         except Exception as e:
             self.is_running = False
@@ -330,6 +789,8 @@ class MemoryProfiler:
                 self.monitor_task.cancel()
             if self.snapshot_task:
                 self.snapshot_task.cancel()
+            if self.cleanup_task:
+                self.cleanup_task.cancel()
             
             # Take final snapshot
             await self.take_snapshot("shutdown")
@@ -346,23 +807,32 @@ class MemoryProfiler:
 
     def _register_event_handlers(self) -> None:
         """Register event handlers for system events."""
-        # Component lifecycle events for memory tracking
-        self.event_bus.subscribe("component_initialized", self._handle_component_initialized)
-        self.event_bus.subscribe("component_stopped", self._handle_component_stopped)
-        
-        # Session lifecycle events
-        self.event_bus.subscribe("session_started", self._handle_session_started)
-        self.event_bus.subscribe("session_ended", self._handle_session_ended)
-        
-        # Processing events
-        self.event_bus.subscribe("processing_started", self._handle_processing_started)
-        self.event_bus.subscribe("processing_completed", self._handle_processing_completed)
-        
-        # Error events
-        self.event_bus.subscribe("error_occurred", self._handle_error)
-        
-        # System events
-        self.event_bus.subscribe("system_shutdown_started", self._handle_system_shutdown)
+        if not self.event_bus:
+            self.logger.warning("Event bus not available, skipping event handler registration")
+            return
+            
+        try:
+            # Component lifecycle events for memory tracking
+            self.event_bus.subscribe("component_initialized", self._handle_component_initialized)
+            self.event_bus.subscribe("component_stopped", self._handle_component_stopped)
+            
+            # Session lifecycle events
+            self.event_bus.subscribe("session_started", self._handle_session_started)
+            self.event_bus.subscribe("session_ended", self._handle_session_ended)
+            
+            # Processing events
+            self.event_bus.subscribe("processing_started", self._handle_processing_started)
+            self.event_bus.subscribe("processing_completed", self._handle_processing_completed)
+            
+            # Error events
+            self.event_bus.subscribe("error_occurred", self._handle_error)
+            
+            # System events
+            self.event_bus.subscribe("system_shutdown_started", self._handle_system_shutdown)
+            
+            self.logger.debug("Event handlers registered successfully")
+        except Exception as e:
+            self.logger.warning(f"Failed to register event handlers: {str(e)}")
 
     @handle_exceptions
     async def take_snapshot(self, trigger: str = "manual") -> MemorySnapshot:
@@ -378,12 +848,20 @@ class MemoryProfiler:
         snapshot_id = f"snapshot_{int(time.time())}_{trigger}"
         
         try:
-            with self.tracer.trace("memory_snapshot") as span:
-                span.set_attributes({
-                    "snapshot_id": snapshot_id,
-                    "trigger": trigger,
-                    "profiling_level": self.profiling_level.value
-                })
+            if self.tracer:
+                trace_context = self.tracer.trace("memory_snapshot")
+            else:
+                # Use a simple context manager if tracer is not available
+                from contextlib import nullcontext
+                trace_context = nullcontext()
+                
+            with trace_context as span:
+                if span and hasattr(span, 'set_attributes'):
+                    span.set_attributes({
+                        "snapshot_id": snapshot_id,
+                        "trigger": trigger,
+                        "profiling_level": self.profiling_level.value
+                    })
                 
                 snapshot = MemorySnapshot(
                     snapshot_id=snapshot_id,
@@ -453,13 +931,14 @@ class MemoryProfiler:
                     self.snapshots.pop(0)
                 
                 # Emit event
-                await self.event_bus.emit(MemorySnapshotCreated(
-                    snapshot_id=snapshot_id,
-                    timestamp=snapshot.timestamp,
-                    trigger=trigger,
-                    memory_mb=snapshot.process_rss_mb,
-                    growth_rate=snapshot.memory_growth_rate_mb_per_min
-                ))
+                if self.event_bus:
+                    await self.event_bus.emit(MemorySnapshotCreated(
+                        snapshot_id=snapshot_id,
+                        timestamp=snapshot.timestamp,
+                        trigger=trigger,
+                        memory_mb=snapshot.process_rss_mb,
+                        growth_rate=snapshot.memory_growth_rate_mb_per_min
+                    ))
                 
                 self.logger.info(f"Memory snapshot {snapshot_id} created")
                 
@@ -748,8 +1227,9 @@ class MemoryProfiler:
         self.allocations[allocation_id] = allocation
         
         # Update metrics
-        self.metrics.increment("memory_allocations_total")
-        self.metrics.record("memory_allocation_size_bytes", size_bytes)
+        if self.metrics:
+            self.metrics.increment("memory_allocations_total")
+            self.metrics.record("memory_allocation_size_bytes", size_bytes)
         
         # Clean up old allocations periodically
         if len(self.allocations) > 10000:
@@ -811,15 +1291,21 @@ class MemoryProfiler:
             leaked_bytes = sum(a.size_bytes for a in potential_leaks)
             leaked_mb = leaked_bytes / (1024 * 1024)
             
-            asyncio.create_task(self.event_bus.emit(MemoryLeakDetected(
-                leak_count=len(potential_leaks),
-                leaked_bytes=leaked_bytes,
-                component=potential_leaks[0].component if potential_leaks else None,
-                session_id=potential_leaks[0].session_id if potential_leaks else None
-            )))
-            
-            self.metrics.increment("memory_leaks_detected", count=len(potential_leaks))
-            self.metrics.set("memory_leaked_mb", leaked_mb)
+            if potential_leaks:
+                leaked_bytes = sum(a.size_bytes for a in potential_leaks)
+                leaked_mb = leaked_bytes / (1024 * 1024)
+                
+                if self.event_bus:
+                    asyncio.create_task(self.event_bus.emit(MemoryLeakDetected(
+                        leak_count=len(potential_leaks),
+                        leaked_bytes=leaked_bytes,
+                        component=potential_leaks[0].component if potential_leaks else None,
+                        session_id=potential_leaks[0].session_id if potential_leaks else None
+                    )))
+                
+                if self.metrics:
+                    self.metrics.increment("memory_leaks_detected", count=len(potential_leaks))
+                    self.metrics.set("memory_leaked_mb", leaked_mb)
             
             self.logger.warning(
                 f"Detected {len(potential_leaks)} potential memory leaks totaling {leaked_mb:.2f} MB"
@@ -884,45 +1370,65 @@ class MemoryProfiler:
                     process_memory = self.process.memory_info()
                     
                     # Update metrics
-                    self.metrics.set("memory_system_total_mb", system_memory.total / (1024 * 1024))
-                    self.metrics.set("memory_system_available_mb", system_memory.available / (1024 * 1024))
-                    self.metrics.set("memory_system_used_mb", system_memory.used / (1024 * 1024))
-                    self.metrics.set("memory_system_used_percent", system_memory.percent)
-                    
-                    self.metrics.set("memory_process_rss_mb", process_memory.rss / (1024 * 1024))
-                    self.metrics.set("memory_process_vms_mb", process_memory.vms / (1024 * 1024))
+                    if self.metrics:
+                        self.metrics.set("memory_system_total_mb", system_memory.total / (1024 * 1024))
+                        self.metrics.set("memory_system_available_mb", system_memory.available / (1024 * 1024))
+                        self.metrics.set("memory_system_used_mb", system_memory.used / (1024 * 1024))
+                        self.metrics.set("memory_system_used_percent", system_memory.percent)
+                        
+                        self.metrics.set("memory_process_rss_mb", process_memory.rss / (1024 * 1024))
+                        self.metrics.set("memory_process_vms_mb", process_memory.vms / (1024 * 1024))
                     
                     # Check for GPU memory if enabled
                     if self.enable_gpu_monitoring and torch.cuda.is_available():
                         gpu_allocated = torch.cuda.memory_allocated() / (1024 * 1024)
                         gpu_cached = torch.cuda.memory_reserved() / (1024 * 1024)
                         
-                        self.metrics.set("memory_gpu_allocated_mb", gpu_allocated)
-                        self.metrics.set("memory_gpu_cached_mb", gpu_cached)
+                        if self.metrics:
+                            self.metrics.set("memory_gpu_allocated_mb", gpu_allocated)
+                            self.metrics.set("memory_gpu_cached_mb", gpu_cached)
                     
                     # Check for memory thresholds
                     if system_memory.percent >= self.critical_threshold_percent:
-                        await self.event_bus.emit(MemoryThresholdExceeded(
-                            threshold_type="critical",
-                            current_percent=system_memory.percent,
-                            threshold_percent=self.critical_threshold_percent,
-                            available_mb=system_memory.available / (1024 * 1024)
-                        ))
+                        if self.event_bus:
+                            await self.event_bus.emit(MemoryThresholdExceeded(
+                                threshold_type="critical",
+                                current_percent=system_memory.percent,
+                                threshold_percent=self.critical_threshold_percent,
+                                available_mb=system_memory.available / (1024 * 1024)
+                            ))
                         
                         # Take snapshot on critical threshold
                         await self.take_snapshot("critical_threshold")
                         
                     elif system_memory.percent >= self.warning_threshold_percent:
-                        await self.event_bus.emit(MemoryThresholdExceeded(
-                            threshold_type="warning",
-                            current_percent=system_memory.percent,
-                            threshold_percent=self.warning_threshold_percent,
-                            available_mb=system_memory.available / (1024 * 1024)
-                        ))
+                        if self.event_bus:
+                            await self.event_bus.emit(MemoryThresholdExceeded(
+                                threshold_type="warning",
+                                current_percent=system_memory.percent,
+                                threshold_percent=self.warning_threshold_percent,
+                                available_mb=system_memory.available / (1024 * 1024)
+                            ))
                     
                     # Look for memory leaks
                     if self.enable_leak_detection:
                         self._detect_memory_leaks()
+                    
+                    # Analyze memory fragmentation every 5 minutes
+                    if int(time.time()) % 300 == 0:  # Every 5 minutes
+                        fragmentation_stats = self.analyze_memory_fragmentation()
+                        if self.metrics and "system_fragmentation_ratio" in fragmentation_stats:
+                            self.metrics.set("memory_fragmentation_ratio", fragmentation_stats["system_fragmentation_ratio"])
+                    
+                    # Update pool efficiency metrics
+                    if self.metrics and self.memory_pools:
+                        pool_stats = self.get_pool_stats()
+                        for pool_name, stats in pool_stats.items():
+                            self.metrics.set(
+                                "memory_pool_efficiency_percent",
+                                stats["efficiency_percent"],
+                                {"pool_name": pool_name}
+                            )
                     
                     # Sleep interval - shorter at higher memory usage
                     if system_memory.percent >= self.warning_threshold_percent:
@@ -969,6 +1475,54 @@ class MemoryProfiler:
         except Exception as e:
             self.logger.error(f"Snapshot loop failed: {str(e)}")
 
+    async def _cleanup_loop(self) -> None:
+        """Background task for periodic cleanup operations."""
+        try:
+            # Wait a bit before first cleanup
+            await asyncio.sleep(120)  # Wait 2 minutes
+            
+            while self.is_running:
+                try:
+                    # Cleanup old allocations
+                    await self._cleanup_old_allocations()
+                    
+                    # Cleanup old snapshots
+                    await self._cleanup_old_snapshots()
+                    
+                    # Cleanup completed async operations
+                    await self._cleanup_async_operations()
+                    
+                    # Sleep until next cleanup (every 10 minutes)
+                    await asyncio.sleep(600)
+                    
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    self.logger.error(f"Error in cleanup loop: {str(e)}")
+                    await asyncio.sleep(300)  # Retry after 5 minutes
+                    
+        except asyncio.CancelledError:
+            self.logger.info("Cleanup loop cancelled")
+        except Exception as e:
+            self.logger.error(f"Cleanup loop failed: {str(e)}")
+
+    async def _cleanup_async_operations(self) -> None:
+        """Clean up old async operation tracking data."""
+        now = datetime.now(timezone.utc)
+        to_remove = []
+        
+        # Find operations older than 1 hour
+        for operation_id, operation in self.async_operation_tracker.items():
+            if (now - operation["start_time"]).total_seconds() > 3600:
+                to_remove.append(operation_id)
+        
+        # Remove them
+        for operation_id in to_remove:
+            del self.async_operation_tracker[operation_id]
+        
+        if to_remove:
+            self.logger.debug(f"Cleaned up {len(to_remove)} old async operation records")
+
     @asynccontextmanager
     async def profile_scope(
         self,
@@ -988,11 +1542,17 @@ class MemoryProfiler:
         initial_memory = psutil.Process().memory_info().rss
         
         # Start the scope
-        with self.tracer.trace(f"memory_profile_{name}") as span:
-            span.set_attributes({
-                "component": component or "unknown",
-                "session_id": session_id or "unknown"
-            })
+        if self.tracer:
+            trace_context = self.tracer.trace(f"memory_profile_{name}")
+        else:
+            trace_context = nullcontext()
+            
+        with trace_context as span:
+            if span and hasattr(span, 'set_attributes'):
+                span.set_attributes({
+                    "component": component or "unknown",
+                    "session_id": session_id or "unknown"
+                })
             
             try:
                 # Execute the scope
@@ -1004,7 +1564,7 @@ class MemoryProfiler:
                 elapsed_time = time.time() - start_time
                 
                 # Record metrics
-                if memory_change > 0:
+                if memory_change > 0 and self.metrics:
                     self.metrics.record("memory_allocation_size_bytes", memory_change)
                 
                 # Track the allocation if significant
@@ -1017,10 +1577,11 @@ class MemoryProfiler:
                     )
                 
                 # Update span
-                span.set_attributes({
-                    "memory_change_bytes": memory_change,
-                    "execution_time_seconds": elapsed_time
-                })
+                if span and hasattr(span, 'set_attributes'):
+                    span.set_attributes({
+                        "memory_change_bytes": memory_change,
+                        "execution_time_seconds": elapsed_time
+                    })
 
     async def _handle_component_initialized(self, event) -> None:
         """Handle component initialized events."""
@@ -1111,11 +1672,14 @@ class MemoryProfiler:
         
         # Check overall memory growth
         if latest_snapshot.memory_growth_rate_mb_per_min > 0.5:
+            severity = "critical" if latest_snapshot.memory_growth_rate_mb_per_min > 5.0 else \
+                      "high" if latest_snapshot.memory_growth_rate_mb_per_min > 2.0 else "medium"
             suggestions.append({
                 "type": "growth",
-                "severity": "high" if latest_snapshot.memory_growth_rate_mb_per_min > 2.0 else "medium",
+                "severity": severity,
                 "message": f"Memory is growing at {latest_snapshot.memory_growth_rate_mb_per_min:.2f} MB/minute",
-                "suggestion": "Check for memory leaks or resource cleanup issues"
+                "suggestion": "Check for memory leaks or resource cleanup issues",
+                "action": "investigate_growth"
             })
         
         # Check component memory distribution
@@ -1129,7 +1693,8 @@ class MemoryProfiler:
                         "severity": "medium",
                         "component": component,
                         "message": f"Component {component} is using {memory_mb:.2f} MB ({memory_mb/total_component_mb*100:.1f}% of tracked memory)",
-                        "suggestion": "Consider optimizing memory usage in this component"
+                        "suggestion": "Consider optimizing memory usage in this component",
+                        "action": f"optimize_component_{component}"
                     })
         
         # Check for GPU memory optimization if applicable
@@ -1139,24 +1704,79 @@ class MemoryProfiler:
                     "type": "gpu",
                     "severity": "medium",
                     "message": f"GPU has {latest_snapshot.gpu_cached_mb:.2f} MB cached but only {latest_snapshot.gpu_allocated_mb:.2f} MB allocated",
-                    "suggestion": "Consider using torch.cuda.empty_cache() to free unused GPU memory"
+                    "suggestion": "Consider using torch.cuda.empty_cache() to free unused GPU memory",
+                    "action": "clear_gpu_cache"
                 })
         
         # Check for potential leaks
         if latest_snapshot.potential_leaks:
             leak_types = {}
+            total_leaked_mb = 0
             for leak in latest_snapshot.potential_leaks:
                 leak_type = leak.get("object_type", "unknown")
                 if leak_type not in leak_types:
-                    leak_types[leak_type] = 0
-                leak_types[leak_type] += 1
+                    leak_types[leak_type] = {"count": 0, "size_mb": 0}
+                leak_types[leak_type]["count"] += 1
+                leak_types[leak_type]["size_mb"] += leak.get("size_mb", 0)
+                total_leaked_mb += leak.get("size_mb", 0)
             
-            for leak_type, count in leak_types.items():
+            for leak_type, stats in leak_types.items():
                 suggestions.append({
                     "type": "leak",
+                    "severity": "critical" if stats["size_mb"] > 50 else "high",
+                    "message": f"Detected {stats['count']} potential memory leaks of type {leak_type} ({stats['size_mb']:.2f} MB)",
+                    "suggestion": "Check for unclosed resources or circular references",
+                    "action": f"fix_leak_{leak_type}",
+                    "details": {
+                        "leak_count": stats["count"],
+                        "total_size_mb": stats["size_mb"]
+                    }
+                })
+        
+        # Check memory pool efficiency
+        if self.memory_pools:
+            pool_stats = self.get_pool_stats()
+            for pool_name, stats in pool_stats.items():
+                if stats["efficiency_percent"] < 50:
+                    suggestions.append({
+                        "type": "pool",
+                        "severity": "medium",
+                        "message": f"Memory pool '{pool_name}' has low efficiency: {stats['efficiency_percent']:.1f}%",
+                        "suggestion": "Consider tuning pool size or allocation patterns",
+                        "action": f"optimize_pool_{pool_name}",
+                        "details": stats
+                    })
+        
+        # Check fragmentation if we have data
+        if self.fragmentation_history:
+            latest_fragmentation = self.fragmentation_history[-1]
+            if latest_fragmentation.get("system_fragmentation_ratio", 0) > 0.8:
+                suggestions.append({
+                    "type": "fragmentation",
                     "severity": "high",
-                    "message": f"Detected {count} potential memory leaks of type {leak_type}",
-                    "suggestion": "Check for unclosed resources or circular references"
+                    "message": f"High memory fragmentation detected: {latest_fragmentation['system_fragmentation_ratio']*100:.1f}%",
+                    "suggestion": "Consider memory defragmentation or pool consolidation",
+                    "action": "reduce_fragmentation"
+                })
+        
+        # Check async operation patterns
+        if self.async_operation_tracker:
+            long_running_ops = [
+                op for op in self.async_operation_tracker.values()
+                if (datetime.now(timezone.utc) - op["start_time"]).total_seconds() > 300  # 5 minutes
+            ]
+            
+            if long_running_ops:
+                suggestions.append({
+                    "type": "async_operations",
+                    "severity": "medium",
+                    "message": f"{len(long_running_ops)} async operations running for >5 minutes",
+                    "suggestion": "Check for stuck or slow async operations that may be holding memory",
+                    "action": "investigate_async_operations",
+                    "details": {
+                        "long_running_count": len(long_running_ops),
+                        "operation_types": list(set(op["operation_type"] for op in long_running_ops))
+                    }
                 })
         
         # If using Python objects heavily
@@ -1164,8 +1784,9 @@ class MemoryProfiler:
             suggestions.append({
                 "type": "gc",
                 "severity": "medium",
-                "message": f"High number of Python objects: {latest_snapshot.python_gc_objects}",
-                "suggestion": "Consider manually triggering garbage collection (gc.collect())"
+                "message": f"High number of Python objects: {latest_snapshot.python_gc_objects:,}",
+                "suggestion": "Consider manually triggering garbage collection (gc.collect()) or reducing object creation",
+                "action": "optimize_gc"
             })
         
         # If no specific issues found but memory usage is high
@@ -1176,8 +1797,19 @@ class MemoryProfiler:
             suggestions.append({
                 "type": "general",
                 "severity": "medium",
-                "message": f"High overall memory usage: {latest_snapshot.process_rss_mb:.2f} MB",
-                "suggestion": "Consider implementing memory limits or scaling resources"
+                "message": f"High overall memory usage: {latest_snapshot.process_rss_mb:.2f} MB ({latest_snapshot.process_rss_mb/latest_snapshot.total_physical_mb*100:.1f}% of system memory)",
+                "suggestion": "Consider implementing memory limits or scaling resources",
+                "action": "scale_resources"
+            })
+        
+        # Add positive feedback if everything looks good
+        if not suggestions:
+            suggestions.append({
+                "type": "positive",
+                "severity": "info",
+                "message": "Memory usage appears healthy with no major issues detected",
+                "suggestion": "Continue monitoring for any changes in memory patterns",
+                "action": "continue_monitoring"
             })
         
         return suggestions

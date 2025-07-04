@@ -1320,3 +1320,4 @@ class ConfigLoader:
                     self.logger.debug(f"Cleaned up {expired_count} expired cache entries")
                 
             except Exception as e:
+                self.logger.error(f"Error in cleanup task: {str(e)}")
