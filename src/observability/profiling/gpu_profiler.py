@@ -871,59 +871,695 @@ class GPUProfiler:
 
     async def _detect_bottlenecks(self) -> None:
         """Detect GPU performance bottlenecks."""
-        # TODO: Implement bottleneck detection logic
-        pass
+        if not self.gpu_available:
+            return
+            
+        for device_id in self.gpu_devices:
+            try:
+                await self._detect_device_bottlenecks(device_id)
+            except Exception as e:
+                self.logger.error(f"Failed to detect bottlenecks for GPU {device_id}: {str(e)}")
+
+    async def _detect_device_bottlenecks(self, device_id: int) -> None:
+        """Detect bottlenecks for a specific GPU device."""
+        if device_id not in self.metrics_history or len(self.metrics_history[device_id]) < 5:
+            return
+            
+        recent_metrics = list(self.metrics_history[device_id])[-10:]  # Last 10 samples
+        device_info = self.gpu_devices[device_id]
+        
+        # Compute utilization bottleneck
+        avg_utilization = sum(m.utilization_percent for m in recent_metrics) / len(recent_metrics)
+        if avg_utilization > 95:
+            bottleneck = GPUBottleneck(
+                bottleneck_id=str(uuid.uuid4()),
+                device_id=device_id,
+                bottleneck_type=GPUBottleneckType.COMPUTE,
+                severity="high",
+                current_value=avg_utilization,
+                threshold_value=95.0,
+                impact_factor=min(1.0, avg_utilization / 100.0),
+                description=f"High compute utilization ({avg_utilization:.1f}%) on GPU {device_id}",
+                suggested_actions=[
+                    "Consider reducing model complexity",
+                    "Optimize kernel implementations",
+                    "Use mixed precision training",
+                    "Distribute workload across multiple GPUs"
+                ],
+                related_metrics={
+                    "utilization_percent": avg_utilization,
+                    "memory_utilization": sum(m.memory_utilization_percent for m in recent_metrics) / len(recent_metrics)
+                }
+            )
+            self.detected_bottlenecks.append(bottleneck)
+            
+            await self.event_bus.emit(GPUPerformanceBottleneckDetected(
+                device_id=device_id,
+                device_name=device_info.name,
+                bottleneck_type=bottleneck.bottleneck_type.value,
+                bottleneck_details=asdict(bottleneck)
+            ))
+        
+        # Memory bandwidth bottleneck
+        avg_memory_util = sum(m.memory_utilization_percent for m in recent_metrics) / len(recent_metrics)
+        if avg_memory_util > 90 and avg_utilization < 70:
+            bottleneck = GPUBottleneck(
+                bottleneck_id=str(uuid.uuid4()),
+                device_id=device_id,
+                bottleneck_type=GPUBottleneckType.MEMORY_BANDWIDTH,
+                severity="medium",
+                current_value=avg_memory_util,
+                threshold_value=90.0,
+                impact_factor=min(1.0, avg_memory_util / 100.0),
+                description=f"Memory bandwidth bottleneck on GPU {device_id}",
+                suggested_actions=[
+                    "Optimize memory access patterns",
+                    "Use memory coalescing techniques",
+                    "Reduce memory transfers between host and device",
+                    "Consider using unified memory"
+                ],
+                related_metrics={
+                    "memory_utilization": avg_memory_util,
+                    "compute_utilization": avg_utilization
+                }
+            )
+            self.detected_bottlenecks.append(bottleneck)
+            
+            await self.event_bus.emit(GPUPerformanceBottleneckDetected(
+                device_id=device_id,
+                device_name=device_info.name,
+                bottleneck_type=bottleneck.bottleneck_type.value,
+                bottleneck_details=asdict(bottleneck)
+            ))
+        
+        # Memory capacity bottleneck
+        avg_memory_used = sum(m.memory_used_mb for m in recent_metrics) / len(recent_metrics)
+        memory_usage_percent = (avg_memory_used / device_info.total_memory_mb) * 100
+        if memory_usage_percent > 95:
+            bottleneck = GPUBottleneck(
+                bottleneck_id=str(uuid.uuid4()),
+                device_id=device_id,
+                bottleneck_type=GPUBottleneckType.MEMORY_CAPACITY,
+                severity="critical",
+                current_value=memory_usage_percent,
+                threshold_value=95.0,
+                impact_factor=min(1.0, memory_usage_percent / 100.0),
+                description=f"Memory capacity bottleneck on GPU {device_id} ({memory_usage_percent:.1f}% used)",
+                suggested_actions=[
+                    "Reduce batch size",
+                    "Use gradient checkpointing",
+                    "Clear unused GPU memory with torch.cuda.empty_cache()",
+                    "Consider model parallelization"
+                ],
+                related_metrics={
+                    "memory_used_mb": avg_memory_used,
+                    "memory_total_mb": device_info.total_memory_mb,
+                    "memory_usage_percent": memory_usage_percent
+                }
+            )
+            self.detected_bottlenecks.append(bottleneck)
+            
+            await self.event_bus.emit(GPUPerformanceBottleneckDetected(
+                device_id=device_id,
+                device_name=device_info.name,
+                bottleneck_type=bottleneck.bottleneck_type.value,
+                bottleneck_details=asdict(bottleneck)
+            ))
+        
+        # Thermal bottleneck
+        avg_temp = sum(m.temperature_celsius for m in recent_metrics if m.temperature_celsius > 0) / max(1, len([m for m in recent_metrics if m.temperature_celsius > 0]))
+        if avg_temp > 85:
+            bottleneck = GPUBottleneck(
+                bottleneck_id=str(uuid.uuid4()),
+                device_id=device_id,
+                bottleneck_type=GPUBottleneckType.THERMAL,
+                severity="high",
+                current_value=avg_temp,
+                threshold_value=85.0,
+                impact_factor=min(1.0, avg_temp / 100.0),
+                description=f"Thermal bottleneck on GPU {device_id} ({avg_temp:.1f}°C)",
+                suggested_actions=[
+                    "Improve cooling system",
+                    "Reduce GPU workload",
+                    "Lower power limits",
+                    "Check for dust buildup"
+                ],
+                related_metrics={
+                    "temperature_celsius": avg_temp,
+                    "utilization_percent": avg_utilization
+                }
+            )
+            self.detected_bottlenecks.append(bottleneck)
+            
+            await self.event_bus.emit(GPUPerformanceBottleneckDetected(
+                device_id=device_id,
+                device_name=device_info.name,
+                bottleneck_type=bottleneck.bottleneck_type.value,
+                bottleneck_details=asdict(bottleneck)
+            ))
+        
+        # Power bottleneck
+        avg_power = sum(m.power_draw_watts for m in recent_metrics if m.power_draw_watts > 0) / max(1, len([m for m in recent_metrics if m.power_draw_watts > 0]))
+        avg_power_limit = sum(m.power_limit_watts for m in recent_metrics if m.power_limit_watts > 0) / max(1, len([m for m in recent_metrics if m.power_limit_watts > 0]))
+        if avg_power_limit > 0 and (avg_power / avg_power_limit) > 0.98:
+            bottleneck = GPUBottleneck(
+                bottleneck_id=str(uuid.uuid4()),
+                device_id=device_id,
+                bottleneck_type=GPUBottleneckType.POWER,
+                severity="medium",
+                current_value=avg_power,
+                threshold_value=avg_power_limit,
+                impact_factor=min(1.0, avg_power / avg_power_limit),
+                description=f"Power bottleneck on GPU {device_id} ({avg_power:.1f}W / {avg_power_limit:.1f}W)",
+                suggested_actions=[
+                    "Increase power limit if possible",
+                    "Optimize compute workload",
+                    "Use power-efficient algorithms",
+                    "Consider undervolting"
+                ],
+                related_metrics={
+                    "power_draw_watts": avg_power,
+                    "power_limit_watts": avg_power_limit,
+                    "power_usage_percent": (avg_power / avg_power_limit) * 100
+                }
+            )
+            self.detected_bottlenecks.append(bottleneck)
+            
+            await self.event_bus.emit(GPUPerformanceBottleneckDetected(
+                device_id=device_id,
+                device_name=device_info.name,
+                bottleneck_type=bottleneck.bottleneck_type.value,
+                bottleneck_details=asdict(bottleneck)
+            ))
+        
+        # Cleanup old bottlenecks (keep last 50)
+        self.detected_bottlenecks = self.detected_bottlenecks[-50:]
 
     async def _detect_memory_leaks(self) -> None:
         """Detect GPU memory leaks."""
-        # TODO: Implement memory leak detection logic
-        pass
+        if not self.gpu_available:
+            return
+            
+        for device_id in self.gpu_devices:
+            try:
+                await self._detect_device_memory_leaks(device_id)
+            except Exception as e:
+                self.logger.error(f"Failed to detect memory leaks for GPU {device_id}: {str(e)}")
+
+    async def _detect_device_memory_leaks(self, device_id: int) -> None:
+        """Detect memory leaks for a specific GPU device."""
+        if device_id not in self.metrics_history or len(self.metrics_history[device_id]) < 20:
+            return  # Need at least 20 samples for trend analysis
+            
+        metrics_list = list(self.metrics_history[device_id])
+        device_info = self.gpu_devices[device_id]
+        
+        # Analyze memory usage trend over time
+        memory_usage_trend = [m.memory_used_mb for m in metrics_list[-20:]]
+        time_points = [(i * self.config.sampling_interval_ms / 1000.0) for i in range(len(memory_usage_trend))]
+        
+        # Calculate linear regression to detect consistent memory growth
+        if len(memory_usage_trend) >= 10:
+            # Simple linear regression
+            n = len(memory_usage_trend)
+            sum_x = sum(time_points)
+            sum_y = sum(memory_usage_trend)
+            sum_xy = sum(x * y for x, y in zip(time_points, memory_usage_trend))
+            sum_x2 = sum(x * x for x in time_points)
+            
+            # Calculate slope (growth rate)
+            if n * sum_x2 - sum_x * sum_x != 0:
+                slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
+                
+                # Convert slope to MB/hour
+                growth_rate_mb_per_hour = slope * 3600  # seconds to hours
+                
+                # Detect potential memory leak
+                if growth_rate_mb_per_hour > 10.0:  # Growing by more than 10MB/hour
+                    # Check if this is a new leak or existing one
+                    existing_leak = None
+                    for leak in self.detected_leaks:
+                        if (leak.device_id == device_id and 
+                            (datetime.now(timezone.utc) - leak.detected_at).total_seconds() < 3600):  # Within last hour
+                            existing_leak = leak
+                            break
+                    
+                    if existing_leak:
+                        # Update existing leak
+                        existing_leak.leaked_memory_mb = memory_usage_trend[-1] - memory_usage_trend[0]
+                        existing_leak.growth_rate_mb_per_hour = growth_rate_mb_per_hour
+                    else:
+                        # Create new leak detection
+                        leak = GPUMemoryLeak(
+                            leak_id=str(uuid.uuid4()),
+                            device_id=device_id,
+                            leaked_memory_mb=memory_usage_trend[-1] - memory_usage_trend[0],
+                            growth_rate_mb_per_hour=growth_rate_mb_per_hour,
+                            allocation_pattern={
+                                "trend_slope": slope,
+                                "initial_memory_mb": memory_usage_trend[0],
+                                "current_memory_mb": memory_usage_trend[-1],
+                                "sample_count": len(memory_usage_trend),
+                                "time_span_seconds": time_points[-1] - time_points[0]
+                            }
+                        )
+                        self.detected_leaks.append(leak)
+                        
+                        # Emit memory leak event
+                        await self.event_bus.emit(GPUMemoryLeakDetected(
+                            device_id=device_id,
+                            device_name=device_info.name,
+                            leaked_memory_mb=leak.leaked_memory_mb,
+                            leak_details=asdict(leak)
+                        ))
+                        
+                        self.logger.warning(
+                            f"GPU memory leak detected on device {device_id}: "
+                            f"{growth_rate_mb_per_hour:.2f} MB/hour growth rate"
+                        )
+        
+        # Check for sudden memory spikes
+        if len(metrics_list) >= 5:
+            recent_memory = [m.memory_used_mb for m in metrics_list[-5:]]
+            if len(recent_memory) >= 2:
+                memory_spike = recent_memory[-1] - recent_memory[0]
+                if memory_spike > 500:  # Sudden 500MB+ increase
+                    leak = GPUMemoryLeak(
+                        leak_id=str(uuid.uuid4()),
+                        device_id=device_id,
+                        leaked_memory_mb=memory_spike,
+                        growth_rate_mb_per_hour=0.0,  # Not a gradual leak
+                        allocation_pattern={
+                            "type": "spike",
+                            "spike_size_mb": memory_spike,
+                            "before_mb": recent_memory[0],
+                            "after_mb": recent_memory[-1],
+                            "time_span_seconds": 5 * self.config.sampling_interval_ms / 1000.0
+                        }
+                    )
+                    self.detected_leaks.append(leak)
+                    
+                    await self.event_bus.emit(GPUMemoryLeakDetected(
+                        device_id=device_id,
+                        device_name=device_info.name,
+                        leaked_memory_mb=memory_spike,
+                        leak_details=asdict(leak)
+                    ))
+        
+        # Cleanup old leak detections (keep last 20)
+        self.detected_leaks = self.detected_leaks[-20:]
 
     async def _profile_kernel_executions(self) -> None:
         """Profile GPU kernel executions."""
-        # TODO: Implement kernel profiling logic
-        pass
+        if not TORCH_AVAILABLE or not torch.cuda.is_available():
+            return
+            
+        try:
+            # Use PyTorch profiler for kernel tracking
+            if self.config.level in [GPUProfilingLevel.DETAILED, GPUProfilingLevel.COMPREHENSIVE]:
+                await self._profile_with_torch_profiler()
+            else:
+                await self._basic_kernel_monitoring()
+                
+        except Exception as e:
+            self.logger.error(f"Failed to profile kernel executions: {str(e)}")
+
+    async def _profile_with_torch_profiler(self) -> None:
+        """Use PyTorch profiler for detailed kernel analysis."""
+        try:
+            # This would be used in conjunction with actual model execution
+            # For now, we'll monitor active contexts and streams
+            for device_id in self.gpu_devices:
+                if torch.cuda.is_available():
+                    # Check for active CUDA contexts
+                    try:
+                        torch.cuda.set_device(device_id)
+                        current_stream = torch.cuda.current_stream(device_id)
+                        
+                        # Monitor stream synchronization events
+                        if hasattr(current_stream, 'query') and not current_stream.query():
+                            # Stream is busy, kernel is likely executing
+                            kernel_id = f"stream_{device_id}_{int(time.time() * 1000)}"
+                            
+                            kernel_info = GPUKernelInfo(
+                                kernel_id=kernel_id,
+                                kernel_name="active_kernel",
+                                device_id=device_id
+                            )
+                            
+                            self.kernel_executions[kernel_id] = kernel_info
+                            self.active_kernels.add(kernel_id)
+                            
+                            # Emit kernel started event
+                            await self.event_bus.emit(GPUKernelExecutionStarted(
+                                device_id=device_id,
+                                kernel_name=kernel_info.kernel_name,
+                                kernel_id=kernel_id
+                            ))
+                            
+                    except Exception as e:
+                        self.logger.debug(f"Could not monitor stream for device {device_id}: {str(e)}")
+                        
+        except Exception as e:
+            self.logger.debug(f"PyTorch profiler monitoring failed: {str(e)}")
+
+    async def _basic_kernel_monitoring(self) -> None:
+        """Basic kernel monitoring without detailed profiling."""
+        try:
+            # Monitor GPU utilization changes to infer kernel activity
+            for device_id in self.gpu_devices:
+                if device_id not in self.metrics_history or len(self.metrics_history[device_id]) < 2:
+                    continue
+                    
+                recent_metrics = list(self.metrics_history[device_id])[-2:]
+                
+                # If utilization increased significantly, assume kernel started
+                utilization_change = recent_metrics[-1].utilization_percent - recent_metrics[-2].utilization_percent
+                
+                if utilization_change > 20:  # 20% increase in utilization
+                    kernel_id = f"inferred_{device_id}_{int(time.time() * 1000)}"
+                    
+                    kernel_info = GPUKernelInfo(
+                        kernel_id=kernel_id,
+                        kernel_name="inferred_kernel",
+                        device_id=device_id
+                    )
+                    
+                    self.kernel_executions[kernel_id] = kernel_info
+                    self.active_kernels.add(kernel_id)
+                    
+                    # Update metrics
+                    if self.metrics:
+                        self.metrics.increment("gpu_kernel_executions_total", 
+                                            tags={"device_id": str(device_id)})
+                
+                # Check for completed kernels
+                completed_kernels = []
+                for kernel_id in list(self.active_kernels):
+                    kernel_info = self.kernel_executions.get(kernel_id)
+                    if kernel_info and kernel_info.device_id == device_id:
+                        # If utilization dropped, assume kernel completed
+                        if utilization_change < -10:  # 10% decrease
+                            kernel_info.end_time = datetime.now(timezone.utc)
+                            kernel_info.duration_ms = (
+                                kernel_info.end_time - kernel_info.start_time
+                            ).total_seconds() * 1000
+                            
+                            completed_kernels.append(kernel_id)
+                            
+                            # Emit kernel completed event
+                            await self.event_bus.emit(GPUKernelExecutionCompleted(
+                                device_id=device_id,
+                                kernel_name=kernel_info.kernel_name,
+                                kernel_id=kernel_id,
+                                execution_time_ms=kernel_info.duration_ms
+                            ))
+                            
+                            # Update metrics
+                            if self.metrics:
+                                self.metrics.record("gpu_kernel_duration_ms", 
+                                                  kernel_info.duration_ms,
+                                                  tags={"device_id": str(device_id)})
+                
+                # Remove completed kernels from active set
+                for kernel_id in completed_kernels:
+                    self.active_kernels.discard(kernel_id)
+                    
+        except Exception as e:
+            self.logger.debug(f"Basic kernel monitoring failed: {str(e)}")
+
+    @contextmanager
+    def profile_kernel(self, kernel_name: str, device_id: int = 0, component: Optional[str] = None):
+        """Context manager for profiling a specific kernel execution."""
+        kernel_id = str(uuid.uuid4())
+        
+        kernel_info = GPUKernelInfo(
+            kernel_id=kernel_id,
+            kernel_name=kernel_name,
+            device_id=device_id,
+            component=component
+        )
+        
+        try:
+            # Record start
+            self.kernel_executions[kernel_id] = kernel_info
+            self.active_kernels.add(kernel_id)
+            
+            # Emit start event
+            asyncio.create_task(self.event_bus.emit(GPUKernelExecutionStarted(
+                device_id=device_id,
+                kernel_name=kernel_name,
+                component=component,
+                kernel_id=kernel_id
+            )))
+            
+            yield kernel_info
+            
+        finally:
+            # Record end
+            kernel_info.end_time = datetime.now(timezone.utc)
+            kernel_info.duration_ms = (
+                kernel_info.end_time - kernel_info.start_time
+            ).total_seconds() * 1000
+            
+            self.active_kernels.discard(kernel_id)
+            
+            # Emit completion event
+            asyncio.create_task(self.event_bus.emit(GPUKernelExecutionCompleted(
+                device_id=device_id,
+                kernel_name=kernel_name,
+                component=component,
+                kernel_id=kernel_id,
+                execution_time_ms=kernel_info.duration_ms
+            )))
+            
+            # Update metrics
+            if self.metrics:
+                tags = {"device_id": str(device_id), "kernel_name": kernel_name}
+                if component:
+                    tags["component"] = component
+                    
+                self.metrics.increment("gpu_kernel_executions_total", tags=tags)
+                self.metrics.record("gpu_kernel_duration_ms", kernel_info.duration_ms, tags=tags)
 
     # Event handlers
     async def _handle_processing_started(self, event) -> None:
         """Handle processing started events."""
-        # TODO: Track component GPU usage
-        pass
+        try:
+            component = getattr(event, 'component', None) or 'unknown'
+            session_id = getattr(event, 'session_id', None)
+            
+            # Initialize component GPU tracking if not exists
+            if component not in self.component_gpu_usage:
+                self.component_gpu_usage[component] = defaultdict(float)
+            
+            # Record baseline GPU usage for this component
+            for device_id in self.gpu_devices:
+                if device_id in self.metrics_history and self.metrics_history[device_id]:
+                    latest_metrics = self.metrics_history[device_id][-1]
+                    baseline_memory = latest_metrics.memory_used_mb
+                    
+                    # Store baseline for tracking delta
+                    self.component_gpu_usage[component][f"baseline_{device_id}"] = baseline_memory
+            
+            self.logger.debug(f"Started GPU tracking for component: {component}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to handle processing started event: {str(e)}")
 
     async def _handle_processing_completed(self, event) -> None:
         """Handle processing completed events."""
-        # TODO: Update component GPU usage statistics
-        pass
+        try:
+            component = getattr(event, 'component', None) or 'unknown'
+            session_id = getattr(event, 'session_id', None)
+            processing_time = getattr(event, 'processing_time', 0.0)
+            
+            # Calculate GPU usage delta for this component
+            for device_id in self.gpu_devices:
+                if device_id in self.metrics_history and self.metrics_history[device_id]:
+                    latest_metrics = self.metrics_history[device_id][-1]
+                    current_memory = latest_metrics.memory_used_mb
+                    
+                    baseline_key = f"baseline_{device_id}"
+                    if baseline_key in self.component_gpu_usage[component]:
+                        baseline_memory = self.component_gpu_usage[component][baseline_key]
+                        memory_delta = current_memory - baseline_memory
+                        
+                        # Update cumulative usage (only positive deltas to avoid negative from cleanup)
+                        if memory_delta > 0:
+                            self.component_gpu_usage[component][device_id] += memory_delta
+                        
+                        # Update metrics
+                        if self.metrics:
+                            self.metrics.set("gpu_component_memory_usage_mb", 
+                                           self.component_gpu_usage[component][device_id],
+                                           tags={
+                                               "component": component,
+                                               "device_id": str(device_id)
+                                           })
+                        
+                        # Clean up baseline
+                        del self.component_gpu_usage[component][baseline_key]
+            
+            self.logger.debug(f"Completed GPU tracking for component: {component}, duration: {processing_time:.2f}s")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to handle processing completed event: {str(e)}")
 
     async def _handle_workflow_started(self, event) -> None:
         """Handle workflow started events."""
-        # TODO: Track workflow-level GPU usage
-        pass
+        try:
+            workflow_id = getattr(event, 'workflow_id', None)
+            
+            if workflow_id:
+                # Track workflow-level GPU usage
+                workflow_key = f"workflow_{workflow_id}"
+                self.component_gpu_usage[workflow_key] = defaultdict(float)
+                
+                # Record initial GPU state
+                for device_id in self.gpu_devices:
+                    if device_id in self.metrics_history and self.metrics_history[device_id]:
+                        latest_metrics = self.metrics_history[device_id][-1]
+                        self.component_gpu_usage[workflow_key][f"start_{device_id}"] = latest_metrics.memory_used_mb
+                
+                self.logger.debug(f"Started GPU tracking for workflow: {workflow_id}")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to handle workflow started event: {str(e)}")
 
     async def _handle_workflow_completed(self, event) -> None:
         """Handle workflow completed events."""
-        # TODO: Update workflow GPU usage statistics
-        pass
+        try:
+            workflow_id = getattr(event, 'workflow_id', None)
+            execution_time = getattr(event, 'execution_time', 0.0)
+            
+            if workflow_id:
+                workflow_key = f"workflow_{workflow_id}"
+                
+                # Calculate total GPU usage for workflow
+                for device_id in self.gpu_devices:
+                    start_key = f"start_{device_id}"
+                    if (workflow_key in self.component_gpu_usage and 
+                        start_key in self.component_gpu_usage[workflow_key]):
+                        
+                        if device_id in self.metrics_history and self.metrics_history[device_id]:
+                            latest_metrics = self.metrics_history[device_id][-1]
+                            start_memory = self.component_gpu_usage[workflow_key][start_key]
+                            peak_memory = latest_metrics.memory_used_mb
+                            
+                            workflow_memory_usage = max(0, peak_memory - start_memory)
+                            self.component_gpu_usage[workflow_key][device_id] = workflow_memory_usage
+                            
+                            # Update metrics
+                            if self.metrics:
+                                self.metrics.set("gpu_component_memory_usage_mb", 
+                                               workflow_memory_usage,
+                                               tags={
+                                                   "component": workflow_key,
+                                                   "device_id": str(device_id)
+                                               })
+                
+                self.logger.debug(f"Completed GPU tracking for workflow: {workflow_id}, duration: {execution_time:.2f}s")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to handle workflow completed event: {str(e)}")
 
     async def _handle_workflow_step_started(self, event) -> None:
         """Handle workflow step started events."""
-        # TODO: Track step-level GPU usage
-        pass
+        try:
+            workflow_id = getattr(event, 'workflow_id', None)
+            step_id = getattr(event, 'step_id', None)
+            
+            if workflow_id and step_id:
+                step_key = f"step_{workflow_id}_{step_id}"
+                self.component_gpu_usage[step_key] = defaultdict(float)
+                
+                # Record step start GPU state
+                for device_id in self.gpu_devices:
+                    if device_id in self.metrics_history and self.metrics_history[device_id]:
+                        latest_metrics = self.metrics_history[device_id][-1]
+                        self.component_gpu_usage[step_key][f"start_{device_id}"] = latest_metrics.memory_used_mb
+                
+                self.logger.debug(f"Started GPU tracking for workflow step: {workflow_id}/{step_id}")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to handle workflow step started event: {str(e)}")
 
     async def _handle_workflow_step_completed(self, event) -> None:
         """Handle workflow step completed events."""
-        # TODO: Update step GPU usage statistics
-        pass
+        try:
+            workflow_id = getattr(event, 'workflow_id', None)
+            step_id = getattr(event, 'step_id', None)
+            step_duration = getattr(event, 'step_duration', 0.0)
+            
+            if workflow_id and step_id:
+                step_key = f"step_{workflow_id}_{step_id}"
+                
+                # Calculate step GPU usage
+                for device_id in self.gpu_devices:
+                    start_key = f"start_{device_id}"
+                    if (step_key in self.component_gpu_usage and 
+                        start_key in self.component_gpu_usage[step_key]):
+                        
+                        if device_id in self.metrics_history and self.metrics_history[device_id]:
+                            latest_metrics = self.metrics_history[device_id][-1]
+                            start_memory = self.component_gpu_usage[step_key][start_key]
+                            end_memory = latest_metrics.memory_used_mb
+                            
+                            step_memory_usage = max(0, end_memory - start_memory)
+                            self.component_gpu_usage[step_key][device_id] = step_memory_usage
+                            
+                            # Update metrics
+                            if self.metrics:
+                                self.metrics.set("gpu_component_memory_usage_mb", 
+                                               step_memory_usage,
+                                               tags={
+                                                   "component": step_key,
+                                                   "device_id": str(device_id),
+                                                   "workflow_id": workflow_id,
+                                                   "step_id": step_id
+                                               })
+                
+                self.logger.debug(f"Completed GPU tracking for workflow step: {workflow_id}/{step_id}, duration: {step_duration:.2f}s")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to handle workflow step completed event: {str(e)}")
 
     async def _handle_component_started(self, event) -> None:
         """Handle component started events."""
-        # TODO: Initialize component GPU tracking
-        pass
+        try:
+            component_id = getattr(event, 'component_id', None)
+            
+            if component_id:
+                # Initialize component GPU tracking
+                if component_id not in self.component_gpu_usage:
+                    self.component_gpu_usage[component_id] = defaultdict(float)
+                
+                self.logger.debug(f"Initialized GPU tracking for component: {component_id}")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to handle component started event: {str(e)}")
 
     async def _handle_component_stopped(self, event) -> None:
         """Handle component stopped events."""
-        # TODO: Finalize component GPU tracking
-        pass
+        try:
+            component_id = getattr(event, 'component_id', None)
+            
+            if component_id and component_id in self.component_gpu_usage:
+                # Log final component GPU usage
+                total_usage = sum(
+                    usage for key, usage in self.component_gpu_usage[component_id].items()
+                    if not key.startswith(('baseline_', 'start_'))
+                )
+                
+                self.logger.info(f"Component {component_id} final GPU usage: {total_usage:.2f} MB across all devices")
+                
+                # Keep component data for historical analysis but mark as stopped
+                self.component_gpu_usage[f"{component_id}_stopped"] = self.component_gpu_usage[component_id]
+                del self.component_gpu_usage[component_id]
+                
+        except Exception as e:
+            self.logger.error(f"Failed to handle component stopped event: {str(e)}")
 
     @handle_exceptions
     async def get_gpu_status(self) -> Dict[str, Any]:

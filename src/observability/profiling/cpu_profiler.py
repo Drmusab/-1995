@@ -1578,4 +1578,8 @@ class EnhancedCPUProfiler:
         except Exception as e:
             self.logger.error(f"Failed to save profile data: {str(e)}")
 
-    async def _generate_flamegraph_async(self, session: ProfilingSession,
+    async def _generate_flamegraph_async(self, session: ProfilingSession) -> None:
+        """Generate flamegraph asynchronously (placeholder)."""
+        # This would generate a flamegraph from the profiling session
+        # Implementation would depend on flamegraph library availability
+        pass
