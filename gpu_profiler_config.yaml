@@ -1,0 +1,75 @@
+# GPU Profiler Configuration Template
+# Copy and customize this configuration for your environment
+
+gpu_profiler:
+  # Profiling level: lightweight, standard, detailed, comprehensive
+  level: "standard"
+  
+  # Profiling mode: monitoring, profiling, adaptive, debug
+  mode: "monitoring"
+  
+  # Sampling interval in milliseconds
+  sampling_interval_ms: 100.0
+  
+  # Alert thresholds
+  utilization_threshold: 85.0         # GPU utilization alert threshold (%)
+  memory_threshold: 90.0              # Memory usage alert threshold (%)
+  temperature_threshold: 80.0         # Temperature alert threshold (°C)
+  power_threshold: 95.0               # Power usage alert threshold (%)
+  
+  # Data retention
+  max_samples: 10000                  # Maximum samples to retain in memory
+  retention_hours: 24                 # Data retention period in hours
+  
+  # Feature toggles
+  enable_real_time_monitoring: true   # Enable continuous monitoring
+  enable_kernel_profiling: true       # Enable CUDA kernel profiling
+  enable_memory_tracking: true        # Enable GPU memory tracking
+  enable_power_monitoring: true       # Enable power consumption monitoring
+  enable_temperature_monitoring: true # Enable temperature monitoring
+  enable_multi_gpu: true              # Enable multi-GPU support
+  
+  # Integration settings
+  integrate_with_tracing: true        # Integrate with tracing system
+  integrate_with_metrics: true        # Integrate with metrics collection
+  integrate_with_component_profiling: true  # Enable component-level profiling
+  
+  # Advanced features
+  enable_bottleneck_detection: true   # Enable performance bottleneck detection
+  enable_optimization_suggestions: true  # Enable optimization suggestions
+  enable_leak_detection: true         # Enable memory leak detection
+
+# Development environment settings
+development:
+  gpu_profiler:
+    level: "detailed"
+    mode: "debug"
+    sampling_interval_ms: 50.0
+    enable_real_time_monitoring: true
+    enable_kernel_profiling: true
+    enable_bottleneck_detection: true
+    enable_optimization_suggestions: true
+
+# Production environment settings
+production:
+  gpu_profiler:
+    level: "standard"
+    mode: "monitoring"
+    sampling_interval_ms: 200.0
+    utilization_threshold: 90.0
+    memory_threshold: 95.0
+    enable_real_time_monitoring: true
+    enable_kernel_profiling: false     # Disabled for lower overhead
+    enable_bottleneck_detection: true
+    enable_optimization_suggestions: false
+
+# Testing environment settings
+testing:
+  gpu_profiler:
+    level: "lightweight"
+    mode: "monitoring"
+    sampling_interval_ms: 500.0
+    enable_real_time_monitoring: false
+    enable_kernel_profiling: false
+    enable_bottleneck_detection: false
+    enable_optimization_suggestions: false
