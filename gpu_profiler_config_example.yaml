@@ -1,0 +1,71 @@
+# GPU Profiler Configuration Example
+
+# Example configuration for the GPU Profiler
+# This file shows how to configure the GPU profiler for different environments
+
+gpu_profiler:
+  # Profiling mode: basic, standard, detailed, comprehensive
+  mode: "standard"
+  
+  # Profiling level: low, medium, high, maximum
+  level: "medium"
+  
+  # Monitoring intervals (in seconds)
+  monitoring_interval_seconds: 1.0
+  metrics_update_interval_seconds: 5.0
+  device_discovery_interval_seconds: 30.0
+  
+  # Feature flags
+  enable_cuda_profiling: true
+  enable_opencl_profiling: true
+  enable_thermal_monitoring: true
+  enable_power_monitoring: true
+  enable_memory_tracking: true
+  enable_performance_benchmarking: true
+  enable_leak_detection: true
+  
+  # Alert thresholds
+  temperature_warning_celsius: 80.0
+  temperature_critical_celsius: 90.0
+  memory_warning_percent: 80.0
+  memory_critical_percent: 95.0
+  utilization_warning_percent: 90.0
+  power_warning_percent: 90.0
+  
+  # Data retention
+  max_snapshots: 1000
+  max_profiling_sessions: 100
+  snapshot_retention_hours: 24
+  
+  # Output configuration
+  output_dir: "data/profiling/gpu"
+  enable_detailed_logging: false
+  export_json_reports: true
+  export_csv_metrics: false
+
+# Environment-specific overrides
+
+# Development environment
+development:
+  gpu_profiler:
+    mode: "comprehensive"
+    level: "high"
+    enable_detailed_logging: true
+    monitoring_interval_seconds: 0.5
+
+# Production environment
+production:
+  gpu_profiler:
+    mode: "standard"
+    level: "medium"
+    enable_detailed_logging: false
+    monitoring_interval_seconds: 2.0
+    max_snapshots: 500
+
+# Testing environment
+testing:
+  gpu_profiler:
+    mode: "basic"
+    level: "low"
+    monitoring_interval_seconds: 5.0
+    export_json_reports: false
