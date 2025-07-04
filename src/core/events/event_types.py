@@ -1163,6 +1163,128 @@ class PerformanceOptimizationApplied(BaseEvent):
 
 
 # =============================================================================
+# GPU EVENTS
+# =============================================================================
+
+@dataclass
+class GPUProfilerStarted(BaseEvent):
+    """GPU profiler started event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    profiling_level: str = ""
+    gpu_count: int = 0
+    profiler_config: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class GPUProfilerStopped(BaseEvent):
+    """GPU profiler stopped event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    profiling_duration: float = 0.0
+    total_samples: int = 0
+    report_path: Optional[str] = None
+
+
+@dataclass
+class GPUUtilizationAlert(BaseEvent):
+    """GPU utilization alert event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.WARNING
+    device_id: int = 0
+    device_name: str = ""
+    utilization_percent: float = 0.0
+    threshold_percent: float = 0.0
+    alert_type: str = "high"  # high, low
+
+
+@dataclass
+class GPUMemoryAlert(BaseEvent):
+    """GPU memory usage alert event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.WARNING
+    device_id: int = 0
+    device_name: str = ""
+    memory_used_mb: float = 0.0
+    memory_total_mb: float = 0.0
+    usage_percent: float = 0.0
+    threshold_percent: float = 0.0
+
+
+@dataclass
+class GPUTemperatureAlert(BaseEvent):
+    """GPU temperature alert event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.WARNING
+    device_id: int = 0
+    device_name: str = ""
+    temperature_celsius: float = 0.0
+    threshold_celsius: float = 0.0
+
+
+@dataclass
+class GPUMemoryLeakDetected(BaseEvent):
+    """GPU memory leak detected event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.ERROR
+    device_id: int = 0
+    device_name: str = ""
+    leaked_memory_mb: float = 0.0
+    component: Optional[str] = None
+    leak_details: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class GPUPerformanceBottleneckDetected(BaseEvent):
+    """GPU performance bottleneck detected event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.WARNING
+    device_id: int = 0
+    device_name: str = ""
+    bottleneck_type: str = ""  # compute, memory, bandwidth
+    component: Optional[str] = None
+    bottleneck_details: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class GPUKernelExecutionStarted(BaseEvent):
+    """GPU kernel execution started event."""
+    category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
+    device_id: int = 0
+    kernel_name: str = ""
+    component: Optional[str] = None
+    kernel_id: str = ""
+
+
+@dataclass
+class GPUKernelExecutionCompleted(BaseEvent):
+    """GPU kernel execution completed event."""
+    category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
+    device_id: int = 0
+    kernel_name: str = ""
+    component: Optional[str] = None
+    kernel_id: str = ""
+    execution_time_ms: float = 0.0
+    memory_transferred_mb: float = 0.0
+
+
+@dataclass
+class GPUPowerUsageAlert(BaseEvent):
+    """GPU power usage alert event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.WARNING
+    device_id: int = 0
+    device_name: str = ""
+    power_draw_watts: float = 0.0
+    power_limit_watts: float = 0.0
+    usage_percent: float = 0.0
+
+
+# =============================================================================
 # ERROR EVENTS
 # =============================================================================
 
@@ -1431,6 +1553,18 @@ EVENT_TYPES = {
     "PerformanceThresholdExceeded": PerformanceThresholdExceeded,
     "ResourceUsageHigh": ResourceUsageHigh,
     "PerformanceOptimizationApplied": PerformanceOptimizationApplied,
+    
+    # GPU Events
+    "GPUProfilerStarted": GPUProfilerStarted,
+    "GPUProfilerStopped": GPUProfilerStopped,
+    "GPUUtilizationAlert": GPUUtilizationAlert,
+    "GPUMemoryAlert": GPUMemoryAlert,
+    "GPUTemperatureAlert": GPUTemperatureAlert,
+    "GPUMemoryLeakDetected": GPUMemoryLeakDetected,
+    "GPUPerformanceBottleneckDetected": GPUPerformanceBottleneckDetected,
+    "GPUKernelExecutionStarted": GPUKernelExecutionStarted,
+    "GPUKernelExecutionCompleted": GPUKernelExecutionCompleted,
+    "GPUPowerUsageAlert": GPUPowerUsageAlert,
     
     # Error Events
     "ErrorOccurred": ErrorOccurred,
