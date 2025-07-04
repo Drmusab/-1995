@@ -31,6 +31,8 @@ import functools
 import inspect
 from collections import defaultdict, deque
 import threading
+import traceback  # Add missing import
+from contextlib import nullcontext
 
 # Delayed imports to avoid circular dependencies  
 from typing import TYPE_CHECKING
@@ -846,12 +848,20 @@ class MemoryProfiler:
         snapshot_id = f"snapshot_{int(time.time())}_{trigger}"
         
         try:
-            with self.tracer.trace("memory_snapshot") as span:
-                span.set_attributes({
-                    "snapshot_id": snapshot_id,
-                    "trigger": trigger,
-                    "profiling_level": self.profiling_level.value
-                })
+            if self.tracer:
+                trace_context = self.tracer.trace("memory_snapshot")
+            else:
+                # Use a simple context manager if tracer is not available
+                from contextlib import nullcontext
+                trace_context = nullcontext()
+                
+            with trace_context as span:
+                if span and hasattr(span, 'set_attributes'):
+                    span.set_attributes({
+                        "snapshot_id": snapshot_id,
+                        "trigger": trigger,
+                        "profiling_level": self.profiling_level.value
+                    })
                 
                 snapshot = MemorySnapshot(
                     snapshot_id=snapshot_id,
@@ -1535,45 +1545,17 @@ class MemoryProfiler:
         if self.tracer:
             trace_context = self.tracer.trace(f"memory_profile_{name}")
         else:
-            trace_context = None
+            trace_context = nullcontext()
             
-        if trace_context:
-            with trace_context as span:
+        with trace_context as span:
+            if span and hasattr(span, 'set_attributes'):
                 span.set_attributes({
                     "component": component or "unknown",
                     "session_id": session_id or "unknown"
                 })
-                
-                try:
-                    # Execute the scope
-                    yield
-                finally:
-                    # Calculate memory change
-                    final_memory = psutil.Process().memory_info().rss
-                    memory_change = final_memory - initial_memory
-                    elapsed_time = time.time() - start_time
-                    
-                    # Record metrics
-                    if memory_change > 0 and self.metrics:
-                        self.metrics.record("memory_allocation_size_bytes", memory_change)
-                    
-                    # Track the allocation if significant
-                    if memory_change > 1024 * 1024:  # Only track allocations > 1MB
-                        await self.track_allocation(
-                            size_bytes=memory_change,
-                            object_type=name,
-                            component=component,
-                            session_id=session_id
-                        )
-                    
-                    # Update span
-                    span.set_attributes({
-                        "memory_change_bytes": memory_change,
-                        "execution_time_seconds": elapsed_time
-                    })
-        else:
-            # Fallback without tracing
+            
             try:
+                # Execute the scope
                 yield
             finally:
                 # Calculate memory change
@@ -1593,6 +1575,13 @@ class MemoryProfiler:
                         component=component,
                         session_id=session_id
                     )
+                
+                # Update span
+                if span and hasattr(span, 'set_attributes'):
+                    span.set_attributes({
+                        "memory_change_bytes": memory_change,
+                        "execution_time_seconds": elapsed_time
+                    })
 
     async def _handle_component_initialized(self, event) -> None:
         """Handle component initialized events."""
