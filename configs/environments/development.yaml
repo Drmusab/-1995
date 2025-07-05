@@ -1,0 +1,519 @@
+# =========================================================
+# AI Assistant Development Configuration
+# =========================================================
+# Author: Drmusab
+# Last Modified: 2025-07-05 11:27:18
+# Environment: Development
+# =========================================================
+
+# Environment settings
+environment:
+  name: "development"
+  debug: true
+  verbose_logging: true
+  hot_reload: true
+  development_mode: true
+  local_execution: true
+
+# Core system settings
+system:
+  version: "1.0.0"
+  instance_id: "dev-instance-${HOSTNAME:-local}"
+  max_concurrent_tasks: 10
+  timezone: "UTC"
+  temp_directory: "/tmp/ai_assistant"
+  data_directory: "./data"
+  startup_timeout: 60  # seconds
+  shutdown_timeout: 30  # seconds
+  auto_recovery: true
+  graceful_shutdown: true
+
+# Core engine configuration
+core_engine:
+  default_processing_mode: "asynchronous"  # synchronous, asynchronous, real_time
+  max_concurrent_requests: 20
+  default_timeout_seconds: 60.0
+  enable_real_time_processing: true
+  enable_speech_processing: true
+  enable_vision_processing: true
+  enable_multimodal_fusion: true
+  enable_reasoning: true
+  enable_learning: true
+  default_quality_level: "balanced"  # fast, balanced, quality
+  adaptive_quality: true
+  quality_monitoring: true
+  working_memory_size: 2000
+  context_window_size: 8192
+  memory_consolidation_interval: 1800  # 30 minutes
+  enable_response_caching: true
+  enable_component_caching: true
+  cache_ttl_seconds: 3600
+  require_authentication: false  # Disabled for easier development
+  enable_authorization: false    # Disabled for easier development
+  audit_logging: true
+  enable_performance_monitoring: true
+  enable_profiling: true
+  gc_interval_seconds: 300
+
+# Component manager configuration
+component_manager:
+  auto_discovery: true
+  parallel_initialization: true
+  health_monitoring: true
+  health_check_interval: 30
+  auto_restart_failed: true
+  max_restart_attempts: 3
+  restart_backoff_factor: 2.0
+  component_directories:
+    - "src/processing"
+    - "src/integrations"
+    - "src/memory"
+    - "src/skills"
+    - "src/reasoning"
+
+# Plugin manager configuration
+plugins:
+  enabled: true
+  auto_discovery: true
+  auto_discovery_interval: 300  # 5 minutes
+  directories:
+    - "plugins/"
+    - "src/plugins/"
+    - "data/plugins/"
+  hot_reload: true
+  security_validation: true
+  max_plugins_per_type: 20
+  plugin_timeout: 30
+  plugin_memory_limit_mb: 512
+  default_security_level: "sandbox"  # untrusted, sandbox, trusted, system
+
+# Session manager configuration
+sessions:
+  storage_type: "memory"  # memory, database
+  max_idle_time: 3600.0   # 1 hour
+  max_session_time: 86400.0  # 24 hours
+  cleanup_on_expire: true
+  persist_context: true
+  enable_clustering: false
+  auto_save_interval: 300.0  # 5 minutes
+  encryption_enabled: false  # Disabled for easier development
+  audit_logging: true
+  max_sessions_per_node: 1000
+  node_id: "dev-node-1"
+
+# Workflow orchestrator configuration
+workflows:
+  enabled: true
+  workflow_directory: "./data/workflows"
+  max_concurrent_workflows: 10
+  default_timeout: 300  # seconds
+  auto_retry_failed: true
+  max_retries: 3
+  retry_delay: 5  # seconds
+  auto_cleanup_completed: true
+  max_workflow_history: 100
+  auto_generated_workflows: true
+  workflow_templates:
+    - "conversation"
+    - "research"
+    - "content_creation"
+    - "data_analysis"
+
+# Interactions configuration
+interactions:
+  max_duration: 1800  # 30 minutes
+  default_timeout: 300  # 5 minutes
+  enable_real_time: true
+  enable_streaming: true
+  max_conversation_history: 100
+  default_interaction_mode: "conversational"
+  default_input_modalities:
+    - "text"
+  default_output_modalities:
+    - "text"
+  auto_detect_modalities: true
+  save_interaction_history: true
+
+# Integration configurations
+integrations:
+  # LLM providers
+  llm:
+    default_provider: "ollama"  # ollama, openai, deepseek
+    model_router:
+      enabled: true
+      strategy: "cost_effective"  # cost_effective, performance, quality
+      timeout: 30  # seconds
+      auto_fallback: true
+    ollama:
+      enabled: true
+      endpoint: "http://localhost:11434"
+      models:
+        - name: "llama3"
+          context_size: 8192
+          default: true
+        - name: "mistral"
+          context_size: 4096
+        - name: "codellama"
+          context_size: 16384
+      timeout: 60
+    openai:
+      enabled: false  # Enable if you have API key
+      api_key: "${OPENAI_API_KEY}"
+      organization_id: "${OPENAI_ORG_ID}"
+      models:
+        - name: "gpt-4"
+          context_size: 8192
+        - name: "gpt-3.5-turbo"
+          context_size: 4096
+          default: true
+      timeout: 60
+    deepseek:
+      enabled: false
+      api_key: "${DEEPSEEK_API_KEY}"
+      models:
+        - name: "deepseek-chat"
+          context_size: 4096
+          default: true
+      timeout: 60
+
+  # Cache configuration
+  cache:
+    strategy: "local"  # local, redis, hybrid
+    ttl: 3600  # seconds
+    max_size_mb: 1024
+    enable_compression: true
+    redis:
+      enabled: false
+      host: "localhost"
+      port: 6379
+      password: ""
+      db: 0
+      key_prefix: "ai_assistant_dev"
+    local:
+      enabled: true
+      directory: "./data/cache"
+      max_entries: 10000
+      eviction_policy: "lru"  # lru, lfu, fifo
+
+  # Database configuration
+  database:
+    enabled: false
+    type: "sqlite"  # sqlite, postgres
+    sqlite:
+      path: "./data/development.db"
+    postgres:
+      host: "localhost"
+      port: 5432
+      username: "aiassistant"
+      password: "${DB_PASSWORD}"
+      database: "aiassistant_dev"
+    connection_pool: 5
+    timeout: 30
+    auto_migrate: true
+
+  # External APIs
+  external_apis:
+    web_search:
+      enabled: false
+      provider: "dummy"  # dummy, bing, google
+      api_key: "${SEARCH_API_KEY}"
+      results_per_query: 5
+      timeout: 10
+    weather:
+      enabled: false
+      provider: "dummy"  # dummy, openweathermap
+      api_key: "${WEATHER_API_KEY}"
+      timeout: 5
+    calendar:
+      enabled: false
+      provider: "dummy"  # dummy, google
+      client_id: "${CALENDAR_CLIENT_ID}"
+      client_secret: "${CALENDAR_CLIENT_SECRET}"
+      timeout: 10
+
+# API configurations
+api:
+  enabled: true
+  # REST API configuration
+  rest:
+    enabled: true
+    host: "0.0.0.0"
+    port: 8000
+    debug: true
+    prefix: "/api/v1"
+    swagger: true
+    middleware:
+      cors:
+        enabled: true
+        allow_origins: ["*"]
+        allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+      rate_limiter:
+        enabled: false
+        max_requests: 100
+        window_seconds: 60
+      compression:
+        enabled: true
+        level: 1
+      auth:
+        enabled: false
+        jwt_secret: "development_secret_key"
+        token_expiry: 86400  # 24 hours
+
+  # WebSocket API configuration
+  websocket:
+    enabled: true
+    host: "0.0.0.0"
+    port: 8001
+    path: "/ws"
+    heartbeat_interval: 30
+    max_connections: 1000
+    max_message_size: 1048576  # 1MB
+
+  # GraphQL API configuration
+  graphql:
+    enabled: true
+    host: "0.0.0.0"
+    port: 8002
+    path: "/graphql"
+    playground: true
+    debug: true
+
+  # gRPC API configuration
+  grpc:
+    enabled: false
+    host: "0.0.0.0"
+    port: 50051
+    max_workers: 10
+    reflection: true
+
+# Memory configurations
+memory:
+  vector_store:
+    type: "local"  # local, redis, postgres
+    dimension: 1536
+    metric: "cosine"  # cosine, euclidean, dot
+    index_path: "./data/vector_indices"
+  working_memory:
+    max_size: 2000
+    ttl_seconds: 3600
+  episodic_memory:
+    max_episodes: 10000
+    consolidation_interval: 3600  # 1 hour
+  semantic_memory:
+    enabled: true
+    auto_learn: true
+  context_window:
+    size: 8192
+    overlap: 200
+  cache:
+    enabled: true
+    ttl_seconds: 3600
+    max_size_mb: 512
+
+# Skills configurations
+skills:
+  auto_discovery: true
+  skill_directories:
+    - "src/skills/builtin"
+    - "src/skills/custom"
+  validate_skills: true
+  skill_timeout: 30
+  max_skill_memory_mb: 256
+  composition:
+    enabled: true
+    max_composition_depth: 5
+  development_mode: true  # Enables hot-reloading of skills
+  default_skills:
+    - "conversation"
+    - "search"
+    - "calculator"
+    - "summarization"
+    - "translation"
+
+# Processing configurations
+processing:
+  # Natural language processing
+  natural_language:
+    default_language: "en"
+    intent_threshold: 0.7
+    sentiment_analysis: true
+    entity_extraction: true
+    language_detection: true
+    tokenizer: "default"
+    max_tokens: 8192
+
+  # Speech processing
+  speech:
+    enabled: true
+    default_quality: "balanced"  # fast, balanced, quality
+    model_path: "./data/models/speech"
+    audio_sample_rate: 16000
+    use_gpu: true
+    emotion_detection: true
+    speaker_recognition: true
+    cache_transcriptions: true
+
+  # Vision processing
+  vision:
+    enabled: true
+    model_path: "./data/models/vision"
+    default_resolution: "medium"  # low, medium, high
+    use_gpu: true
+    detect_faces: true
+    detect_objects: true
+    ocr_enabled: true
+    cache_results: true
+
+  # Multimodal processing
+  multimodal:
+    enabled: true
+    fusion_strategy: "weighted"  # early, late, weighted
+    cross_modal_attention: true
+    modality_weights:
+      text: 0.5
+      speech: 0.3
+      vision: 0.2
+
+# Reasoning configurations
+reasoning:
+  enabled: true
+  logic_engine:
+    max_depth: 5
+    timeout: 30
+  knowledge_graph:
+    enabled: true
+    path: "./data/knowledge_base/graphs"
+    auto_update: true
+  planning:
+    enabled: true
+    max_steps: 10
+    goal_decomposition: true
+  decision_making:
+    confidence_threshold: 0.7
+    uncertainty_handling: true
+    decision_tree:
+      max_depth: 5
+
+# Learning configurations
+learning:
+  enabled: true
+  continual_learning:
+    enabled: true
+    update_interval: 3600  # 1 hour
+    batch_size: 64
+    learning_rate: 0.001
+  preference_learning:
+    enabled: true
+    adaptation_rate: 0.1
+  feedback_processing:
+    enabled: true
+    incorporate_feedback: true
+  model_adaptation:
+    enabled: true
+    fine_tuning: false  # Resource-intensive, disabled by default
+
+# Observability configurations
+observability:
+  # Logging
+  logging:
+    level: "DEBUG"
+    format: "detailed"  # simple, detailed, json
+    console_output: true
+    file_output: true
+    log_directory: "./data/logs"
+    max_log_size_mb: 100
+    max_log_files: 10
+    trace_enabled: true
+    sanitize_sensitive_data: true
+    custom_handlers:
+      rotation:
+        enabled: true
+        when: "midnight"
+        interval: 1
+        backup_count: 7
+
+  # Monitoring
+  monitoring:
+    enabled: true
+    metrics:
+      enabled: true
+      export: false
+      port: 8003
+      path: "/metrics"
+    tracing:
+      enabled: true
+      exporter: "console"  # console, jaeger
+      jaeger_endpoint: "http://localhost:14268/api/traces"
+    alerting:
+      enabled: false
+      threshold_cpu_percent: 80
+      threshold_memory_percent: 80
+      threshold_error_rate: 0.05
+    dashboards:
+      enabled: false
+      refresh_interval: 60
+
+  # Profiling
+  profiling:
+    enabled: true
+    cpu_profiling: true
+    memory_profiling: true
+    gpu_profiling: false
+    profile_directory: "./data/profiles"
+    interval: 300  # 5 minutes
+
+# Security configurations (development settings)
+security:
+  # Authentication
+  authentication:
+    enabled: false  # Disabled for easier development
+    providers:
+      - "local"  # local, oauth, ldap
+    local:
+      user_db_path: "./data/users.db"
+    session_timeout: 86400  # 24 hours
+    max_failed_attempts: 5
+    token_secret: "development_secret_key"
+
+  # Authorization
+  authorization:
+    enabled: false  # Disabled for easier development
+    rbac_enabled: true
+    default_role: "user"
+    roles:
+      - name: "admin"
+        permissions: ["*"]
+      - name: "user"
+        permissions: ["read", "execute"]
+      - name: "guest"
+        permissions: ["read"]
+
+  # Encryption
+  encryption:
+    enabled: false  # Disabled for easier development
+    algorithm: "AES-256-GCM"
+    key_rotation: false
+    key_path: "./data/keys"
+
+  # Sanitization
+  sanitization:
+    enabled: true
+    sanitize_inputs: true
+    sanitize_outputs: true
+    allowed_html_tags: ["b", "i", "code", "pre"]
+
+# Development tools
+development:
+  auto_reload: true
+  debug_endpoints: true
+  mock_services: true
+  demo_mode: false
+  performance_tracking: true
+  profiler_enabled: true
+  test_users:
+    - username: "dev_user"
+      password: "password123"
+      role: "admin"
+  exception_details: true
+  seed_data: true
+  allow_introspection: true
