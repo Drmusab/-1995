@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  ai_assistant:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ai_assistant:latest
+    container_name: ai_assistant
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # REST API
+      - "8080:8080"  # Web UI
+      - "50051:50051"  # gRPC
+    volumes:
+      - ../data:/data
+      - ../configs:/app/configs
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - CONFIG_PATH=/app/configs/environments/production.yaml
+      - REDIS_HOST=redis
+      - POSTGRES_HOST=postgres
+    depends_on:
+      - redis
+      - postgres
+      - vector_db
+    networks:
+      - ai_network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai_assistant_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai_network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai_assistant_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=ai_assistant
+      - POSTGRES_PASSWORD=secure_password
+      - POSTGRES_DB=ai_assistant
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai_network
+
+  vector_db:
+    image: qdrant/qdrant:latest
+    container_name: ai_assistant_vector_db
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - vector_db_data:/qdrant/storage
+    networks:
+      - ai_network
+
+  monitoring:
+    image: prom/prometheus:latest
+    container_name: ai_assistant_monitoring
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../infrastructure/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - ai_network
+
+networks:
+  ai_network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:
+  vector_db_data:
