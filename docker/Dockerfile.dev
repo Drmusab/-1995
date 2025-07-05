@@ -1,0 +1,45 @@
+FROM python:3.10-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    pkg-config \
+    libpq-dev \
+    libsndfile1-dev \
+    ffmpeg \
+    libgl1-mesa-glx \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install development tools
+RUN pip install --no-cache-dir \
+    poetry \
+    pytest \
+    black \
+    isort \
+    mypy \
+    flake8 \
+    pre-commit \
+    pytest-cov
+
+# Environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=DEBUG
+ENV ENVIRONMENT=development
+ENV CONFIG_PATH=/app/configs/environments/development.yaml
+
+# We'll mount the app directory from the host, so we don't copy code here
+# This enables hot reloading during development
+
+# Expose ports
+EXPOSE 8000 8080 50051
+
+# Default command for development (can be overridden)
+CMD ["python", "-m", "src.main", "--config", "${CONFIG_PATH}"]
