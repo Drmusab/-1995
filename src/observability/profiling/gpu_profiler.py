@@ -2925,5 +2925,4 @@ class EnhancedGPUProfiler:
         start_memory = {}
         
         # Record initial memory for each GPU
-        for device_id in range(torch.cuda.device_count() if torch.cuda.
->>>>>>> main
+        for device_id in range(torch.cuda.device_count() if torch.cuda
