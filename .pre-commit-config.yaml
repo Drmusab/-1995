@@ -1,0 +1,233 @@
+# AI Assistant Project Pre-commit Configuration
+# Last Updated: 2025-07-08
+# Author: Drmusab
+
+default_language_version:
+  python: python3.11
+
+default_stages: [commit]
+
+repos:
+  # Python code formatting
+  - repo: https://github.com/psf/black
+    rev: 24.2.0
+    hooks:
+      - id: black
+        name: 🔄 Black (Python formatter)
+        types: [python]
+        args: [--line-length=100, --target-version=py311]
+
+  # Import sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: 🔄 isort (Import sorting)
+        types: [python]
+        args: [--profile=black, --line-length=100]
+
+  # Python linting
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        name: 🔍 Flake8 (Python linter)
+        types: [python]
+        additional_dependencies:
+          - flake8-docstrings==1.7.0
+          - flake8-bugbear==24.2.6
+          - flake8-comprehensions==3.14.0
+          - flake8-bandit==4.1.1
+          - flake8-debugger==4.1.2
+          - flake8-print==5.0.0
+        args:
+          - --max-line-length=100
+          - --extend-ignore=E203,E501,D103,D104
+          - --exclude=data/,migrations/,__pycache__/,build/,dist/
+
+  # Type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        name: 🔍 MyPy (Type checking)
+        types: [python]
+        exclude: 'tests/|migrations/|docs/|tools/'
+        additional_dependencies:
+          - types-requests
+          - types-PyYAML
+          - types-redis
+          - types-setuptools
+        args:
+          - --ignore-missing-imports
+          - --disallow-untyped-defs
+          - --disallow-incomplete-defs
+          - --check-untyped-defs
+          - --disable-error-code=attr-defined
+          - --disable-error-code=name-defined
+
+  # Docstring formatting
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        name: 📝 pydocstyle (Docstring style checker)
+        types: [python]
+        exclude: 'tests/|migrations/|setup.py|docs/conf.py'
+        args:
+          - --ignore=D100,D104,D105,D107,D203,D212,D213,D402,D413,D415,D416,D417
+
+  # Check for common mistakes
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.10.0
+    hooks:
+      - id: python-check-blanket-noqa
+        name: 🔍 Check for blanket noqa statements
+      - id: python-check-mock-methods
+        name: 🔍 Check mock methods
+      - id: python-no-eval
+        name: 🔍 Check for eval() usage
+      - id: python-no-log-warn
+        name: 🔍 Check for deprecated log.warn()
+      - id: rst-inline-touching-normal
+        name: 🔍 Check RST files
+
+  # Security checks
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.7
+    hooks:
+      - id: bandit
+        name: 🔒 Bandit (Security linter)
+        types: [python]
+        args: ["-c", "pyproject.toml"]
+        exclude: 'tests/|examples/'
+
+  # General code checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: ✂️ Trim trailing whitespace
+        exclude: ".*\\.md$"
+      - id: end-of-file-fixer
+        name: 📄 Fix end of files
+      - id: check-yaml
+        name: 🔍 Check YAML files
+      - id: check-toml
+        name: 🔍 Check TOML files
+      - id: check-json
+        name: 🔍 Check JSON files
+      - id: check-ast
+        name: 🔍 Check Python AST
+      - id: check-executables-have-shebangs
+        name: 🔍 Check executable shebang
+      - id: check-case-conflict
+        name: 🔍 Check for case conflicts
+      - id: check-added-large-files
+        name: 🔍 Check for large files
+        args: ['--maxkb=500']
+      - id: detect-private-key
+        name: 🔒 Detect private keys
+      - id: debug-statements
+        name: 🐞 Check for debug statements
+      - id: check-merge-conflict
+        name: 🔍 Check for merge conflicts
+
+  # Check for secrets in code
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        name: 🔒 Detect secrets
+        exclude: "tests/fixtures/|.env.example"
+        args: ['--baseline', '.secrets.baseline']
+
+  # AI Assistant specific checks
+  - repo: local
+    hooks:
+      - id: check-core-imports
+        name: 🔍 Check core imports in assistant modules
+        entry: python -c "import sys; import re; import pathlib; files = sys.argv[1:]; exits = 0; core_modules = {'core_engine', 'component_manager', 'workflow_orchestrator', 'interaction_handler', 'session_manager', 'plugin_manager'}; for file in files: if pathlib.Path(file).stem in core_modules: imports = re.findall(r'^from src\.assistant\.(\w+) import', pathlib.Path(file).read_text(), re.MULTILINE); circular = [i for i in imports if i in core_modules]; if circular: print(f'{file}: Circular import detected: {circular}'); exits = 1; sys.exit(exits)"
+        language: python
+        types: [python]
+        files: "src/assistant/.+\\.py$"
+        pass_filenames: true
+
+      - id: validate-engine-methods
+        name: 🔍 Validate core engine methods
+        entry: python -c "import sys; import re; import pathlib; files = sys.argv[1:]; exits = 0; for file in files: content = pathlib.Path(file).read_text(); if 'EnhancedCoreEngine' in content and not re.search(r'@handle_exceptions', content): print(f'{file}: Missing @handle_exceptions decorator on public methods'); exits = 1; sys.exit(exits)"
+        language: python
+        files: "src/assistant/core_engine\\.py$"
+        pass_filenames: true
+
+      - id: check-workflow-definitions
+        name: 🔍 Check workflow definitions
+        entry: python -c "import sys; import re; import pathlib; files = sys.argv[1:]; exits = 0; for file in files: content = pathlib.Path(file).read_text(); if '@dataclass' in content and 'WorkflowDefinition' in content and not re.search(r'workflow_id: str', content): print(f'{file}: WorkflowDefinition missing required workflow_id field'); exits = 1; sys.exit(exits)"
+        language: python
+        files: "src/assistant/workflow_orchestrator\\.py$|src/reasoning/planning/.+\\.py$"
+        pass_filenames: true
+        
+      - id: enforce-error-handling
+        name: 🔍 Enforce error handling in API routes
+        entry: python -c "import sys; import re; import pathlib; files = sys.argv[1:]; exits = 0; for file in files: content = pathlib.Path(file).read_text(); if 'async def ' in content and not re.search(r'try:|@handle_exceptions', content): print(f'{file}: Missing error handling in API route'); exits = 1; sys.exit(exits)"
+        language: python
+        files: "src/api/.+\\.py$"
+        pass_filenames: true
+
+      - id: check-memory-cleanup
+        name: 🔍 Check memory cleanup
+        entry: python -c "import sys; import re; import pathlib; files = sys.argv[1:]; exits = 0; for file in files: content = pathlib.Path(file).read_text(); if 'class ' in content and 'Memory' in content and not re.search(r'async def cleanup|def __del__', content): print(f'{file}: Memory component missing cleanup method'); exits = 1; sys.exit(exits)"
+        language: python
+        files: "src/memory/.+\\.py$"
+        pass_filenames: true
+
+  # Check environment variables
+  - repo: local
+    hooks:
+      - id: check-env-example
+        name: 🔍 Check .env.example is up to date
+        entry: python -c "import sys; import re; import pathlib; exists = pathlib.Path('.env').exists(); env_example = pathlib.Path('.env.example').read_text() if pathlib.Path('.env.example').exists() else ''; env = pathlib.Path('.env').read_text() if exists else ''; env_vars = set(re.findall(r'^([A-Za-z0-9_]+)=', env, re.MULTILINE)) if exists else set(); example_vars = set(re.findall(r'^([A-Za-z0-9_]+)=', env_example, re.MULTILINE)); missing = env_vars - example_vars; if missing: print(f'Variables in .env but missing from .env.example: {missing}'); sys.exit(1);"
+        language: python
+        pass_filenames: false
+        always_run: true
+
+  # Check for yaml/json schema validation for config files
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.28.0
+    hooks:
+      - id: check-github-workflows
+        name: 🔍 Check GitHub workflows
+      - id: check-dependabot
+        name: 🔍 Check Dependabot config
+
+  # Run tests related to changed files
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: 🧪 pytest (run tests related to changed files)
+        entry: python -m pytest
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages: [push]
+        additional_dependencies:
+          - pytest==7.4.0
+          - pytest-cov==4.1.0
+        args:
+          - --quiet
+          - --cov=src
+          - --cov-report=term-missing
+          - -xvs
+
+# Advanced configuration
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] Auto-fixes from pre-commit hooks
+    
+    For more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_commit_msg: |
+    [pre-commit.ci] Pre-commit autoupdate
+  autoupdate_schedule: quarterly
+  skip: []
+  submodules: false
