@@ -1,7 +1,28 @@
-# Python cache files
+# AI Assistant Project .gitignore
+# Last Updated: 2025-07-08
+# Author: Drmusab
+
+# Environment and configuration
+.env
+.env.*
+!.env.example
+*.env
+.venv/
+venv/
+env/
+ENV/
+.python-version
+*.pyc
 __pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/
+
+# Compiled Python files
 *.py[cod]
 *$py.class
+*.so
 
 # Distribution / packaging
 .Python
@@ -22,16 +43,54 @@ wheels/
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
+# Logs and data
+logs/
+*.log
+data/logs/
+data/cache/
+data/user_data/
+data/models/*
+!data/models/model_registry.json
+data/vector_cache/
+data/response_cache/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# AI model files
+*.bin
+*.onnx
+*.pt
+*.pth
+*.h5
+*.model
+*.weights
+*.pb
+*.tflite
+*.mlmodel
 
-# Unit test / coverage reports
-htmlcov/
+# Vector database files
+*.faiss
+*.hnsw
+*.index
+*.idx
+*.vec
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.*.sw*
+.DS_Store
+
+# Local development
+*.sqlite
+*.sqlite3
+*.db
+.ipynb_checkpoints/
+local_settings.py
+docker-compose.override.yml
+
+# Testing
 .tox/
 .coverage
 .coverage.*
@@ -40,37 +99,80 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+
+# Documentation builds
+docs/_build/
+docs/api/generated/
+site/
+
+# Specific for this project
+configs/local/*
+data/knowledge_base/embeddings/
+migrations/versions/*
+!migrations/versions/.gitkeep
+data/checkpoints/
+data/fine_tuned/
+custom_plugins/
 .pytest_cache/
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS files
+# System-specific
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
+desktop.ini
+
+# Security and credentials
+*.pem
+*.key
+*.der
+*.p12
+*.pfx
+*.crt
+*.cer
+*.priv
+*.pub
+credentials.json
+token.json
+service-account.json
+secrets.yaml
+
+# Terraform
+infrastructure/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+.terragrunt-cache/
+.terraform.lock.hcl
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Virtual environments
+.virtualenv/
+.conda/
+.envrc
 
 # Temporary files
-*.tmp
-*.temp
-/tmp/
+tmp/
+temp/
+.tmp/
 
-# Logs
-*.log
+# Build artifacts
+node_modules/
+*.tmp
+*.bak
+*~.nib
+*.bak
+*.back
+*#
+*.~*
+
+# Performance profiles
+*.prof
+*.lprof
+*.nvprof
