@@ -1,7 +1,7 @@
 """
 Advanced AI Assistant Core Engine
 Author: Drmusab
-Last Modified: 2025-05-26 14:49:04 UTC
+Last Modified: 2025-07-17 16:45:00 UTC
 
 This module provides the main processing pipeline and orchestration engine for the
 AI assistant, integrating all subsystems including speech processing, vision,
@@ -108,7 +108,7 @@ from src.observability.logging.config import get_logger
 # Session and workflow management
 from src.assistant.session_manager import SessionManager
 from src.assistant.workflow_orchestrator import WorkflowOrchestrator
-from src.assistant.component_manager import ComponentManager
+from src.assistant.component_manager import EnhancedComponentManager, ComponentPriority, ComponentDependency, DependencyType
 from src.assistant.interaction_handler import InteractionHandler
 
 
@@ -338,17 +338,15 @@ class EnhancedCoreEngine:
         
         # Initialize core components
         self._setup_core_services()
-        self._setup_processing_components()
-        self._setup_reasoning_components()
-        self._setup_memory_systems()
-        self._setup_learning_systems()
-        self._setup_monitoring()
-        self._setup_security()
-        self._setup_threading()
         
-        # Component health tracking
-        self.component_health: Dict[str, bool] = {}
-        self.component_metrics: Dict[str, Dict[str, Any]] = {}
+        # Set up component manager
+        self.component_manager = container.get(EnhancedComponentManager)
+        
+        # Register with health check system
+        self.health_check.register_component("core_engine", self._health_check_callback)
+        
+        # Setup threading
+        self._setup_threading()
         
         self.logger.info("EnhancedCoreEngine initialized successfully")
 
@@ -362,61 +360,10 @@ class EnhancedCoreEngine:
         # Session and workflow management
         self.session_manager = self.container.get(SessionManager)
         self.workflow_orchestrator = self.container.get(WorkflowOrchestrator)
-        self.component_manager = self.container.get(ComponentManager)
         self.interaction_handler = self.container.get(InteractionHandler)
-
-    def _setup_processing_components(self) -> None:
-        """Setup multimodal processing components."""
-        # Speech processing
-        if self.config.enable_speech_processing:
-            self.audio_pipeline = self.container.get(EnhancedAudioPipeline)
-            self.speech_to_text = self.container.get(EnhancedWhisperTranscriber)
-            self.text_to_speech = self.container.get(EnhancedTextToSpeech)
-            self.emotion_detector = self.container.get(EnhancedEmotionDetector)
-            self.speaker_recognition = self.container.get(EnhancedSpeakerRecognition)
         
-        # Vision processing
-        if self.config.enable_vision_processing:
-            self.vision_processor = self.container.get(VisionProcessor)
-            self.image_analyzer = self.container.get(ImageAnalyzer)
-        
-        # Natural language processing
-        self.intent_manager = self.container.get(IntentManager)
-        self.language_chain = self.container.get(LanguageChain)
-        self.sentiment_analyzer = self.container.get(SentimentAnalyzer)
-        self.entity_extractor = self.container.get(EntityExtractor)
-        
-        # Multimodal fusion
-        if self.config.enable_multimodal_fusion:
-            self.fusion_strategy = self.container.get(MultimodalFusionStrategy)
-        
-        # LLM integration
-        self.model_router = self.container.get(ModelRouter)
-
-    def _setup_reasoning_components(self) -> None:
-        """Setup reasoning and planning components."""
-        if self.config.enable_reasoning:
-            self.logic_engine = self.container.get(LogicEngine)
-            self.knowledge_graph = self.container.get(KnowledgeGraph)
-            self.task_planner = self.container.get(TaskPlanner)
-            self.decision_tree = self.container.get(DecisionTree)
-
-    def _setup_memory_systems(self) -> None:
-        """Setup comprehensive memory systems."""
-        self.memory_manager = self.container.get(MemoryManager)
-        self.context_manager = self.container.get(ContextManager)
-        self.vector_store = self.container.get(VectorStore)
-        self.working_memory = self.container.get(WorkingMemory)
-        self.episodic_memory = self.container.get(EpisodicMemory)
-        self.semantic_memory = self.container.get(SemanticMemory)
-
-    def _setup_learning_systems(self) -> None:
-        """Setup learning and adaptation systems."""
-        if self.config.enable_learning:
-            self.continual_learner = self.container.get(ContinualLearner)
-            self.preference_learner = self.container.get(PreferenceLearner)
-            self.feedback_processor = self.container.get(FeedbackProcessor)
-            self.model_adapter = self.container.get(ModelAdapter)
+        # Monitoring and observability
+        self._setup_monitoring()
 
     def _setup_monitoring(self) -> None:
         """Setup monitoring and observability."""
@@ -429,13 +376,6 @@ class EnhancedCoreEngine:
         self.metrics.register_gauge("engine_active_sessions")
         self.metrics.register_counter("engine_errors_total")
         self.metrics.register_gauge("engine_component_health")
-
-    def _setup_security(self) -> None:
-        """Setup security components."""
-        if self.config.require_authentication:
-            self.auth_manager = self.container.get(AuthenticationManager)
-        if self.config.enable_authorization:
-            self.authz_manager = self.container.get(AuthorizationManager)
 
     def _setup_threading(self) -> None:
         """Setup threading and concurrency."""
@@ -451,13 +391,17 @@ class EnhancedCoreEngine:
             with self.tracer.trace("engine_initialization") as span:
                 self.logger.info("Starting core engine initialization...")
                 
-                # Initialize components in dependency order
-                await self._initialize_core_components()
-                await self._initialize_processing_components()
-                await self._initialize_memory_systems()
-                await self._initialize_learning_systems()
+                # Register all components with the component manager
+                await self._register_components()
+                
+                # Initialize all components through the component manager
+                await self.component_manager.initialize_all()
+                
+                # Get component references after initialization
+                await self._get_component_references()
+                
+                # Register event handlers
                 await self._register_event_handlers()
-                await self._setup_health_monitoring()
                 
                 # Start background tasks
                 await self._start_background_tasks()
@@ -470,11 +414,11 @@ class EnhancedCoreEngine:
                 await self.event_bus.emit(EngineStarted(
                     engine_id=id(self),
                     version="1.0.0",
-                    components_loaded=len(self.component_health),
+                    components_loaded=len(self.component_manager._components),
                     startup_time=self.startup_time
                 ))
                 
-                self.logger.info(f"Core engine initialized successfully in {self.startup_time}")
+                self.logger.info(f"Core engine initialized successfully at {self.startup_time}")
                 
         except Exception as e:
             self.state = EngineState.ERROR
@@ -487,107 +431,406 @@ class EnhancedCoreEngine:
             ))
             raise CoreEngineError(f"Engine initialization failed: {str(e)}") from e
 
-    async def _initialize_core_components(self) -> None:
-        """Initialize core service components."""
-        components = [
-            ("session_manager", self.session_manager),
-            ("workflow_orchestrator", self.workflow_orchestrator),
-            ("component_manager", self.component_manager),
-            ("interaction_handler", self.interaction_handler)
-        ]
+    async def _register_components(self) -> None:
+        """Register all components with the component manager."""
+        self.logger.info("Registering components with component manager...")
         
-        for name, component in components:
-            try:
-                if hasattr(component, 'initialize'):
-                    await component.initialize()
-                self.component_health[name] = True
-                self.logger.debug(f"Initialized {name}")
-            except Exception as e:
-                self.component_health[name] = False
-                self.logger.error(f"Failed to initialize {name}: {str(e)}")
+        # Register core components
+        self._register_core_components()
+        
+        # Register processing components
+        self._register_processing_components()
+        
+        # Register reasoning components
+        self._register_reasoning_components()
+        
+        # Register memory systems
+        self._register_memory_systems()
+        
+        # Register learning systems
+        self._register_learning_systems()
 
-    async def _initialize_processing_components(self) -> None:
-        """Initialize processing components."""
-        components = []
+    def _register_core_components(self) -> None:
+        """Register core service components."""
+        # Session Manager
+        self.component_manager.register_component(
+            "session_manager",
+            SessionManager,
+            priority=ComponentPriority.ESSENTIAL,
+            config_section="session"
+        )
         
+        # Workflow Orchestrator
+        self.component_manager.register_component(
+            "workflow_orchestrator",
+            WorkflowOrchestrator,
+            priority=ComponentPriority.ESSENTIAL,
+            dependencies=[
+                ComponentDependency("session_manager", DependencyType.REQUIRED)
+            ],
+            config_section="workflows"
+        )
+        
+        # Interaction Handler
+        self.component_manager.register_component(
+            "interaction_handler",
+            InteractionHandler,
+            priority=ComponentPriority.HIGH,
+            dependencies=[
+                ComponentDependency("session_manager", DependencyType.REQUIRED),
+                ComponentDependency("workflow_orchestrator", DependencyType.REQUIRED)
+            ],
+            config_section="interactions"
+        )
+
+    def _register_processing_components(self) -> None:
+        """Register processing components."""
+        # Speech processing components
         if self.config.enable_speech_processing:
-            components.extend([
-                ("audio_pipeline", self.audio_pipeline),
-                ("speech_to_text", self.speech_to_text),
-                ("text_to_speech", self.text_to_speech),
-                ("emotion_detector", self.emotion_detector),
-                ("speaker_recognition", self.speaker_recognition)
-            ])
+            self.component_manager.register_component(
+                "audio_pipeline",
+                EnhancedAudioPipeline,
+                priority=ComponentPriority.NORMAL,
+                config_section="processing.speech.audio_pipeline"
+            )
+            
+            self.component_manager.register_component(
+                "speech_to_text",
+                EnhancedWhisperTranscriber,
+                priority=ComponentPriority.NORMAL,
+                dependencies=[
+                    ComponentDependency("audio_pipeline", DependencyType.OPTIONAL)
+                ],
+                config_section="processing.speech.speech_to_text"
+            )
+            
+            self.component_manager.register_component(
+                "text_to_speech",
+                EnhancedTextToSpeech,
+                priority=ComponentPriority.NORMAL,
+                config_section="processing.speech.text_to_speech"
+            )
+            
+            self.component_manager.register_component(
+                "emotion_detector",
+                EnhancedEmotionDetector,
+                priority=ComponentPriority.NORMAL,
+                dependencies=[
+                    ComponentDependency("audio_pipeline", DependencyType.OPTIONAL)
+                ],
+                config_section="processing.speech.emotion_detection"
+            )
+            
+            self.component_manager.register_component(
+                "speaker_recognition",
+                EnhancedSpeakerRecognition,
+                priority=ComponentPriority.NORMAL,
+                dependencies=[
+                    ComponentDependency("audio_pipeline", DependencyType.OPTIONAL)
+                ],
+                config_section="processing.speech.speaker_recognition"
+            )
         
+        # Vision processing components
         if self.config.enable_vision_processing:
-            components.extend([
-                ("vision_processor", self.vision_processor),
-                ("image_analyzer", self.image_analyzer)
-            ])
+            self.component_manager.register_component(
+                "vision_processor",
+                VisionProcessor,
+                priority=ComponentPriority.NORMAL,
+                config_section="processing.vision.processor"
+            )
+            
+            self.component_manager.register_component(
+                "image_analyzer",
+                ImageAnalyzer,
+                priority=ComponentPriority.NORMAL,
+                dependencies=[
+                    ComponentDependency("vision_processor", DependencyType.REQUIRED)
+                ],
+                config_section="processing.vision.analyzer"
+            )
         
-        components.extend([
-            ("intent_manager", self.intent_manager),
-            ("language_chain", self.language_chain),
-            ("sentiment_analyzer", self.sentiment_analyzer),
-            ("entity_extractor", self.entity_extractor),
-            ("model_router", self.model_router)
-        ])
+        # Natural language processing components
+        self.component_manager.register_component(
+            "intent_manager",
+            IntentManager,
+            priority=ComponentPriority.HIGH,
+            config_section="processing.nlp.intent"
+        )
         
+        self.component_manager.register_component(
+            "language_chain",
+            LanguageChain,
+            priority=ComponentPriority.HIGH,
+            dependencies=[
+                ComponentDependency("intent_manager", DependencyType.OPTIONAL),
+                ComponentDependency("model_router", DependencyType.REQUIRED)
+            ],
+            config_section="processing.nlp.language_chain"
+        )
+        
+        self.component_manager.register_component(
+            "sentiment_analyzer",
+            SentimentAnalyzer,
+            priority=ComponentPriority.NORMAL,
+            config_section="processing.nlp.sentiment"
+        )
+        
+        self.component_manager.register_component(
+            "entity_extractor",
+            EntityExtractor,
+            priority=ComponentPriority.NORMAL,
+            config_section="processing.nlp.entity"
+        )
+        
+        # Multimodal fusion
         if self.config.enable_multimodal_fusion:
-            components.append(("fusion_strategy", self.fusion_strategy))
+            self.component_manager.register_component(
+                "fusion_strategy",
+                MultimodalFusionStrategy,
+                priority=ComponentPriority.HIGH,
+                config_section="processing.multimodal.fusion"
+            )
         
-        for name, component in components:
-            try:
-                if hasattr(component, 'initialize'):
-                    await component.initialize()
-                self.component_health[name] = True
-                self.logger.debug(f"Initialized {name}")
-            except Exception as e:
-                self.component_health[name] = False
-                self.logger.error(f"Failed to initialize {name}: {str(e)}")
+        # LLM integration
+        self.component_manager.register_component(
+            "model_router",
+            ModelRouter,
+            priority=ComponentPriority.ESSENTIAL,
+            config_section="integrations.llm.router"
+        )
 
-    async def _initialize_memory_systems(self) -> None:
-        """Initialize memory management systems."""
-        components = [
-            ("memory_manager", self.memory_manager),
-            ("context_manager", self.context_manager),
-            ("vector_store", self.vector_store),
-            ("working_memory", self.working_memory),
-            ("episodic_memory", self.episodic_memory),
-            ("semantic_memory", self.semantic_memory)
-        ]
-        
-        for name, component in components:
-            try:
-                if hasattr(component, 'initialize'):
-                    await component.initialize()
-                self.component_health[name] = True
-                self.logger.debug(f"Initialized {name}")
-            except Exception as e:
-                self.component_health[name] = False
-                self.logger.error(f"Failed to initialize {name}: {str(e)}")
+    def _register_reasoning_components(self) -> None:
+        """Register reasoning and planning components."""
+        if self.config.enable_reasoning:
+            self.component_manager.register_component(
+                "logic_engine",
+                LogicEngine,
+                priority=ComponentPriority.HIGH,
+                dependencies=[
+                    ComponentDependency("model_router", DependencyType.REQUIRED)
+                ],
+                config_section="reasoning.logic"
+            )
+            
+            self.component_manager.register_component(
+                "knowledge_graph",
+                KnowledgeGraph,
+                priority=ComponentPriority.HIGH,
+                config_section="reasoning.knowledge"
+            )
+            
+            self.component_manager.register_component(
+                "task_planner",
+                TaskPlanner,
+                priority=ComponentPriority.HIGH,
+                dependencies=[
+                    ComponentDependency("logic_engine", DependencyType.REQUIRED),
+                    ComponentDependency("knowledge_graph", DependencyType.OPTIONAL)
+                ],
+                config_section="reasoning.planning"
+            )
+            
+            self.component_manager.register_component(
+                "decision_tree",
+                DecisionTree,
+                priority=ComponentPriority.HIGH,
+                dependencies=[
+                    ComponentDependency("logic_engine", DependencyType.REQUIRED)
+                ],
+                config_section="reasoning.decision"
+            )
 
-    async def _initialize_learning_systems(self) -> None:
-        """Initialize learning and adaptation systems."""
-        if not self.config.enable_learning:
-            return
+    def _register_memory_systems(self) -> None:
+        """Register memory management systems."""
+        self.component_manager.register_component(
+            "vector_store",
+            VectorStore,
+            priority=ComponentPriority.ESSENTIAL,
+            config_section="memory.vector_store"
+        )
         
-        components = [
-            ("continual_learner", self.continual_learner),
-            ("preference_learner", self.preference_learner),
-            ("feedback_processor", self.feedback_processor),
-            ("model_adapter", self.model_adapter)
-        ]
+        self.component_manager.register_component(
+            "working_memory",
+            WorkingMemory,
+            priority=ComponentPriority.HIGH,
+            dependencies=[
+                ComponentDependency("vector_store", DependencyType.REQUIRED)
+            ],
+            config_section="memory.working"
+        )
         
-        for name, component in components:
+        self.component_manager.register_component(
+            "episodic_memory",
+            EpisodicMemory,
+            priority=ComponentPriority.HIGH,
+            dependencies=[
+                ComponentDependency("vector_store", DependencyType.REQUIRED)
+            ],
+            config_section="memory.episodic"
+        )
+        
+        self.component_manager.register_component(
+            "semantic_memory",
+            SemanticMemory,
+            priority=ComponentPriority.HIGH,
+            dependencies=[
+                ComponentDependency("vector_store", DependencyType.REQUIRED)
+            ],
+            config_section="memory.semantic"
+        )
+        
+        self.component_manager.register_component(
+            "context_manager",
+            ContextManager,
+            priority=ComponentPriority.HIGH,
+            dependencies=[
+                ComponentDependency("working_memory", DependencyType.REQUIRED),
+                ComponentDependency("episodic_memory", DependencyType.REQUIRED),
+                ComponentDependency("semantic_memory", DependencyType.REQUIRED)
+            ],
+            config_section="memory.context"
+        )
+        
+        self.component_manager.register_component(
+            "memory_manager",
+            MemoryManager,
+            priority=ComponentPriority.HIGH,
+            dependencies=[
+                ComponentDependency("working_memory", DependencyType.REQUIRED),
+                ComponentDependency("episodic_memory", DependencyType.REQUIRED),
+                ComponentDependency("semantic_memory", DependencyType.REQUIRED),
+                ComponentDependency("context_manager", DependencyType.REQUIRED)
+            ],
+            config_section="memory.manager"
+        )
+
+    def _register_learning_systems(self) -> None:
+        """Register learning and adaptation systems."""
+        if self.config.enable_learning:
+            self.component_manager.register_component(
+                "feedback_processor",
+                FeedbackProcessor,
+                priority=ComponentPriority.NORMAL,
+                config_section="learning.feedback"
+            )
+            
+            self.component_manager.register_component(
+                "preference_learner",
+                PreferenceLearner,
+                priority=ComponentPriority.NORMAL,
+                dependencies=[
+                    ComponentDependency("feedback_processor", DependencyType.REQUIRED),
+                    ComponentDependency("memory_manager", DependencyType.REQUIRED)
+                ],
+                config_section="learning.preferences"
+            )
+            
+            self.component_manager.register_component(
+                "model_adapter",
+                ModelAdapter,
+                priority=ComponentPriority.NORMAL,
+                dependencies=[
+                    ComponentDependency("model_router", DependencyType.REQUIRED)
+                ],
+                config_section="learning.adaptation"
+            )
+            
+            self.component_manager.register_component(
+                "continual_learner",
+                ContinualLearner,
+                priority=ComponentPriority.NORMAL,
+                dependencies=[
+                    ComponentDependency("feedback_processor", DependencyType.REQUIRED),
+                    ComponentDependency("preference_learner", DependencyType.OPTIONAL),
+                    ComponentDependency("model_adapter", DependencyType.REQUIRED),
+                    ComponentDependency("memory_manager", DependencyType.REQUIRED)
+                ],
+                config_section="learning.continual"
+            )
+
+    async def _get_component_references(self) -> None:
+        """Get references to initialized components."""
+        self.logger.info("Getting component references...")
+        
+        # Session and workflow management
+        self.session_manager = await self.component_manager.get_component("session_manager")
+        self.workflow_orchestrator = await self.component_manager.get_component("workflow_orchestrator")
+        self.interaction_handler = await self.component_manager.get_component("interaction_handler")
+        
+        # Processing components
+        if self.config.enable_speech_processing:
             try:
-                if hasattr(component, 'initialize'):
-                    await component.initialize()
-                self.component_health[name] = True
-                self.logger.debug(f"Initialized {name}")
+                self.audio_pipeline = await self.component_manager.get_component("audio_pipeline")
+                self.speech_to_text = await self.component_manager.get_component("speech_to_text")
+                self.text_to_speech = await self.component_manager.get_component("text_to_speech")
+                self.emotion_detector = await self.component_manager.get_component("emotion_detector")
+                self.speaker_recognition = await self.component_manager.get_component("speaker_recognition")
             except Exception as e:
-                self.component_health[name] = False
-                self.logger.error(f"Failed to initialize {name}: {str(e)}")
+                self.logger.warning(f"Some speech components failed to initialize: {str(e)}")
+        
+        # Vision processing
+        if self.config.enable_vision_processing:
+            try:
+                self.vision_processor = await self.component_manager.get_component("vision_processor")
+                self.image_analyzer = await self.component_manager.get_component("image_analyzer")
+            except Exception as e:
+                self.logger.warning(f"Some vision components failed to initialize: {str(e)}")
+        
+        # NLP components
+        try:
+            self.intent_manager = await self.component_manager.get_component("intent_manager")
+            self.language_chain = await self.component_manager.get_component("language_chain")
+            self.sentiment_analyzer = await self.component_manager.get_component("sentiment_analyzer")
+            self.entity_extractor = await self.component_manager.get_component("entity_extractor")
+        except Exception as e:
+            self.logger.warning(f"Some NLP components failed to initialize: {str(e)}")
+        
+        # Multimodal fusion
+        if self.config.enable_multimodal_fusion:
+            try:
+                self.fusion_strategy = await self.component_manager.get_component("fusion_strategy")
+            except Exception as e:
+                self.logger.warning(f"Fusion strategy failed to initialize: {str(e)}")
+        
+        # LLM integration
+        try:
+            self.model_router = await self.component_manager.get_component("model_router")
+        except Exception as e:
+            self.logger.error(f"Model router failed to initialize: {str(e)}")
+            raise CoreEngineError("Failed to initialize model router, which is required") from e
+        
+        # Reasoning components
+        if self.config.enable_reasoning:
+            try:
+                self.logic_engine = await self.component_manager.get_component("logic_engine")
+                self.knowledge_graph = await self.component_manager.get_component("knowledge_graph")
+                self.task_planner = await self.component_manager.get_component("task_planner")
+                self.decision_tree = await self.component_manager.get_component("decision_tree")
+            except Exception as e:
+                self.logger.warning(f"Some reasoning components failed to initialize: {str(e)}")
+        
+        # Memory systems
+        try:
+            self.memory_manager = await self.component_manager.get_component("memory_manager")
+            self.context_manager = await self.component_manager.get_component("context_manager")
+            self.vector_store = await self.component_manager.get_component("vector_store")
+            self.working_memory = await self.component_manager.get_component("working_memory")
+            self.episodic_memory = await self.component_manager.get_component("episodic_memory")
+            self.semantic_memory = await self.component_manager.get_component("semantic_memory")
+        except Exception as e:
+            self.logger.error(f"Memory systems failed to initialize: {str(e)}")
+            raise CoreEngineError("Failed to initialize memory systems, which are required") from e
+        
+        # Learning systems
+        if self.config.enable_learning:
+            try:
+                self.continual_learner = await self.component_manager.get_component("continual_learner")
+                self.preference_learner = await self.component_manager.get_component("preference_learner")
+                self.feedback_processor = await self.component_manager.get_component("feedback_processor")
+                self.model_adapter = await self.component_manager.get_component("model_adapter")
+            except Exception as e:
+                self.logger.warning(f"Some learning components failed to initialize: {str(e)}")
 
     async def _register_event_handlers(self) -> None:
         """Register event handlers for system events."""
@@ -603,16 +846,6 @@ class EnhancedCoreEngine:
         # Learning events
         if self.config.enable_learning:
             self.event_bus.subscribe("learning_event_occurred", self._handle_learning_event)
-
-    async def _setup_health_monitoring(self) -> None:
-        """Setup comprehensive health monitoring."""
-        self.health_check.register_component("core_engine", self._health_check_callback)
-        
-        # Register component health checks
-        for component_name in self.component_health.keys():
-            component = getattr(self, component_name, None)
-            if component and hasattr(component, '_health_check_callback'):
-                self.health_check.register_component(component_name, component._health_check_callback)
 
     async def _start_background_tasks(self) -> None:
         """Start background maintenance tasks."""
@@ -1240,6 +1473,9 @@ class EnhancedCoreEngine:
 
     async def get_engine_status(self) -> Dict[str, Any]:
         """Get comprehensive engine status."""
+        # Get component status from component manager
+        component_status = self.component_manager.get_component_status()
+        
         return {
             'state': self.state.value,
             'startup_time': self.startup_time.isoformat() if self.startup_time else None,
@@ -1247,9 +1483,9 @@ class EnhancedCoreEngine:
                 datetime.now(timezone.utc) - self.startup_time
             ).total_seconds() if self.startup_time else 0,
             'active_sessions': len(self.active_sessions),
-            'component_health': self.component_health,
-            'component_count': len(self.component_health),
-            'healthy_components': sum(1 for h in self.component_health.values() if h),
+            'component_health': component_status.get('components', {}),
+            'component_count': component_status.get('total_components', 0),
+            'healthy_components': component_status.get('running_components', 0),
             'processing_queue_size': self.processing_queue.qsize(),
             'memory_usage': self._get_memory_usage(),
             'version': "1.0.0"
@@ -1272,10 +1508,8 @@ class EnhancedCoreEngine:
         """Background task for performance monitoring."""
         while self.state != EngineState.SHUTTING_DOWN:
             try:
-                # Update component metrics
-                for component_name, is_healthy in self.component_health.items():
-                    self.metrics.set(f"engine_component_health", 1 if is_healthy else 0, 
-                                   tags={'component': component_name})
+                # Get component status from component manager
+                component_status = self.component_manager.get_component_status()
                 
                 # Update session metrics
                 self.metrics.set("engine_active_sessions", len(self.active_sessions))
@@ -1299,31 +1533,9 @@ class EnhancedCoreEngine:
 
     async def _health_monitoring_loop(self) -> None:
         """Background task for component health monitoring."""
-        while self.state != EngineState.SHUTTING_DOWN:
-            try:
-                # Check component health
-                for component_name in self.component_health.keys():
-                    component = getattr(self, component_name, None)
-                    if component and hasattr(component, '_health_check_callback'):
-                        try:
-                            health_result = await component._health_check_callback()
-                            is_healthy = health_result.get('status') == 'healthy'
-                            
-                            if self.component_health[component_name] != is_healthy:
-                                self.component_health[component_name] = is_healthy
-                                await self.event_bus.emit(ComponentHealthChanged(
-                                    component=component_name,
-                                    healthy=is_healthy,
-                                    details=health_result
-                                ))
-                        except Exception as e:
-                            self.component_health[component_name] = False
-                            self.logger.error(f"Health check failed for {component_name}: {str(e)}")
-                
-                await asyncio.sleep(60)  # Check every minute
-                
-            except Exception as e:
-                self.logger.error(f"Health monitoring error: {str(e)}")
+        # No need to implement custom health monitoring here
+        # The component manager already handles component health monitoring
+        await asyncio.sleep(60)  # Just to keep the task alive
 
     async def _learning_update_loop(self) -> None:
         """Background task for learning system updates."""
@@ -1368,16 +1580,13 @@ class EnhancedCoreEngine:
         if hasattr(self, 'feedback_processor'):
             await self.feedback_processor.process_event(event)
 
-    async def _attempt_component_recovery(self, component_name: str) -> None:
+    async def _attempt_component_recovery(self, component_id: str) -> None:
         """Attempt to recover a failed component."""
         try:
-            component = getattr(self, component_name, None)
-            if component and hasattr(component, 'initialize'):
-                await component.initialize()
-                self.component_health[component_name] = True
-                self.logger.info(f"Successfully recovered component: {component_name}")
+            await self.component_manager.restart_component(component_id)
+            self.logger.info(f"Successfully restarted component: {component_id}")
         except Exception as e:
-            self.logger.error(f"Failed to recover component {component_name}: {str(e)}")
+            self.logger.error(f"Failed to recover component {component_id}: {str(e)}")
 
     async def _handle_critical_error(self, event) -> None:
         """Handle critical errors that may require system intervention."""
@@ -1394,66 +1603,12 @@ class EnhancedCoreEngine:
     async def _health_check_callback(self) -> Dict[str, Any]:
         """Health check callback for the core engine."""
         try:
-            healthy_components = sum(1 for h in self.component_health.values() if h)
-            total_components = len(self.component_health)
+            # Get component status from component manager
+            component_status = self.component_manager.get_component_status()
+            healthy_components = component_status.get('running_components', 0)
+            total_components = component_status.get('total_components', 0)
             
             return {
                 "status": "healthy" if self.state == EngineState.READY else "degraded",
                 "state": self.state.value,
-                "component_health_ratio": healthy_components / total_components if total_components > 0 else 0,
-                "active_sessions": len(self.active_sessions),
-                "uptime_seconds": (
-                    datetime.now(timezone.utc) - self.startup_time
-                ).total_seconds() if self.startup_time else 0
-            }
-        except Exception as e:
-            return {
-                "status": "unhealthy",
-                "error": str(e)
-            }
-
-    async def shutdown(self) -> None:
-        """Gracefully shutdown the core engine."""
-        self.logger.info("Starting core engine shutdown...")
-        self.state = EngineState.SHUTTING_DOWN
-        
-        try:
-            # End all active sessions
-            for session_id in list(self.active_sessions.keys()):
-                await self.end_session(session_id)
-            
-            # Shutdown components
-            for component_name in self.component_health.keys():
-                component = getattr(self, component_name, None)
-                if component and hasattr(component, 'cleanup'):
-                    try:
-                        await component.cleanup()
-                        self.logger.debug(f"Cleaned up {component_name}")
-                    except Exception as e:
-                        self.logger.error(f"Error cleaning up {component_name}: {str(e)}")
-            
-            # Shutdown thread pool
-            self.thread_pool.shutdown(wait=True)
-            
-            # Final cleanup
-            self.shutdown_time = datetime.now(timezone.utc)
-            
-            await self.event_bus.emit(EngineShutdown(
-                engine_id=id(self),
-                shutdown_time=self.shutdown_time,
-                uptime_seconds=(self.shutdown_time - self.startup_time).total_seconds()
-            ))
-            
-            self.logger.info("Core engine shutdown completed successfully")
-            
-        except Exception as e:
-            self.logger.error(f"Error during shutdown: {str(e)}")
-            raise CoreEngineError(f"Shutdown failed: {str(e)}") from e
-
-    def __del__(self):
-        """Destructor to ensure cleanup."""
-        try:
-            if hasattr(self, 'thread_pool'):
-                self.thread_pool.shutdown(wait=False)
-        except Exception:
-            pass  # Ignore cleanup errors in destructor
+                "component_health_ratio": healthy_components / total_
