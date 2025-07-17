@@ -1,36 +1,86 @@
 """
-Enhanced Session Manager with Memory Integration
+Memory-Enabled Session Manager
 Author: Drmusab
-Last Modified: 2025-07-17 18:15:00 UTC
+Last Modified: 2025-07-17 19:35:00 UTC
 
-This module enhances the session manager with memory integration,
-allowing sessions to have persistent memory across interactions.
+This module provides a session manager with memory capabilities, allowing
+the assistant to maintain context and recall past interactions throughout
+a conversation and across multiple sessions.
 """
 
-from typing import Dict, List, Optional, Any, Set, Tuple
 import asyncio
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from datetime import datetime, timezone, timedelta
 import logging
-from datetime import datetime, timezone
+import uuid
+import json
 
 from src.core.dependency_injection import Container
-from src.assistant.session_manager import (
-    EnhancedSessionManager, SessionInfo, SessionContext, SessionState, 
-    SessionConfiguration, SessionError
+from src.core.events.event_bus import EventBus
+from src.core.events.event_types import (
+    SessionStarted, SessionEnded, MessageReceived, 
+    MessageProcessed, ErrorOccurred
 )
 from src.assistant.session_memory_integrator import SessionMemoryIntegrator
-from src.memory.core_memory.base_memory import MemoryType
+from src.memory.operations.retrieval import RetrievalRequest, RetrievalStrategy
 from src.observability.logging.config import get_logger
-from src.core.events.event_bus import EventBus
-from src.core.events.event_types import SessionStarted, SessionEnded
+from src.observability.monitoring.metrics import MetricsCollector
 
 
-class MemoryEnabledSessionManager(EnhancedSessionManager):
-    """
-    Enhanced session manager with memory system integration.
+class Session:
+    """Represents a user session with memory capabilities."""
     
-    This class extends the EnhancedSessionManager to integrate with the
-    memory system, allowing sessions to store and retrieve memories,
-    maintain context across interactions, and persist important information.
+    def __init__(
+        self,
+        session_id: str,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Initialize a new session.
+        
+        Args:
+            session_id: Unique session identifier
+            user_id: Optional user identifier
+            metadata: Optional session metadata
+        """
+        self.session_id = session_id
+        self.user_id = user_id
+        self.metadata = metadata or {}
+        self.created_at = datetime.now(timezone.utc)
+        self.last_active = self.created_at
+        self.interaction_count = 0
+        self.active = True
+        
+        # Memory-related fields
+        self.context: Dict[str, Any] = {}
+        self.memory_ids: List[str] = []
+        self.important_facts: List[Dict[str, Any]] = []
+    
+    def touch(self) -> None:
+        """Update last activity time."""
+        self.last_active = datetime.now(timezone.utc)
+        self.interaction_count += 1
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert session to dictionary."""
+        return {
+            "session_id": self.session_id,
+            "user_id": self.user_id,
+            "metadata": self.metadata,
+            "created_at": self.created_at.isoformat(),
+            "last_active": self.last_active.isoformat(),
+            "interaction_count": self.interaction_count,
+            "active": self.active,
+            "context": self.context,
+            "memory_count": len(self.memory_ids)
+        }
+
+
+class MemoryEnabledSessionManager:
+    """
+    Session manager with memory integration for maintaining conversational
+    context and recalling past interactions.
     """
     
     def __init__(self, container: Container):
@@ -38,329 +88,334 @@ class MemoryEnabledSessionManager(EnhancedSessionManager):
         Initialize the memory-enabled session manager.
         
         Args:
-            container: Dependency injection container
+            container: The dependency injection container
         """
-        super().__init__(container)
+        self.container = container
         self.logger = get_logger(__name__)
         
-        # Create the session memory integrator
-        self.memory_integrator = SessionMemoryIntegrator(container)
+        # Core components
+        self.event_bus = container.get(EventBus)
+        
+        # Memory integration
+        self.memory_integrator = container.get(SessionMemoryIntegrator)
+        
+        # Active sessions
+        self.sessions: Dict[str, Session] = {}
+        
+        # Optional components
+        try:
+            self.metrics = container.get(MetricsCollector)
+            self.metrics.register_counter("session_total", 
+                                         "Total number of sessions")
+            self.metrics.register_gauge("session_active", 
+                                       "Number of active sessions")
+            self.metrics.register_histogram("session_duration_seconds", 
+                                           "Session duration in seconds")
+        except Exception:
+            self.logger.warning("Metrics collector not available")
+            self.metrics = None
+        
+        # Register event handlers
+        self._register_event_handlers()
+        
+        # Start background tasks
+        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
         
         self.logger.info("Memory-enabled session manager initialized")
     
+    def _register_event_handlers(self) -> None:
+        """Register event handlers."""
+        self.event_bus.subscribe(MessageReceived, self._handle_message_received)
+    
+    async def _handle_message_received(self, event: MessageReceived) -> None:
+        """
+        Handle incoming message by ensuring session exists.
+        
+        Args:
+            event: The message received event
+        """
+        session_id = event.session_id
+        user_id = event.user_id
+        
+        # Create or get session
+        if session_id not in self.sessions:
+            await self.create_session(session_id, user_id)
+        else:
+            # Update last activity
+            self.sessions[session_id].touch()
+    
     async def create_session(
         self, 
-        user_id: Optional[str] = None, 
-        config: Optional[SessionConfiguration] = None,
-        initial_context: Optional[Dict[str, Any]] = None
-    ) -> SessionInfo:
-        """
-        Create a new session with memory integration.
-        
-        Args:
-            user_id: Optional user identifier
-            config: Optional session configuration
-            initial_context: Optional initial context
-            
-        Returns:
-            Session information
-        """
-        # Create the session using the parent method
-        session_info = await super().create_session(user_id, config, initial_context)
-        
-        try:
-            # Initialize memory for the session
-            await self.memory_integrator.initialize_session_memory(session_info)
-            
-            # Record session creation in session context
-            if not session_info.context.custom_data:
-                session_info.context.custom_data = {}
-            
-            session_info.context.custom_data["memory_initialized"] = True
-            session_info.context.custom_data["memory_initialized_at"] = datetime.now(timezone.utc).isoformat()
-            
-            return session_info
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize session memory: {str(e)}")
-            # Continue with session creation even if memory initialization fails
-            # to avoid disrupting the user experience
-            return session_info
-    
-    async def add_interaction(
-        self, 
-        session_id: str, 
-        interaction_data: Dict[str, Any],
-        interaction_type: str = "message"
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """
-        Add an interaction to a session with memory integration.
+        Create a new session with memory capabilities.
+        
+        Args:
+            session_id: Optional session ID (generated if not provided)
+            user_id: Optional user ID
+            metadata: Optional session metadata
+            
+        Returns:
+            Session ID
+        """
+        # Generate session ID if not provided
+        if not session_id:
+            session_id = str(uuid.uuid4())
+        
+        # Create session object
+        session = Session(
+            session_id=session_id,
+            user_id=user_id,
+            metadata=metadata
+        )
+        
+        # Store in active sessions
+        self.sessions[session_id] = session
+        
+        # Emit session started event
+        await self.event_bus.emit(SessionStarted(
+            session_id=session_id,
+            user_id=user_id
+        ))
+        
+        # Update metrics
+        if self.metrics:
+            self.metrics.increment("session_total")
+            self.metrics.gauge("session_active", len(self.sessions))
+        
+        self.logger.info(f"Created session {session_id} for user {user_id}")
+        
+        return session_id
+    
+    async def end_session(self, session_id: str) -> bool:
+        """
+        End a session and consolidate its memories.
         
         Args:
             session_id: Session identifier
-            interaction_data: Interaction data
-            interaction_type: Type of interaction
             
         Returns:
-            Interaction ID
+            True if session was ended, False otherwise
         """
-        # Add interaction using parent method
-        interaction_id = await super().add_interaction(session_id, interaction_data, interaction_type)
+        if session_id not in self.sessions:
+            return False
         
+        session = self.sessions[session_id]
+        session.active = False
+        
+        # Calculate session duration
+        duration = (datetime.now(timezone.utc) - session.created_at).total_seconds()
+        
+        # Emit session ended event
+        await self.event_bus.emit(SessionEnded(
+            session_id=session_id,
+            user_id=session.user_id,
+            duration=duration
+        ))
+        
+        # Remove from active sessions
+        del self.sessions[session_id]
+        
+        # Update metrics
+        if self.metrics:
+            self.metrics.gauge("session_active", len(self.sessions))
+            self.metrics.record("session_duration_seconds", duration)
+        
+        self.logger.info(f"Ended session {session_id} after {duration:.1f} seconds")
+        
+        return True
+    
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get session information including memory context.
+        
+        Args:
+            session_id: Session identifier
+            
+        Returns:
+            Session information or None if not found
+        """
+        if session_id not in self.sessions:
+            return None
+        
+        session = self.sessions[session_id]
+        
+        # Get basic session info
+        session_dict = session.to_dict()
+        
+        # Get memory context
         try:
-            # Store interaction in memory
-            memory_id = await self.memory_integrator.store_interaction(
-                session_id, 
-                interaction_data, 
-                interaction_type
-            )
-            
-            # Update the session's last activity
-            session_info = await self.get_session(session_id)
-            if session_info:
-                await self._update_last_activity(session_info)
-            
-            return interaction_id
-            
+            context = await self.memory_integrator.get_session_context(session_id)
+            session_dict["context"] = context
         except Exception as e:
-            self.logger.error(f"Failed to store interaction in memory: {str(e)}")
-            # Return the original interaction ID even if memory storage fails
-            return interaction_id
+            self.logger.error(f"Error getting session context: {str(e)}")
+            session_dict["context_error"] = str(e)
+        
+        return session_dict
     
-    async def update_session_context(
-        self, 
-        session_id: str, 
-        context_updates: Dict[str, Any],
-        merge: bool = True
-    ) -> bool:
+    async def process_message(
+        self,
+        session_id: str,
+        message: str,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
-        Update session context with memory integration.
+        Process a message with memory-enhanced context.
         
         Args:
             session_id: Session identifier
-            context_updates: Context updates
-            merge: Whether to merge or replace context
+            message: User message
+            user_id: Optional user identifier
+            metadata: Optional message metadata
             
         Returns:
-            True if successful
+            Response with context information
         """
-        # Update context using parent method
-        result = await super().update_session_context(session_id, context_updates, merge)
+        # Ensure session exists
+        if session_id not in self.sessions:
+            await self.create_session(session_id, user_id)
         
-        if result:
-            try:
-                # Get the updated session
-                session_info = await self.get_session(session_id)
-                if session_info:
-                    # Update memory context based on session context
-                    context_element_data = {
-                        "context_update": context_updates,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "merge_mode": "merge" if merge else "replace"
-                    }
-                    
-                    # Store as a memory item
-                    await self.memory_integrator.store_interaction(
-                        session_id,
-                        context_element_data,
-                        "context_update"
-                    )
-            except Exception as e:
-                self.logger.error(f"Failed to update memory context: {str(e)}")
+        session = self.sessions[session_id]
+        session.touch()
         
-        return result
+        # Get memory context
+        context = await self.memory_integrator.get_session_context(session_id)
+        
+        # TODO: Process message with context using the core engine
+        # This is a placeholder for demonstration
+        response = {
+            "text": f"Processed message with memory context: {message}",
+            "session_id": session_id,
+            "context_used": True,
+            "memory_context_size": len(json.dumps(context))
+        }
+        
+        # Emit message processed event
+        await self.event_bus.emit(MessageProcessed(
+            session_id=session_id,
+            user_id=user_id,
+            message=message,
+            response=response["text"],
+            metadata=metadata
+        ))
+        
+        return response
     
-    async def end_session(
-        self, 
-        session_id: str, 
-        reason: str = "user_request"
-    ) -> bool:
+    async def store_session_fact(
+        self,
+        session_id: str,
+        fact: str,
+        importance: float = 0.7,
+        tags: Optional[Set[str]] = None
+    ) -> str:
         """
-        End a session with memory consolidation.
+        Store an important fact learned in the session.
         
         Args:
             session_id: Session identifier
-            reason: Reason for ending session
+            fact: The fact to store
+            importance: Importance score (0-1)
+            tags: Optional tags
             
         Returns:
-            True if successful
+            Memory ID of the stored fact
         """
-        try:
-            # Get session before ending it
-            session_info = await self.get_session(session_id)
-            
-            if not session_info:
-                return False
-            
-            # Calculate session duration
-            session_duration = 0.0
-            if session_info.started_at:
-                duration = datetime.now(timezone.utc) - session_info.started_at
-                session_duration = duration.total_seconds()
-            
-            # End session using parent method
-            result = await super().end_session(session_id, reason)
-            
-            if result:
-                # Publish session ended event with duration
-                self.event_bus.publish(SessionEnded(
-                    session_id=session_id,
-                    user_id=session_info.context.user_id,
-                    end_reason=reason,
-                    session_duration=session_duration
-                ))
-                
-                # Memory consolidation will be triggered by the event handler
-            
-            return result
-            
-        except Exception as e:
-            self.logger.error(f"Error ending session with memory consolidation: {str(e)}")
-            # Try to end the session with the parent method as a fallback
-            return await super().end_session(session_id, reason)
-    
-    async def get_session_memory_context(self, session_id: str) -> Dict[str, Any]:
-        """
-        Get the memory context for a session.
+        if session_id not in self.sessions:
+            self.logger.warning(f"Attempting to store fact for unknown session {session_id}")
+            return ""
         
-        Args:
-            session_id: Session identifier
-            
-        Returns:
-            Memory context data
-        """
-        try:
-            return await self.memory_integrator.retrieve_session_context(session_id)
-        except Exception as e:
-            self.logger.error(f"Failed to get session memory context: {str(e)}")
-            return {}
+        session = self.sessions[session_id]
+        
+        # Store the fact
+        memory_id = await self.memory_integrator.store_session_fact(
+            session_id=session_id,
+            user_id=session.user_id,
+            fact=fact,
+            importance=importance,
+            tags=tags
+        )
+        
+        # Track in session
+        if memory_id:
+            session.memory_ids.append(memory_id)
+            session.important_facts.append({
+                "memory_id": memory_id,
+                "fact": fact,
+                "importance": importance,
+                "tags": list(tags or set())
+            })
+        
+        return memory_id
     
-    async def get_session_history(
-        self, 
-        session_id: str, 
-        limit: int = 10,
-        interaction_type: Optional[str] = None
+    async def get_session_memories(
+        self,
+        session_id: str,
+        query: Optional[str] = None,
+        limit: int = 10
     ) -> List[Dict[str, Any]]:
         """
-        Get interaction history for a session from memory.
+        Get memories for a specific session.
         
         Args:
             session_id: Session identifier
-            limit: Maximum number of interactions to retrieve
-            interaction_type: Optional filter by interaction type
-            
-        Returns:
-            List of interaction data
-        """
-        try:
-            return await self.memory_integrator.retrieve_session_history(
-                session_id, 
-                limit, 
-                interaction_type
-            )
-        except Exception as e:
-            self.logger.error(f"Failed to get session history: {str(e)}")
-            return []
-    
-    async def get_relevant_memories(
-        self, 
-        session_id: str, 
-        query: str,
-        limit: int = 5
-    ) -> List[Dict[str, Any]]:
-        """
-        Get memories relevant to a query for a session.
-        
-        Args:
-            session_id: Session identifier
-            query: Query string
+            query: Optional search query
             limit: Maximum number of memories to retrieve
             
         Returns:
-            List of relevant memory data
+            List of memory items
         """
-        try:
-            return await self.memory_integrator.retrieve_relevant_memories(
-                session_id,
-                query,
-                limit
-            )
-        except Exception as e:
-            self.logger.error(f"Failed to get relevant memories: {str(e)}")
+        if session_id not in self.sessions:
+            self.logger.warning(f"Attempting to get memories for unknown session {session_id}")
             return []
-    
-    async def pause_session(self, session_id: str, reason: str = "user_request") -> None:
-        """
-        Pause a session with memory state preservation.
         
-        Args:
-            session_id: Session identifier
-            reason: Reason for pausing
-        """
-        # Pause session using parent method
-        await super().pause_session(session_id)
-        
-        # Store session state in memory
-        session_info = await self.get_session(session_id)
-        if session_info:
-            pause_data = {
-                "session_id": session_id,
-                "paused_at": datetime.now(timezone.utc).isoformat(),
-                "reason": reason,
-                "session_state": {
-                    "active_workflows": list(session_info.context.active_workflows),
-                    "current_topic": session_info.context.current_topic,
-                    "interaction_count": session_info.interaction_count
-                }
-            }
-            
-            # The event handler will store this in memory
-            self.event_bus.publish(SessionPaused(
-                session_id=session_id,
-                user_id=session_info.context.user_id,
-                reason=reason
-            ))
-    
-    async def resume_session(self, session_id: str) -> None:
-        """
-        Resume a session with memory state restoration.
-        
-        Args:
-            session_id: Session identifier
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Cannot resume non-existent session: {session_id}")
-        
-        # Get pause time from session info
-        pause_duration = 0.0
-        if session_info.state == SessionState.PAUSED and session_info.last_activity:
-            duration = datetime.now(timezone.utc) - session_info.last_activity
-            pause_duration = duration.total_seconds()
-        
-        # Resume session using parent method
-        await super().resume_session(session_id)
-        
-        # The event handler will handle memory updates
-        self.event_bus.publish(SessionResumed(
+        return await self.memory_integrator.retrieve_session_memories(
             session_id=session_id,
-            user_id=session_info.context.user_id,
-            pause_duration=pause_duration
-        ))
+            query=query,
+            limit=limit
+        )
     
-    async def _handle_component_health_change(self, event) -> None:
-        """
-        Handle component health change events.
+    async def _cleanup_loop(self) -> None:
+        """Background task to clean up inactive sessions."""
+        try:
+            while True:
+                # Run every 5 minutes
+                await asyncio.sleep(300)
+                
+                # Find inactive sessions (no activity for 30 minutes)
+                now = datetime.now(timezone.utc)
+                inactive_sessions = [
+                    session_id for session_id, session in self.sessions.items()
+                    if (now - session.last_active) > timedelta(minutes=30)
+                ]
+                
+                # End inactive sessions
+                for session_id in inactive_sessions:
+                    await self.end_session(session_id)
+                
+                if inactive_sessions:
+                    self.logger.info(f"Cleaned up {len(inactive_sessions)} inactive sessions")
+                
+        except asyncio.CancelledError:
+            self.logger.info("Session cleanup task cancelled")
+        except Exception as e:
+            self.logger.error(f"Error in session cleanup: {str(e)}")
+    
+    async def shutdown(self) -> None:
+        """Shutdown the session manager."""
+        # Cancel cleanup task
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
         
-        Args:
-            event: Health change event
-        """
-        await super()._handle_component_health_change(event)
+        # End all active sessions
+        for session_id in list(self.sessions.keys()):
+            await self.end_session(session_id)
         
-        # Additional handling for memory system health changes
-        if event.component.startswith("memory."):
-            self.logger.warning(f"Memory system health change: {event.component} is {event.status}")
-            
-            # If the memory system is down, we can still operate in degraded mode
-            if event.status == "down":
-                self.logger.warning("Memory system is down, operating in degraded mode")
+        self.logger.info("Memory-enabled session manager shutdown")
