@@ -31,11 +31,22 @@ from abc import ABC, abstractmethod
 import importlib
 import sys
 
+
+
+
 # Type definitions
 T = TypeVar('T')
 Factory = Callable[..., T]
 AsyncFactory = Callable[..., Any]  # Returns awaitable
-
+async def register_plugin_manager_update(container: Container):
+    """Register the enhanced plugin manager."""
+    from src.assistant.plugin_manager_enhanced import EnhancedPluginManager
+    
+    # Register as singleton
+    container.register_singleton(EnhancedPluginManager)
+    
+    # Also register with the original PluginManager interface for compatibility
+    container.register_alias('PluginManager', EnhancedPluginManager)
 
 class LifecycleScope(Enum):
     """Dependency lifecycle scopes."""
