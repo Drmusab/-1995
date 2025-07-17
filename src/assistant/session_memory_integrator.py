@@ -1,49 +1,49 @@
 """
-Session Memory Integration
+Session Memory Integrator
 Author: Drmusab
-Last Modified: 2025-07-17 18:00:00 UTC
+Last Modified: 2025-07-17 19:30:00 UTC
 
-This module provides integration between the session management system
-and the memory system, allowing sessions to utilize memory capabilities
-for contextual continuity, user history preservation, and session context.
+This module provides the integration layer between the assistant's session management
+and the memory system, ensuring proper persistence and retrieval of session data.
 """
 
-from typing import Dict, List, Optional, Any, Set, Tuple
 import asyncio
-import logging
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from datetime import datetime, timezone
+import logging
+import uuid
 
 from src.core.dependency_injection import Container
-from src.assistant.session_manager import SessionInfo, SessionContext, SessionError
-from src.memory.core_memory.memory_manager import MemoryManager
+from src.core.events.event_bus import EventBus
+from src.core.events.event_types import (
+    SessionStarted, SessionEnded, MessageProcessed, 
+    MemoryRetrievalRequested, MemoryItemStored
+)
 from src.memory.core_memory.base_memory import (
     MemoryItem, MemoryType, MemoryMetadata, MemoryRetentionPolicy,
     MemoryAccess, MemorySensitivity
 )
+from src.memory.core_memory.memory_manager import MemoryManager
 from src.memory.operations.retrieval import (
-    RetrievalRequest, RetrievalStrategy, MemoryRetrievalMode, MemoryRetriever
+    MemoryRetriever, RetrievalRequest, RetrievalResult,
+    RetrievalStrategy, MemoryRetrievalMode
 )
 from src.memory.operations.context_manager import (
-    MemoryContextManager, ContextElement, ContextType, ContextPriority
+    MemoryContextManager, ContextType, ContextPriority, ContextElement
 )
 from src.memory.operations.consolidation import (
     MemoryConsolidator, ConsolidationJob, ConsolidationStrategy, ConsolidationLevel
 )
+from src.memory.cache_manager import MemoryCacheManager, CacheKey
 from src.observability.logging.config import get_logger
-from src.core.events.event_bus import EventBus
-from src.core.events.event_types import (
-    SessionStarted, SessionEnded, SessionPaused, SessionResumed,
-    MemoryItemStored, MemoryConsolidationCompleted
-)
+from src.observability.monitoring.metrics import MetricsCollector
+from src.observability.monitoring.tracing import TraceManager
 
 
 class SessionMemoryIntegrator:
     """
-    Integrates session management with the memory system.
-    
-    This class provides the bridge between the session management system
-    and the memory system, allowing sessions to store and retrieve memories,
-    maintain context across interactions, and persist important information.
+    Integrates the memory system with session management to provide
+    persistent memory across user sessions and interactions.
     """
     
     def __init__(self, container: Container):
@@ -51,492 +51,378 @@ class SessionMemoryIntegrator:
         Initialize the session memory integrator.
         
         Args:
-            container: Dependency injection container
+            container: The dependency injection container
         """
         self.container = container
-        self.memory_manager = container.resolve(MemoryManager)
-        self.memory_retriever = container.resolve(MemoryRetriever)
-        self.context_manager = container.resolve(MemoryContextManager)
-        self.consolidator = container.resolve(MemoryConsolidator)
-        self.event_bus = container.resolve(EventBus)
         self.logger = get_logger(__name__)
         
-        # Cache to store session-to-memory mappings for quick lookups
-        self._session_memory_cache: Dict[str, Set[str]] = {}
-        self._cache_lock = asyncio.Lock()
+        # Core components
+        self.memory_manager = container.get(MemoryManager)
+        self.memory_retriever = container.get(MemoryRetriever)
+        self.context_manager = container.get(MemoryContextManager)
+        self.memory_consolidator = container.get(MemoryConsolidator)
+        self.cache_manager = container.get(MemoryCacheManager)
+        self.event_bus = container.get(EventBus)
+        
+        # Optional components
+        try:
+            self.metrics = container.get(MetricsCollector)
+            self.metrics.register_counter("session_memory_operations_total", 
+                                         "Total number of session memory operations")
+            self.metrics.register_histogram("session_memory_retrieval_time", 
+                                           "Time to retrieve session memories")
+        except Exception:
+            self.logger.warning("Metrics collector not available")
+            self.metrics = None
+            
+        try:
+            self.tracer = container.get(TraceManager)
+        except Exception:
+            self.logger.warning("Trace manager not available")
+            self.tracer = None
         
         # Register event handlers
         self._register_event_handlers()
+        
+        self.logger.info("Session memory integrator initialized")
     
     def _register_event_handlers(self) -> None:
-        """Register event handlers for memory-related events."""
+        """Register event handlers for session events."""
         self.event_bus.subscribe(SessionStarted, self._handle_session_started)
         self.event_bus.subscribe(SessionEnded, self._handle_session_ended)
-        self.event_bus.subscribe(SessionPaused, self._handle_session_paused)
-        self.event_bus.subscribe(SessionResumed, self._handle_session_resumed)
-        self.event_bus.subscribe(MemoryItemStored, self._handle_memory_stored)
-        self.event_bus.subscribe(MemoryConsolidationCompleted, self._handle_consolidation_completed)
+        self.event_bus.subscribe(MessageProcessed, self._handle_message_processed)
     
-    async def initialize_session_memory(self, session_info: SessionInfo) -> None:
+    async def _handle_session_started(self, event: SessionStarted) -> None:
         """
-        Initialize memory structures for a new session.
+        Handle session started event by initializing session memory.
         
         Args:
-            session_info: Session information
+            event: The session started event
         """
-        try:
-            session_id = session_info.session_id
-            user_id = session_info.context.user_id
-            
-            # Initialize working memory for the session
-            await self.memory_manager.get_memory_type(MemoryType.WORKING).initialize_session(session_id)
-            
-            # Initialize context window for the session
-            context_id = await self.context_manager.initialize_context(session_id)
-            
-            # Store initial session metadata in memory
-            session_metadata = {
-                "session_id": session_id,
-                "user_id": user_id,
-                "created_at": session_info.created_at.isoformat(),
-                "session_type": session_info.config.session_type.value,
-                "device_info": session_info.context.device_info,
-                "initial_context": self._extract_initial_context(session_info.context)
-            }
-            
-            # Store session start memory
-            memory_id = await self.memory_manager.store_memory(
-                data=session_metadata,
-                memory_type=MemoryType.EPISODIC,
-                owner_id=user_id,
-                session_id=session_id,
-                context_id=context_id,
-                tags={"session_start", "metadata", f"session:{session_id}"},
-                retention_policy=MemoryRetentionPolicy.STANDARD
-            )
-            
-            # Initialize session memory cache
-            async with self._cache_lock:
-                self._session_memory_cache[session_id] = {memory_id}
-                
-            self.logger.info(f"Initialized memory for session {session_id}")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize session memory: {str(e)}")
-            raise SessionError(f"Memory initialization failed: {str(e)}", session_id=session_info.session_id)
-    
-    async def store_interaction(
-        self, 
-        session_id: str, 
-        interaction_data: Dict[str, Any],
-        interaction_type: str = "message"
-    ) -> str:
-        """
-        Store an interaction in session memory.
+        session_id = event.session_id
+        user_id = event.user_id
         
-        Args:
-            session_id: Session identifier
-            interaction_data: Interaction data to store
-            interaction_type: Type of interaction
-            
-        Returns:
-            Memory ID of the stored interaction
-        """
-        try:
-            # Add timestamp if not present
-            if "timestamp" not in interaction_data:
-                interaction_data["timestamp"] = datetime.now(timezone.utc).isoformat()
-            
-            # Add interaction type
-            interaction_data["interaction_type"] = interaction_type
-            
-            # Store in working memory first (for quick access)
-            working_memory_id = await self.memory_manager.store_memory(
-                data=interaction_data,
-                memory_type=MemoryType.WORKING,
-                session_id=session_id,
-                tags={interaction_type, f"session:{session_id}"}
-            )
-            
-            # Also store in episodic memory for long-term persistence
-            episodic_memory_id = await self.memory_manager.store_memory(
-                data=interaction_data,
-                memory_type=MemoryType.EPISODIC,
-                session_id=session_id,
-                tags={interaction_type, f"session:{session_id}"}
-            )
-            
-            # Update context with relevant interaction information
-            await self._update_context_from_interaction(session_id, interaction_data, interaction_type)
-            
-            # Add to session memory cache
-            async with self._cache_lock:
-                if session_id in self._session_memory_cache:
-                    self._session_memory_cache[session_id].add(working_memory_id)
-                    self._session_memory_cache[session_id].add(episodic_memory_id)
-                else:
-                    self._session_memory_cache[session_id] = {working_memory_id, episodic_memory_id}
-            
-            return episodic_memory_id
+        self.logger.info(f"Initializing memory for session {session_id}, user {user_id}")
         
-        except Exception as e:
-            self.logger.error(f"Failed to store interaction in memory: {str(e)}")
-            # Return empty string instead of raising to avoid disrupting interaction flow
-            return ""
-    
-    async def retrieve_session_context(self, session_id: str) -> Dict[str, Any]:
-        """
-        Retrieve the current context for a session.
+        # Initialize working memory for this session
+        await self.memory_manager.initialize_working_memory(session_id, user_id)
         
-        Args:
-            session_id: Session identifier
-            
-        Returns:
-            Session context data
-        """
-        try:
-            # Get context window
-            return await self.context_manager.get_context_dict(session_id)
-        except Exception as e:
-            self.logger.error(f"Failed to retrieve session context: {str(e)}")
-            return {}
-    
-    async def retrieve_session_history(
-        self, 
-        session_id: str, 
-        limit: int = 10,
-        interaction_type: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Retrieve interaction history for a session.
+        # Initialize context window for this session
+        await self.context_manager.initialize_context(session_id)
         
-        Args:
-            session_id: Session identifier
-            limit: Maximum number of interactions to retrieve
-            interaction_type: Optional filter by interaction type
-            
-        Returns:
-            List of interaction data
-        """
-        try:
-            # Create retrieval request
-            request = RetrievalRequest(
-                query=f"session:{session_id}",
-                session_id=session_id,
-                memory_types=[MemoryType.WORKING, MemoryType.EPISODIC],
-                strategy=RetrievalStrategy.TEMPORAL,
-                mode=MemoryRetrievalMode.CONTEXTUAL,
-                max_results=limit,
-                tags={f"session:{session_id}"}
-            )
-            
-            if interaction_type:
-                request.tags.add(interaction_type)
-            
-            # Retrieve memories
-            result = await self.memory_retriever.retrieve(request)
-            
-            # Extract content
-            return [memory.content for memory in result.memories]
-        
-        except Exception as e:
-            self.logger.error(f"Failed to retrieve session history: {str(e)}")
-            return []
-    
-    async def retrieve_relevant_memories(
-        self, 
-        session_id: str, 
-        query: str,
-        limit: int = 5
-    ) -> List[Dict[str, Any]]:
-        """
-        Retrieve memories relevant to a query within the session context.
-        
-        Args:
-            session_id: Session identifier
-            query: Query string
-            limit: Maximum number of memories to retrieve
-            
-        Returns:
-            List of relevant memory contents
-        """
-        try:
-            # Create retrieval request
-            request = RetrievalRequest(
-                query=query,
-                session_id=session_id,
-                memory_types=[MemoryType.EPISODIC, MemoryType.SEMANTIC],
-                strategy=RetrievalStrategy.SEMANTIC,
-                mode=MemoryRetrievalMode.BALANCED,
-                max_results=limit
-            )
-            
-            # Retrieve memories
-            result = await self.memory_retriever.retrieve(request)
-            
-            # Return memory contents
-            return [memory.content for memory in result.memories]
-        
-        except Exception as e:
-            self.logger.error(f"Failed to retrieve relevant memories: {str(e)}")
-            return []
-    
-    async def consolidate_session_memories(self, session_id: str) -> None:
-        """
-        Consolidate memories from a session when it ends.
-        
-        This process extracts important information from session interactions
-        and stores it in long-term memory structures.
-        
-        Args:
-            session_id: Session identifier
-        """
-        try:
-            self.logger.info(f"Consolidating memories for session {session_id}")
-            
-            # Get memory IDs associated with this session
-            memory_ids = []
-            async with self._cache_lock:
-                if session_id in self._session_memory_cache:
-                    memory_ids = list(self._session_memory_cache[session_id])
-            
-            if not memory_ids:
-                # Try to find memories for this session if cache is empty
+        # Retrieve user's relevant episodic memories
+        if user_id:
+            try:
+                # Get recent and important memories for this user
                 request = RetrievalRequest(
-                    query=f"session:{session_id}",
-                    session_id=session_id,
-                    memory_types=[MemoryType.WORKING, MemoryType.EPISODIC],
+                    query="",  # Empty query for recent memories
+                    user_id=user_id,
+                    memory_types=[MemoryType.EPISODIC, MemoryType.SEMANTIC],
                     strategy=RetrievalStrategy.RECENCY,
-                    max_results=100,
-                    tags={f"session:{session_id}"}
+                    mode=MemoryRetrievalMode.BALANCED,
+                    max_results=5
                 )
+                
                 result = await self.memory_retriever.retrieve(request)
-                memory_ids = [memory.memory_id for memory in result.memories]
-            
-            if not memory_ids:
-                self.logger.warning(f"No memories found to consolidate for session {session_id}")
-                return
-            
-            # Create a consolidation job
+                
+                # Store relevant memories in session cache for quick access
+                if result.items:
+                    await self.cache_manager.cache_session_data(
+                        session_id=session_id,
+                        data=result.memories,
+                        subtype="recent_memories"
+                    )
+                    
+                    # Add important memories to context
+                    for memory, score in result.items[:3]:  # Only add top 3 to context
+                        await self.context_manager.add_context_element(
+                            session_id=session_id,
+                            content=memory.content,
+                            context_type=ContextType.REFERENCE,
+                            priority=ContextPriority.MEDIUM,
+                            source="past_memory",
+                            memory_id=memory.memory_id,
+                            metadata={"memory_type": memory.memory_type.value}
+                        )
+                
+                self.logger.info(f"Retrieved {len(result.items)} past memories for user {user_id}")
+                
+            except Exception as e:
+                self.logger.error(f"Error retrieving past memories for user {user_id}: {str(e)}")
+        
+        # Record metric
+        if self.metrics:
+            self.metrics.increment("session_memory_operations_total", 
+                                  tags={"operation": "session_start"})
+    
+    async def _handle_session_ended(self, event: SessionEnded) -> None:
+        """
+        Handle session ended event by consolidating session memories.
+        
+        Args:
+            event: The session ended event
+        """
+        session_id = event.session_id
+        user_id = event.user_id
+        
+        self.logger.info(f"Consolidating memories for ended session {session_id}")
+        
+        try:
+            # Create a consolidation job for this session
             job = ConsolidationJob(
                 source_type=MemoryType.WORKING,
-                memory_ids=memory_ids,
                 session_id=session_id,
+                user_id=user_id,
                 target_types=[MemoryType.EPISODIC, MemoryType.SEMANTIC],
                 strategy=ConsolidationStrategy.SESSION_BASED,
                 level=ConsolidationLevel.STANDARD
             )
             
-            # Schedule the consolidation job
-            job_id = await self.consolidator.consolidate_memories(job)
+            # Schedule the job
+            job_id = await self.memory_consolidator.consolidate_session(
+                session_id=session_id,
+                user_id=user_id
+            )
+            
             self.logger.info(f"Scheduled consolidation job {job_id} for session {session_id}")
             
-        except Exception as e:
-            self.logger.error(f"Failed to consolidate session memories: {str(e)}")
-    
-    async def cleanup_session_memory(self, session_id: str) -> None:
-        """
-        Clean up temporary memory structures when a session ends.
-        
-        Args:
-            session_id: Session identifier
-        """
-        try:
-            # Clean up working memory for the session
-            working_memory = self.memory_manager.get_memory_type(MemoryType.WORKING)
-            await working_memory.cleanup_session(session_id)
-            
-            # Clean up context window
+            # Clean up context
             await self.context_manager.cleanup_session(session_id)
             
-            # Remove from cache
-            async with self._cache_lock:
-                self._session_memory_cache.pop(session_id, None)
-                
-            self.logger.info(f"Cleaned up memory for session {session_id}")
+            # Clean up session cache
+            await self.cache_manager.invalidate_session_data(session_id)
             
+            # Record metric
+            if self.metrics:
+                self.metrics.increment("session_memory_operations_total", 
+                                      tags={"operation": "session_end"})
+        
         except Exception as e:
-            self.logger.error(f"Failed to clean up session memory: {str(e)}")
+            self.logger.error(f"Error consolidating memories for session {session_id}: {str(e)}")
     
-    async def _update_context_from_interaction(
-        self, 
-        session_id: str, 
-        interaction_data: Dict[str, Any],
-        interaction_type: str
-    ) -> None:
+    async def _handle_message_processed(self, event: MessageProcessed) -> None:
         """
-        Update session context based on an interaction.
+        Handle message processed event by storing in working memory.
         
         Args:
-            session_id: Session identifier
-            interaction_data: Interaction data
-            interaction_type: Type of interaction
+            event: The message processed event
         """
+        session_id = event.session_id
+        user_id = event.user_id
+        message = event.message
+        response = event.response
+        
+        # Store user message in working memory
         try:
-            # Extract text content for context update
-            text_content = ""
-            if "message" in interaction_data:
-                text_content = interaction_data["message"]
-            elif "content" in interaction_data:
-                text_content = interaction_data["content"]
-            elif "text" in interaction_data:
-                text_content = interaction_data["text"]
+            user_message_id = await self.memory_manager.store_memory(
+                data=message,
+                memory_type=MemoryType.WORKING,
+                owner_id=user_id,
+                session_id=session_id,
+                metadata={
+                    "message_type": "user",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            )
             
-            if text_content:
-                # Update context with this text
-                await self.context_manager.update_context_from_text(
-                    session_id=session_id,
-                    text=text_content,
-                    source=interaction_type
-                )
+            # Store assistant response in working memory
+            assistant_message_id = await self.memory_manager.store_memory(
+                data=response,
+                memory_type=MemoryType.WORKING,
+                session_id=session_id,
+                metadata={
+                    "message_type": "assistant",
+                    "in_response_to": user_message_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            )
             
-            # Add specific context elements based on interaction type
-            if interaction_type == "user_message":
-                # Add as conversation context with high priority
-                element = ContextElement(
-                    element_id=f"msg_{datetime.now(timezone.utc).timestamp()}",
-                    content=interaction_data,
-                    context_type=ContextType.CONVERSATION,
-                    priority=ContextPriority.HIGH
-                )
-                await self.context_manager.add_context_element(session_id, element)
+            # Update context with the conversation
+            await self.context_manager.update_context_from_text(
+                session_id=session_id,
+                text=f"User: {message}\nAssistant: {response}",
+                context_type=ContextType.CONVERSATION,
+                priority=ContextPriority.HIGH
+            )
             
-            elif interaction_type == "system_message":
-                # Add as conversation context with medium priority
-                element = ContextElement(
-                    element_id=f"sys_{datetime.now(timezone.utc).timestamp()}",
-                    content=interaction_data,
-                    context_type=ContextType.CONVERSATION,
-                    priority=ContextPriority.MEDIUM
-                )
-                await self.context_manager.add_context_element(session_id, element)
+            self.logger.debug(f"Stored conversation in memory for session {session_id}")
+            
+            # Record metric
+            if self.metrics:
+                self.metrics.increment("session_memory_operations_total", 
+                                      tags={"operation": "message_store"})
                 
         except Exception as e:
-            self.logger.error(f"Failed to update context from interaction: {str(e)}")
+            self.logger.error(f"Error storing message in memory: {str(e)}")
     
-    def _extract_initial_context(self, context: SessionContext) -> Dict[str, Any]:
+    async def retrieve_session_memories(
+        self, 
+        session_id: str,
+        query: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
         """
-        Extract relevant initial context from session context.
+        Retrieve memories for a specific session.
         
         Args:
-            context: Session context
+            session_id: The session identifier
+            query: Optional search query
+            limit: Maximum number of memories to retrieve
             
         Returns:
-            Initial context dictionary
+            List of memory items as dictionaries
         """
-        return {
-            "user_profile": context.user_profile,
-            "user_preferences": context.user_preferences,
-            "device_info": context.device_info,
-            "location_info": context.location_info,
-            "timezone_info": context.timezone_info,
-            "feature_flags": context.feature_flags
-        }
+        start_time = asyncio.get_event_loop().time()
+        
+        try:
+            if query:
+                # Search for specific memories
+                request = RetrievalRequest(
+                    query=query,
+                    session_id=session_id,
+                    memory_types=[MemoryType.WORKING],
+                    strategy=RetrievalStrategy.SEMANTIC,
+                    max_results=limit
+                )
+                
+                result = await self.memory_retriever.retrieve(request)
+                memories = result.memories
+            else:
+                # Get recent memories for this session
+                memories = await self.memory_manager.get_recent_memories(
+                    memory_type=MemoryType.WORKING,
+                    session_id=session_id,
+                    limit=limit
+                )
+            
+            # Convert to dictionaries
+            memory_dicts = []
+            for memory in memories:
+                memory_dict = {
+                    "memory_id": memory.memory_id,
+                    "content": memory.content,
+                    "memory_type": memory.memory_type.value,
+                    "created_at": memory.metadata.created_at.isoformat(),
+                    "session_id": memory.session_id
+                }
+                
+                # Add message_type if available
+                if "message_type" in memory.metadata.custom_metadata:
+                    memory_dict["message_type"] = memory.metadata.custom_metadata["message_type"]
+                
+                memory_dicts.append(memory_dict)
+            
+            # Record metrics
+            end_time = asyncio.get_event_loop().time()
+            if self.metrics:
+                self.metrics.increment("session_memory_operations_total", 
+                                      tags={"operation": "retrieve"})
+                self.metrics.record("session_memory_retrieval_time", 
+                                   end_time - start_time)
+            
+            return memory_dicts
+            
+        except Exception as e:
+            self.logger.error(f"Error retrieving session memories: {str(e)}")
+            return []
     
-    async def _handle_session_started(self, event: SessionStarted) -> None:
+    async def store_session_fact(
+        self,
+        session_id: str,
+        user_id: Optional[str],
+        fact: str,
+        importance: float = 0.7,
+        tags: Optional[Set[str]] = None
+    ) -> str:
         """
-        Handle session started event.
+        Store an important fact learned during the session.
         
         Args:
-            event: Session started event
+            session_id: The session identifier
+            user_id: The user identifier
+            fact: The fact to store
+            importance: Importance score (0-1)
+            tags: Optional tags for the fact
+            
+        Returns:
+            Memory ID of the stored fact
         """
-        # This is handled directly by initialize_session_memory
-        pass
+        try:
+            # Store fact in semantic memory for future retrieval
+            memory_id = await self.memory_manager.store_memory(
+                data=fact,
+                memory_type=MemoryType.SEMANTIC,
+                owner_id=user_id,
+                session_id=session_id,
+                context_id=session_id,
+                metadata={
+                    "importance": importance,
+                    "tags": list(tags or set()),
+                    "fact_type": "session_fact"
+                }
+            )
+            
+            # Add to session context if important enough
+            if importance >= 0.7:
+                await self.context_manager.add_context_element(
+                    session_id=session_id,
+                    content=fact,
+                    context_type=ContextType.FACTUAL,
+                    priority=ContextPriority.HIGH if importance > 0.8 else ContextPriority.MEDIUM,
+                    source="session_fact",
+                    memory_id=memory_id
+                )
+            
+            # Record metric
+            if self.metrics:
+                self.metrics.increment("session_memory_operations_total", 
+                                      tags={"operation": "store_fact"})
+            
+            return memory_id
+            
+        except Exception as e:
+            self.logger.error(f"Error storing session fact: {str(e)}")
+            return ""
     
-    async def _handle_session_ended(self, event: SessionEnded) -> None:
+    async def get_session_context(self, session_id: str) -> Dict[str, Any]:
         """
-        Handle session ended event.
+        Get the current context for a session.
         
         Args:
-            event: Session ended event
+            session_id: The session identifier
+            
+        Returns:
+            Dictionary with session context
         """
-        session_id = event.session_id
-        
-        # Store session end memory
-        await self.memory_manager.store_memory(
-            data={
+        try:
+            # Get context from context manager
+            context_dict = await self.context_manager.get_context_dict(session_id)
+            
+            # Get related memories
+            memories = await self.context_manager.get_memories_for_context(session_id)
+            
+            # Combine into a comprehensive context object
+            result = {
                 "session_id": session_id,
-                "end_time": datetime.now(timezone.utc).isoformat(),
-                "duration_seconds": event.session_duration,
-                "end_reason": event.end_reason
-            },
-            memory_type=MemoryType.EPISODIC,
-            session_id=session_id,
-            tags={"session_end", f"session:{session_id}"}
-        )
-        
-        # Consolidate memories
-        await self.consolidate_session_memories(session_id)
-        
-        # Cleanup temporary memory
-        await self.cleanup_session_memory(session_id)
-    
-    async def _handle_session_paused(self, event: SessionPaused) -> None:
-        """
-        Handle session paused event.
-        
-        Args:
-            event: Session paused event
-        """
-        session_id = event.session_id
-        
-        # Store pause state in memory
-        await self.memory_manager.store_memory(
-            data={
-                "session_id": session_id,
-                "pause_time": datetime.now(timezone.utc).isoformat(),
-                "pause_reason": event.reason
-            },
-            memory_type=MemoryType.WORKING,
-            session_id=session_id,
-            tags={"session_pause", f"session:{session_id}"}
-        )
-    
-    async def _handle_session_resumed(self, event: SessionResumed) -> None:
-        """
-        Handle session resumed event.
-        
-        Args:
-            event: Session resumed event
-        """
-        session_id = event.session_id
-        
-        # Store resume state in memory
-        await self.memory_manager.store_memory(
-            data={
-                "session_id": session_id,
-                "resume_time": datetime.now(timezone.utc).isoformat(),
-                "pause_duration": event.pause_duration
-            },
-            memory_type=MemoryType.WORKING,
-            session_id=session_id,
-            tags={"session_resume", f"session:{session_id}"}
-        )
-    
-    async def _handle_memory_stored(self, event: MemoryItemStored) -> None:
-        """
-        Handle memory stored event.
-        
-        Args:
-            event: Memory stored event
-        """
-        memory_id = event.memory_id
-        session_id = event.session_id
-        
-        if session_id:
-            # Add to session memory cache
-            async with self._cache_lock:
-                if session_id in self._session_memory_cache:
-                    self._session_memory_cache[session_id].add(memory_id)
-                else:
-                    self._session_memory_cache[session_id] = {memory_id}
-    
-    async def _handle_consolidation_completed(self, event: MemoryConsolidationCompleted) -> None:
-        """
-        Handle memory consolidation completed event.
-        
-        Args:
-            event: Memory consolidation completed event
-        """
-        # No specific action needed here, but could be used for notifications or analytics
-        pass
+                "context": context_dict,
+                "related_memories": [
+                    {
+                        "memory_id": mem.memory_id,
+                        "content": mem.content,
+                        "memory_type": mem.memory_type.value
+                    } 
+                    for mem in memories
+                ],
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+            # Record metric
+            if self.metrics:
+                self.metrics.increment("session_memory_operations_total", 
+                                      tags={"operation": "get_context"})
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error getting session context: {str(e)}")
+            return {"session_id": session_id, "error": str(e)}
