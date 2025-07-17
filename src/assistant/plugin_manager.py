@@ -1,75 +1,61 @@
 """
-Advanced Plugin Management System
+Enhanced Plugin Manager with Skill Registry Integration
 Author: Drmusab
-Last Modified: 2025-05-26 16:13:03 UTC
+Last Modified: 2025-07-17 21:25:00 UTC
 
-This module provides comprehensive plugin lifecycle management for the AI assistant,
-including dynamic loading, sandboxing, dependency resolution, hot-reloading, and
-seamless integration with the core system components.
+This module provides an enhanced plugin manager that integrates with the skill registry,
+includes plugin validation, sandboxing, and secure execution.
 """
 
-from pathlib import Path
-from typing import Optional, Dict, Any, List, Set, Callable, Type, Union, AsyncGenerator, Protocol
 import asyncio
-import threading
-import time
-import importlib
 import importlib.util
-import sys
 import inspect
-import hashlib
 import json
-import subprocess
-from datetime import datetime, timezone
-from dataclasses import dataclass, field
-from enum import Enum
-from contextlib import asynccontextmanager
-import logging
-import weakref
-from abc import ABC, abstractmethod
-import uuid
-import shutil
+import os
+import sys
 import tempfile
 import zipfile
-import tarfile
-from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Type, Union, Callable
+from datetime import datetime, timezone, timedelta
+from dataclasses import dataclass, field
+from enum import Enum
+import hashlib
+import uuid
+import shutil
+import subprocess
+import threading
+import resource
+import signal
+from contextlib import contextmanager
+
+import numpy as np
 
 # Core imports
-from src.core.config.loader import ConfigLoader
+from src.core.dependency_injection import Container
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    PluginLoaded, PluginUnloaded, PluginEnabled, PluginDisabled,
-    PluginError, PluginDependencyResolved, PluginHotReloaded,
-    PluginSecurityViolation, PluginPerformanceWarning
+    BaseEvent, EventCategory, EventPriority, EventSeverity,
+    ComponentRegistered, ComponentUnregistered, ComponentHealthChanged,
+    ComponentFailed, ErrorOccurred, SystemShutdown, WorkflowCompleted,
+    SessionStarted, SessionEnded
 )
-from src.core.error_handling import ErrorHandler, handle_exceptions
-from src.core.dependency_injection import Container
-from src.core.health_check import HealthCheck
-from src.core.security.authentication import AuthenticationManager
-from src.core.security.authorization import AuthorizationManager
+from src.core.config.loader import ConfigLoader
 from src.core.security.sanitization import SecuritySanitizer
-
-# Assistant components
-from src.assistant.component_manager import EnhancedComponentManager, ComponentMetadata, ComponentPriority
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator, WorkflowDefinition
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.interaction_handler import InteractionHandler
-
-# Skills and processing
-from src.skills.skill_factory import SkillFactory
-from src.skills.skill_registry import SkillRegistry
-from src.skills.skill_validator import SkillValidator
-
-# Observability
+from src.core.security.authorization import AuthorizationManager
+from src.core.error_handling import ErrorHandler, handle_exceptions
+from src.core.health_check import HealthCheck
 from src.observability.monitoring.metrics import MetricsCollector
 from src.observability.monitoring.tracing import TraceManager
 from src.observability.logging.config import get_logger
 
-# Memory and learning
-from src.memory.memory_manager import MemoryManager
-from src.learning.feedback_processor import FeedbackProcessor
+# Import skill registry and validator
+from src.skills.skill_registry import SkillRegistry, SkillInterface, SkillMetadata, SkillType
+from src.skills.skill_validator import SkillValidator, ValidationReport, ValidationSeverity
+from src.skills.skill_factory import SkillFactory, SkillExecutionContext
 
 
+# Keep existing enums from original plugin_manager.py
 class PluginState(Enum):
     """Plugin lifecycle states."""
     DISCOVERED = "discovered"
@@ -102,14 +88,6 @@ class PluginType(Enum):
     LANGUAGE_PACK = "language_pack"      # Localization
 
 
-class PluginLoadMode(Enum):
-    """Plugin loading modes."""
-    EAGER = "eager"          # Load immediately
-    LAZY = "lazy"            # Load on first use
-    ON_DEMAND = "on_demand"  # Load when explicitly requested
-    SCHEDULED = "scheduled"  # Load at specific times
-
-
 class SecurityLevel(Enum):
     """Plugin security levels."""
     UNTRUSTED = "untrusted"      # No special permissions
@@ -119,6 +97,7 @@ class SecurityLevel(Enum):
     VERIFIED = "verified"        # Cryptographically verified
 
 
+# Keep existing dataclasses from original plugin_manager.py
 @dataclass
 class PluginDependency:
     """Represents a plugin dependency."""
@@ -150,7 +129,7 @@ class PluginMetadata:
     
     # Plugin characteristics
     plugin_type: PluginType
-    load_mode: PluginLoadMode = PluginLoadMode.EAGER
+    load_mode: str = "eager"
     security_level: SecurityLevel = SecurityLevel.UNTRUSTED
     
     # Dependencies and capabilities
@@ -210,6 +189,18 @@ class PluginInfo:
     instance: Optional[Any] = None
     installation_path: Optional[Path] = None
     
+    # Validation results
+    validation_report: Optional[ValidationReport] = None
+    validation_passed: bool = False
+    
+    # Skill registry integration
+    skill_id: Optional[str] = None
+    skill_registered: bool = False
+    
+    # Sandbox information
+    sandbox_enabled: bool = False
+    sandbox_process: Optional[Any] = None
+    
     # Performance metrics
     load_time: float = 0.0
     memory_usage: float = 0.0
@@ -236,1133 +227,1150 @@ class PluginError(Exception):
     
     def __init__(self, message: str, plugin_id: Optional[str] = None, 
                  error_code: Optional[str] = None):
-        super().__init__(message)
         self.plugin_id = plugin_id
         self.error_code = error_code
-        self.timestamp = datetime.now(timezone.utc)
+        super().__init__(message)
 
 
-class PluginInterface(Protocol):
-    """Base interface that all plugins should implement."""
+class PluginInterface(SkillInterface):
+    """Extended interface that all plugins should implement."""
     
-    def get_metadata(self) -> PluginMetadata:
+    def get_plugin_metadata(self) -> PluginMetadata:
         """Get plugin metadata."""
-        ...
+        pass
     
-    async def initialize(self, container: Container) -> None:
-        """Initialize the plugin."""
-        ...
+    async def on_install(self) -> None:
+        """Called when plugin is installed."""
+        pass
     
-    async def activate(self) -> None:
-        """Activate the plugin."""
-        ...
+    async def on_uninstall(self) -> None:
+        """Called when plugin is uninstalled."""
+        pass
     
-    async def deactivate(self) -> None:
-        """Deactivate the plugin."""
-        ...
+    async def on_enable(self) -> None:
+        """Called when plugin is enabled."""
+        pass
     
-    async def cleanup(self) -> None:
-        """Cleanup plugin resources."""
-        ...
-    
-    async def health_check(self) -> Dict[str, Any]:
-        """Return plugin health status."""
-        ...
+    async def on_disable(self) -> None:
+        """Called when plugin is disabled."""
+        pass
 
 
 class PluginSandbox:
-    """Provides sandboxed execution environment for untrusted plugins."""
+    """Enhanced sandbox for secure plugin execution."""
     
-    def __init__(self, plugin_id: str, security_level: SecurityLevel):
+    def __init__(self, plugin_id: str, security_level: SecurityLevel, resource_limits: Dict[str, Any]):
         self.plugin_id = plugin_id
         self.security_level = security_level
-        self.logger = get_logger(f"plugin_sandbox_{plugin_id}")
-        self._resource_limits = {}
-        self._allowed_modules = set()
-        self._restricted_attributes = set()
+        self.resource_limits = resource_limits
+        self.logger = get_logger(f"PluginSandbox:{plugin_id}")
+        self.process = None
+        self.thread = None
+        self._setup_sandbox()
     
-    def configure_sandbox(self, config: Dict[str, Any]) -> None:
-        """Configure sandbox restrictions."""
-        self._resource_limits = config.get('resource_limits', {})
-        self._allowed_modules = set(config.get('allowed_modules', []))
-        self._restricted_attributes = set(config.get('restricted_attributes', []))
+    def _setup_sandbox(self):
+        """Setup sandbox environment."""
+        # Create isolated environment
+        self.sandbox_dir = Path(tempfile.mkdtemp(prefix=f"plugin_sandbox_{self.plugin_id}_"))
+        self.sandbox_dir.chmod(0o700)
+        
+        # Setup virtual environment if needed
+        if self.security_level == SecurityLevel.UNTRUSTED:
+            self._create_virtual_env()
+    
+    def _create_virtual_env(self):
+        """Create isolated Python virtual environment."""
+        venv_path = self.sandbox_dir / "venv"
+        subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=True)
+        self.python_path = venv_path / "bin" / "python"
+    
+    @contextmanager
+    def resource_limited_execution(self):
+        """Context manager for resource-limited execution."""
+        if self.security_level in [SecurityLevel.UNTRUSTED, SecurityLevel.SANDBOX]:
+            # Set resource limits (Unix only)
+            if hasattr(resource, 'RLIMIT_AS'):
+                # Memory limit
+                memory_limit = int(self.resource_limits.get('memory_mb', 256) * 1024 * 1024)
+                resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
+            
+            if hasattr(resource, 'RLIMIT_CPU'):
+                # CPU time limit
+                cpu_limit = int(self.resource_limits.get('cpu_seconds', 30))
+                resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit, cpu_limit))
+        
+        try:
+            yield
+        finally:
+            pass
     
     def execute_in_sandbox(self, func: Callable, *args, **kwargs) -> Any:
         """Execute function in sandboxed environment."""
-        if self.security_level == SecurityLevel.TRUSTED:
+        if self.security_level == SecurityLevel.UNTRUSTED:
+            # Execute in separate process
+            return self._execute_in_process(func, *args, **kwargs)
+        elif self.security_level == SecurityLevel.SANDBOX:
+            # Execute in thread with restrictions
+            return self._execute_in_thread(func, *args, **kwargs)
+        else:
+            # Trusted execution
             return func(*args, **kwargs)
+    
+    def _execute_in_process(self, func: Callable, *args, **kwargs) -> Any:
+        """Execute in isolated process."""
+        # This is a simplified version - in production, use multiprocessing
+        # with proper IPC and serialization
+        import multiprocessing
         
-        # Implement sandbox restrictions
-        original_import = __builtins__['__import__']
+        def wrapper():
+            with self.resource_limited_execution():
+                return func(*args, **kwargs)
         
-        def restricted_import(name, *args, **kwargs):
-            if name not in self._allowed_modules and not name.startswith('src.'):
-                raise ImportError(f"Module {name} not allowed in sandbox")
-            return original_import(name, *args, **kwargs)
+        process = multiprocessing.Process(target=wrapper)
+        process.start()
+        process.join(timeout=self.resource_limits.get('timeout_seconds', 30))
         
-        try:
-            __builtins__['__import__'] = restricted_import
-            return func(*args, **kwargs)
-        finally:
-            __builtins__['__import__'] = original_import
+        if process.is_alive():
+            process.terminate()
+            raise PluginError(f"Plugin {self.plugin_id} execution timed out")
+        
+        return None  # Would need proper IPC for return values
+    
+    def _execute_in_thread(self, func: Callable, *args, **kwargs) -> Any:
+        """Execute in thread with monitoring."""
+        result = [None]
+        exception = [None]
+        
+        def wrapper():
+            try:
+                with self.resource_limited_execution():
+                    result[0] = func(*args, **kwargs)
+            except Exception as e:
+                exception[0] = e
+        
+        thread = threading.Thread(target=wrapper)
+        thread.start()
+        thread.join(timeout=self.resource_limits.get('timeout_seconds', 30))
+        
+        if thread.is_alive():
+            # Thread timeout - this is tricky to handle safely
+            raise PluginError(f"Plugin {self.plugin_id} execution timed out")
+        
+        if exception[0]:
+            raise exception[0]
+        
+        return result[0]
+    
+    def cleanup(self):
+        """Cleanup sandbox resources."""
+        if self.process:
+            self.process.terminate()
+        if self.sandbox_dir and self.sandbox_dir.exists():
+            shutil.rmtree(self.sandbox_dir)
+
+
+class PluginValidator:
+    """Enhanced plugin validator with security checks."""
+    
+    def __init__(self, skill_validator: SkillValidator, security_sanitizer: SecuritySanitizer):
+        self.skill_validator = skill_validator
+        self.security_sanitizer = security_sanitizer
+        self.logger = get_logger(__name__)
+    
+    async def validate_plugin(self, plugin_path: Path, metadata: PluginMetadata) -> ValidationReport:
+        """Comprehensive plugin validation."""
+        # Verify plugin integrity
+        if not await self._verify_plugin_integrity(plugin_path, metadata):
+            raise PluginError("Plugin integrity check failed")
+        
+        # Check plugin signature if required
+        if metadata.security_level >= SecurityLevel.TRUSTED:
+            if not await self._verify_plugin_signature(plugin_path, metadata):
+                raise PluginError("Plugin signature verification failed")
+        
+        # Scan for security issues
+        security_issues = await self._scan_for_security_issues(plugin_path)
+        if security_issues:
+            self.logger.warning(f"Security issues found in plugin {metadata.plugin_id}: {security_issues}")
+        
+        # If it's a skill plugin, use skill validator
+        if metadata.plugin_type == PluginType.SKILL:
+            # Load the plugin module temporarily for validation
+            spec = importlib.util.spec_from_file_location(
+                f"plugin_temp_{metadata.plugin_id}",
+                plugin_path / "__init__.py"
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            # Find the main class
+            main_class = getattr(module, metadata.main_class) if metadata.main_class else None
+            if not main_class:
+                # Try to find a class that implements SkillInterface
+                for name, obj in inspect.getmembers(module, inspect.isclass):
+                    if issubclass(obj, SkillInterface) and obj != SkillInterface:
+                        main_class = obj
+                        break
+            
+            if main_class:
+                # Create skill metadata from plugin metadata
+                skill_metadata = SkillMetadata(
+                    skill_id=metadata.plugin_id,
+                    name=metadata.name,
+                    version=metadata.version,
+                    description=metadata.description,
+                    author=metadata.author,
+                    skill_type=SkillType.CUSTOM,
+                    capabilities=[],
+                    dependencies=[dep.plugin_id for dep in metadata.dependencies],
+                    tags=metadata.keywords,
+                    security_level=metadata.security_level.value,
+                    resource_requirements={
+                        'memory_mb': metadata.memory_limit_mb,
+                        'cpu_percent': metadata.cpu_limit_percent
+                    }
+                )
+                
+                # Run skill validation
+                report = await self.skill_validator.validate_skill(
+                    metadata.plugin_id,
+                    main_class,
+                    skill_metadata
+                )
+                
+                return report
+        
+        # For non-skill plugins, create a basic validation report
+        return self._create_basic_validation_report(metadata, security_issues)
+    
+    async def _verify_plugin_integrity(self, plugin_path: Path, metadata: PluginMetadata) -> bool:
+        """Verify plugin file integrity."""
+        if metadata.checksum:
+            calculated_checksum = self._calculate_checksum(plugin_path)
+            return calculated_checksum == metadata.checksum
+        return True
+    
+    async def _verify_plugin_signature(self, plugin_path: Path, metadata: PluginMetadata) -> bool:
+        """Verify plugin digital signature."""
+        # Implement digital signature verification
+        # This is a placeholder - implement actual signature verification
+        return True
+    
+    async def _scan_for_security_issues(self, plugin_path: Path) -> List[str]:
+        """Scan plugin for security issues."""
+        issues = []
+        
+        # Check for dangerous patterns in code
+        dangerous_patterns = [
+            r'exec\s*\(',
+            r'eval\s*\(',
+            r'__import__\s*\(',
+            r'compile\s*\(',
+            r'subprocess\.',
+            r'os\.system\s*\(',
+            r'open\s*\(.*[\'"]\/etc\/',
+            r'socket\.',
+        ]
+        
+        for py_file in plugin_path.rglob("*.py"):
+            try:
+                content = py_file.read_text()
+                for pattern in dangerous_patterns:
+                    import re
+                    if re.search(pattern, content):
+                        issues.append(f"Dangerous pattern '{pattern}' found in {py_file.name}")
+            except Exception as e:
+                issues.append(f"Could not scan {py_file.name}: {str(e)}")
+        
+        return issues
+    
+    def _calculate_checksum(self, plugin_path: Path) -> str:
+        """Calculate plugin checksum."""
+        sha256_hash = hashlib.sha256()
+        
+        for file_path in sorted(plugin_path.rglob("*")):
+            if file_path.is_file():
+                with open(file_path, "rb") as f:
+                    for byte_block in iter(lambda: f.read(4096), b""):
+                        sha256_hash.update(byte_block)
+        
+        return sha256_hash.hexdigest()
+    
+    def _create_basic_validation_report(self, metadata: PluginMetadata, 
+                                       security_issues: List[str]) -> ValidationReport:
+        """Create a basic validation report for non-skill plugins."""
+        from src.skills.skill_validator import ValidationResult, ValidationType
+        
+        report = ValidationReport(
+            skill_id=metadata.plugin_id,
+            validation_id=str(uuid.uuid4()),
+            is_valid=len(security_issues) == 0,
+            security_issues=len(security_issues)
+        )
+        
+        # Add security validation results
+        for issue in security_issues:
+            report.results.append(ValidationResult(
+                rule_id="security_scan",
+                rule_name="Security Scan",
+                validation_type=ValidationType.SECURITY,
+                severity=ValidationSeverity.SECURITY,
+                passed=False,
+                message=issue
+            ))
+        
+        return report
 
 
 class PluginLoader:
-    """Handles dynamic plugin loading and unloading."""
+    """Enhanced plugin loader with validation and sandboxing."""
     
-    def __init__(self, logger):
+    def __init__(self, logger, plugin_validator: PluginValidator):
         self.logger = logger
-        self._loaded_modules: Dict[str, Any] = {}
-        self._module_paths: Dict[str, Path] = {}
-    
-    async def load_plugin_from_path(self, plugin_path: Path) -> Optional[Any]:
-        """Load a plugin from a file path."""
+        self.plugin_validator = plugin_validator
+        self._loaded_modules = {}
+        
+    async def load_plugin_from_path(self, plugin_path: Path, 
+                                   validate: bool = True) -> Optional[Any]:
+        """Load a plugin from the specified path with validation."""
         try:
-            # Read plugin metadata
-            metadata_file = plugin_path / "plugin.json"
-            if not metadata_file.exists():
-                raise PluginError(f"Plugin metadata not found: {metadata_file}")
+            # Check if plugin.json exists
+            metadata_path = plugin_path / "plugin.json"
+            if not metadata_path.exists():
+                self.logger.error(f"No plugin.json found in {plugin_path}")
+                return None
             
-            with open(metadata_file, 'r') as f:
+            # Load metadata
+            with open(metadata_path, 'r') as f:
                 metadata_dict = json.load(f)
             
             metadata = self._parse_metadata(metadata_dict)
             
+            # Validate plugin if requested
+            if validate:
+                validation_report = await self.plugin_validator.validate_plugin(plugin_path, metadata)
+                if not validation_report.is_valid:
+                    self.logger.error(f"Plugin {metadata.plugin_id} validation failed")
+                    return None
+            
             # Load the plugin module
-            module_path = plugin_path / "__init__.py"
-            if not module_path.exists():
-                module_path = plugin_path / f"{metadata.plugin_id}.py"
+            module_name = f"plugins.{metadata.plugin_id}"
+            spec = importlib.util.spec_from_file_location(
+                module_name,
+                plugin_path / "__init__.py"
+            )
             
-            if not module_path.exists():
-                raise PluginError(f"Plugin entry point not found: {module_path}")
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+                
+                self._loaded_modules[metadata.plugin_id] = module
+                
+                self.logger.info(f"Successfully loaded plugin: {metadata.plugin_id}")
+                return module
             
-            spec = importlib.util.spec_from_file_location(metadata.plugin_id, module_path)
-            if spec is None or spec.loader is None:
-                raise PluginError(f"Failed to create module spec for {metadata.plugin_id}")
-            
-            module = importlib.util.module_from_spec(spec)
-            self._loaded_modules[metadata.plugin_id] = module
-            self._module_paths[metadata.plugin_id] = plugin_path
-            
-            # Execute the module
-            spec.loader.exec_module(module)
-            
-            # Get the main plugin class
-            if metadata.main_class:
-                plugin_class = getattr(module, metadata.main_class)
-                return plugin_class()
-            else:
-                # Look for a class implementing PluginInterface
-                for name in dir(module):
-                    obj = getattr(module, name)
-                    if (inspect.isclass(obj) and 
-                        hasattr(obj, 'get_metadata') and 
-                        hasattr(obj, 'initialize')):
-                        return obj()
-            
-            raise PluginError(f"No valid plugin class found in {metadata.plugin_id}")
+            return None
             
         except Exception as e:
             self.logger.error(f"Failed to load plugin from {plugin_path}: {str(e)}")
-            raise PluginError(f"Plugin loading failed: {str(e)}")
+            return None
     
     def _parse_metadata(self, metadata_dict: Dict[str, Any]) -> PluginMetadata:
         """Parse plugin metadata from dictionary."""
-        # Convert dictionary to PluginMetadata with proper type conversion
-        return PluginMetadata(
-            plugin_id=metadata_dict['plugin_id'],
-            name=metadata_dict['name'],
-            version=metadata_dict['version'],
-            description=metadata_dict['description'],
-            author=metadata_dict['author'],
-            plugin_type=PluginType(metadata_dict.get('plugin_type', 'utility')),
-            load_mode=PluginLoadMode(metadata_dict.get('load_mode', 'eager')),
-            security_level=SecurityLevel(metadata_dict.get('security_level', 'untrusted')),
-            **{k: v for k, v in metadata_dict.items() 
-               if k not in ['plugin_id', 'name', 'version', 'description', 'author']}
-        )
+        # Convert string enums to enum values
+        if 'plugin_type' in metadata_dict:
+            metadata_dict['plugin_type'] = PluginType(metadata_dict['plugin_type'])
+        if 'security_level' in metadata_dict:
+            metadata_dict['security_level'] = SecurityLevel(metadata_dict['security_level'])
+        
+        # Convert dependencies
+        if 'dependencies' in metadata_dict:
+            metadata_dict['dependencies'] = [
+                PluginDependency(**dep) if isinstance(dep, dict) else dep
+                for dep in metadata_dict['dependencies']
+            ]
+        
+        # Convert capabilities
+        if 'provides' in metadata_dict:
+            metadata_dict['provides'] = [
+                PluginCapability(**cap) if isinstance(cap, dict) else cap
+                for cap in metadata_dict['provides']
+            ]
+        
+        return PluginMetadata(**metadata_dict)
     
     async def unload_plugin(self, plugin_id: str) -> None:
-        """Unload a plugin module."""
+        """Unload a plugin and clean up resources."""
         if plugin_id in self._loaded_modules:
-            # Remove from sys.modules if present
-            module_name = f"plugin_{plugin_id}"
+            module = self._loaded_modules[plugin_id]
+            
+            # Remove from sys.modules
+            module_name = f"plugins.{plugin_id}"
             if module_name in sys.modules:
                 del sys.modules[module_name]
             
+            # Remove from loaded modules
             del self._loaded_modules[plugin_id]
-            self._module_paths.pop(plugin_id, None)
             
-            self.logger.info(f"Unloaded plugin module: {plugin_id}")
+            self.logger.info(f"Unloaded plugin: {plugin_id}")
 
 
-class PluginRegistry:
-    """Manages plugin registration and discovery."""
+class PluginSkillAdapter:
+    """Adapter to convert plugins to skills for registry integration."""
     
-    def __init__(self, logger):
-        self.logger = logger
-        self._plugins: Dict[str, PluginInfo] = {}
-        self._capabilities: Dict[str, List[str]] = {}  # capability -> plugin_ids
-        self._categories: Dict[str, List[str]] = {}    # category -> plugin_ids
-        self._registry_lock = asyncio.Lock()
+    def __init__(self, skill_registry: SkillRegistry, skill_factory: SkillFactory):
+        self.skill_registry = skill_registry
+        self.skill_factory = skill_factory
+        self.logger = get_logger(__name__)
     
-    async def register_plugin(self, plugin_info: PluginInfo) -> None:
-        """Register a plugin in the registry."""
-        async with self._registry_lock:
-            plugin_id = plugin_info.metadata.plugin_id
-            
-            if plugin_id in self._plugins:
-                raise PluginError(f"Plugin {plugin_id} is already registered")
-            
-            self._plugins[plugin_id] = plugin_info
-            
-            # Index capabilities
-            for capability in plugin_info.metadata.provides:
-                if capability.name not in self._capabilities:
-                    self._capabilities[capability.name] = []
-                self._capabilities[capability.name].append(plugin_id)
-            
-            # Index categories
-            for category in plugin_info.metadata.categories:
-                if category not in self._categories:
-                    self._categories[category] = []
-                self._categories[category].append(plugin_id)
-            
-            self.logger.info(f"Registered plugin: {plugin_id}")
-    
-    async def unregister_plugin(self, plugin_id: str) -> None:
-        """Unregister a plugin from the registry."""
-        async with self._registry_lock:
-            if plugin_id not in self._plugins:
-                return
-            
-            plugin_info = self._plugins[plugin_id]
-            
-            # Remove from capability index
-            for capability in plugin_info.metadata.provides:
-                if capability.name in self._capabilities:
-                    self._capabilities[capability.name] = [
-                        pid for pid in self._capabilities[capability.name] 
-                        if pid != plugin_id
-                    ]
-                    if not self._capabilities[capability.name]:
-                        del self._capabilities[capability.name]
-            
-            # Remove from category index
-            for category in plugin_info.metadata.categories:
-                if category in self._categories:
-                    self._categories[category] = [
-                        pid for pid in self._categories[category] 
-                        if pid != plugin_id
-                    ]
-                    if not self._categories[category]:
-                        del self._categories[category]
-            
-            del self._plugins[plugin_id]
-            self.logger.info(f"Unregistered plugin: {plugin_id}")
-    
-    def get_plugin(self, plugin_id: str) -> Optional[PluginInfo]:
-        """Get plugin information by ID."""
-        return self._plugins.get(plugin_id)
-    
-    def list_plugins(self, 
-                    state: Optional[PluginState] = None,
-                    plugin_type: Optional[PluginType] = None,
-                    category: Optional[str] = None) -> List[PluginInfo]:
-        """List plugins with optional filtering."""
-        plugins = list(self._plugins.values())
+    async def register_plugin_as_skill(self, plugin_info: PluginInfo) -> bool:
+        """Register a plugin as a skill in the skill registry."""
+        if plugin_info.metadata.plugin_type != PluginType.SKILL:
+            return False
         
-        if state:
-            plugins = [p for p in plugins if p.state == state]
-        
-        if plugin_type:
-            plugins = [p for p in plugins if p.metadata.plugin_type == plugin_type]
-        
-        if category:
-            plugins = [p for p in plugins if category in p.metadata.categories]
-        
-        return plugins
+        try:
+            # Get the plugin instance
+            if not plugin_info.instance:
+                return False
+            
+            # Create skill metadata
+            skill_metadata = self._create_skill_metadata(plugin_info.metadata)
+            
+            # Register with skill registry
+            success = await self.skill_registry.register_skill(
+                plugin_info.metadata.plugin_id,
+                type(plugin_info.instance),
+                skill_metadata
+            )
+            
+            if success:
+                plugin_info.skill_id = plugin_info.metadata.plugin_id
+                plugin_info.skill_registered = True
+                self.logger.info(f"Registered plugin {plugin_info.metadata.plugin_id} as skill")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"Failed to register plugin as skill: {str(e)}")
+            return False
     
-    def find_plugins_by_capability(self, capability: str) -> List[str]:
-        """Find plugins that provide a specific capability."""
-        return self._capabilities.get(capability, [])
+    async def unregister_plugin_skill(self, plugin_info: PluginInfo) -> bool:
+        """Unregister a plugin from the skill registry."""
+        if not plugin_info.skill_registered or not plugin_info.skill_id:
+            return False
+        
+        try:
+            success = await self.skill_registry.unregister_skill(
+                plugin_info.skill_id,
+                reason="plugin_unloaded"
+            )
+            
+            if success:
+                plugin_info.skill_registered = False
+                self.logger.info(f"Unregistered plugin skill {plugin_info.skill_id}")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"Failed to unregister plugin skill: {str(e)}")
+            return False
+    
+    def _create_skill_metadata(self, plugin_metadata: PluginMetadata) -> SkillMetadata:
+        """Convert plugin metadata to skill metadata."""
+        from src.skills.skill_registry import SkillCapability as SkillCap
+        
+        # Convert capabilities
+        capabilities = []
+        for cap in plugin_metadata.provides:
+            capabilities.append(SkillCap(
+                name=cap.name,
+                description=cap.description or "",
+                input_types=[],
+                output_types=[]
+            ))
+        
+        return SkillMetadata(
+            skill_id=plugin_metadata.plugin_id,
+            name=plugin_metadata.name,
+            version=plugin_metadata.version,
+            description=plugin_metadata.description,
+            author=plugin_metadata.author,
+            skill_type=SkillType.CUSTOM,
+            capabilities=capabilities,
+            dependencies=[dep.plugin_id for dep in plugin_metadata.dependencies],
+            tags=plugin_metadata.keywords,
+            min_system_version=plugin_metadata.min_system_version,
+            max_system_version=plugin_metadata.max_system_version,
+            configuration_schema=plugin_metadata.config_schema,
+            security_level=plugin_metadata.security_level.value,
+            resource_requirements={
+                'memory_mb': plugin_metadata.memory_limit_mb,
+                'cpu_percent': plugin_metadata.cpu_limit_percent,
+                'network_access': plugin_metadata.network_access,
+                'file_system_access': plugin_metadata.file_system_access
+            }
+        )
 
 
 class EnhancedPluginManager:
     """
-    Advanced Plugin Management System for the AI Assistant.
-    
-    Features:
-    - Dynamic plugin loading and unloading
-    - Comprehensive dependency resolution
-    - Security sandboxing and validation
-    - Hot-reloading during development
-    - Performance monitoring and resource management
-    - Integration with all core system components
-    - Plugin marketplace and repository management
-    - Automatic updates and version management
-    - Event-driven plugin communication
-    - Plugin composition and orchestration
+    Enhanced Plugin Manager with proper skill registry integration,
+    validation, and sandboxing capabilities.
     """
     
     def __init__(self, container: Container):
-        """
-        Initialize the enhanced plugin manager.
-        
-        Args:
-            container: Dependency injection container
-        """
+        """Initialize the enhanced plugin manager."""
         self.container = container
         self.logger = get_logger(__name__)
         self.config = container.get(ConfigLoader)
         self.event_bus = container.get(EventBus)
         self.error_handler = container.get(ErrorHandler)
+        self.metrics = container.get(MetricsCollector)
+        self.tracer = container.get(TraceManager)
         self.health_check = container.get(HealthCheck)
         
-        # Core component integration
-        self.component_manager = container.get(EnhancedComponentManager)
-        self.workflow_orchestrator = container.get(WorkflowOrchestrator)
-        self.session_manager = container.get(EnhancedSessionManager)
-        self.interaction_handler = container.get(InteractionHandler)
+        # Security components
+        self.security_sanitizer = container.get(SecuritySanitizer)
+        self.authz_manager = container.get(AuthorizationManager)
         
-        # Skills and processing
-        self.skill_factory = container.get(SkillFactory)
+        # Skill integration
         self.skill_registry = container.get(SkillRegistry)
         self.skill_validator = container.get(SkillValidator)
+        self.skill_factory = container.get(SkillFactory)
         
-        # Memory and learning
-        self.memory_manager = container.get(MemoryManager)
-        self.feedback_processor = container.get(FeedbackProcessor)
+        # Plugin components
+        self.plugin_validator = PluginValidator(self.skill_validator, self.security_sanitizer)
+        self.plugin_loader = PluginLoader(self.logger, self.plugin_validator)
+        self.skill_adapter = PluginSkillAdapter(self.skill_registry, self.skill_factory)
         
-        # Security
-        try:
-            self.auth_manager = container.get(AuthenticationManager)
-            self.authz_manager = container.get(AuthorizationManager)
-            self.security_sanitizer = container.get(SecuritySanitizer)
-        except Exception:
-            self.logger.warning("Security components not available")
-            self.auth_manager = None
-            self.authz_manager = None
-            self.security_sanitizer = None
-        
-        # Setup plugin management components
-        self._setup_plugin_infrastructure()
-        self._setup_monitoring()
+        # Plugin storage
+        self.plugins: Dict[str, PluginInfo] = {}
+        self.plugins_by_type: Dict[PluginType, Set[str]] = {pt: set() for pt in PluginType}
+        self.plugin_sandboxes: Dict[str, PluginSandbox] = {}
         
         # Configuration
-        self._plugin_directories = self._get_plugin_directories()
-        self._auto_discovery_enabled = self.config.get("plugins.auto_discovery", True)
-        self._hot_reload_enabled = self.config.get("plugins.hot_reload", False)
-        self._security_validation_enabled = self.config.get("plugins.security_validation", True)
+        self.plugin_directory = Path(self.config.get("plugins.directory", "plugins"))
+        self.auto_load_plugins = self.config.get("plugins.auto_load", True)
+        self.enable_sandboxing = self.config.get("plugins.enable_sandboxing", True)
+        self.validation_required = self.config.get("plugins.require_validation", True)
         
-        # State management
-        self._initialization_lock = asyncio.Lock()
+        # Background tasks
+        self._background_tasks = []
         self._shutdown_event = asyncio.Event()
-        self._background_tasks: List[asyncio.Task] = []
         
-        # Performance tracking
-        self._plugin_performance: Dict[str, Dict[str, float]] = {}
+        # Ensure plugin directory exists
+        self.plugin_directory.mkdir(parents=True, exist_ok=True)
         
-        self.logger.info("EnhancedPluginManager initialized")
-
-    def _setup_plugin_infrastructure(self) -> None:
-        """Setup plugin management infrastructure."""
-        self.plugin_loader = PluginLoader(self.logger)
-        self.plugin_registry = PluginRegistry(self.logger)
-        
-        # Thread pool for plugin operations
-        self.thread_pool = ThreadPoolExecutor(
-            max_workers=4,
-            thread_name_prefix="plugin_manager"
-        )
-
-    def _setup_monitoring(self) -> None:
-        """Setup monitoring and metrics collection."""
+        self.logger.info("Enhanced Plugin Manager initialized")
+    
+    async def initialize(self) -> None:
+        """Initialize the plugin manager."""
         try:
-            self.metrics = self.container.get(MetricsCollector)
-            self.tracer = self.container.get(TraceManager)
+            # Register health check
+            await self.health_check.register_check("plugin_manager", self._health_check_callback)
             
-            # Register plugin metrics
-            self.metrics.register_counter("plugins_loaded_total")
-            self.metrics.register_counter("plugins_failed_total")
-            self.metrics.register_gauge("plugins_active")
-            self.metrics.register_histogram("plugin_load_duration_seconds")
-            self.metrics.register_histogram("plugin_execution_duration_seconds")
+            # Register event handlers
+            await self._register_event_handlers()
+            
+            # Start background tasks
+            self._background_tasks = [
+                asyncio.create_task(self._plugin_health_monitor_loop()),
+                asyncio.create_task(self._hot_reload_monitor_loop()),
+                asyncio.create_task(self._performance_monitor_loop()),
+                asyncio.create_task(self._cleanup_monitor_loop())
+            ]
+            
+            # Auto-discover and load plugins if enabled
+            if self.auto_load_plugins:
+                await self.discover_plugins()
+                
+                # Load all validated plugins
+                for plugin_id, plugin_info in self.plugins.items():
+                    if plugin_info.validation_passed:
+                        await self.load_plugin(plugin_id)
+            
+            self.logger.info("Plugin manager initialized successfully")
             
         except Exception as e:
-            self.logger.warning(f"Failed to setup monitoring: {str(e)}")
-            self.metrics = None
-            self.tracer = None
-
-    def _get_plugin_directories(self) -> List[Path]:
-        """Get plugin directories from configuration."""
-        plugin_dirs = self.config.get("plugins.directories", [
-            "plugins/",
-            "src/plugins/",
-            "data/plugins/"
-        ])
-        
-        return [Path(d) for d in plugin_dirs]
-
-    async def initialize(self) -> None:
-        """Initialize the plugin manager and discover plugins."""
-        async with self._initialization_lock:
-            try:
-                self.logger.info("Initializing plugin manager...")
-                
-                # Register event handlers
-                await self._register_event_handlers()
-                
-                # Setup health monitoring
-                self.health_check.register_component("plugin_manager", self._health_check_callback)
-                
-                # Discover and load plugins
-                if self._auto_discovery_enabled:
-                    await self.discover_plugins()
-                
-                # Start background tasks
-                await self._start_background_tasks()
-                
-                self.logger.info("Plugin manager initialized successfully")
-                
-            except Exception as e:
-                self.logger.error(f"Failed to initialize plugin manager: {str(e)}")
-                raise PluginError(f"Plugin manager initialization failed: {str(e)}")
-
+            self.logger.error(f"Failed to initialize plugin manager: {str(e)}")
+            raise
+    
     async def _register_event_handlers(self) -> None:
-        """Register event handlers for system events."""
-        # Component events
-        self.event_bus.subscribe("component_registered", self._handle_component_registered)
-        self.event_bus.subscribe("component_failed", self._handle_component_failed)
-        
-        # Workflow events
-        self.event_bus.subscribe("workflow_completed", self._handle_workflow_completed)
-        
-        # Session events
-        self.event_bus.subscribe("session_started", self._handle_session_started)
-        self.event_bus.subscribe("session_ended", self._handle_session_ended)
-        
-        # System events
-        self.event_bus.subscribe("system_shutdown_started", self._handle_system_shutdown)
-
-    async def _start_background_tasks(self) -> None:
-        """Start background maintenance tasks."""
-        # Plugin health monitoring
-        self._background_tasks.append(
-            asyncio.create_task(self._plugin_health_monitor_loop())
-        )
-        
-        # Hot reload monitoring
-        if self._hot_reload_enabled:
-            self._background_tasks.append(
-                asyncio.create_task(self._hot_reload_monitor_loop())
-            )
-        
-        # Performance monitoring
-        self._background_tasks.append(
-            asyncio.create_task(self._performance_monitor_loop())
-        )
-        
-        # Plugin cleanup
-        self._background_tasks.append(
-            asyncio.create_task(self._cleanup_monitor_loop())
-        )
-
-    @handle_exceptions
+        """Register event handlers."""
+        self.event_bus.subscribe(ComponentRegistered, self._handle_component_registered)
+        self.event_bus.subscribe(ComponentFailed, self._handle_component_failed)
+        self.event_bus.subscribe(SystemShutdown, self._handle_system_shutdown)
+    
     async def discover_plugins(self) -> List[str]:
-        """
-        Discover plugins in configured directories.
-        
-        Returns:
-            List of discovered plugin IDs
-        """
+        """Discover all plugins in the plugin directory."""
         discovered_plugins = []
         
-        with self.tracer.trace("plugin_discovery") if self.tracer else None:
-            for plugin_dir in self._plugin_directories:
-                if not plugin_dir.exists():
-                    continue
-                
-                self.logger.info(f"Discovering plugins in: {plugin_dir}")
-                
-                # Look for plugin directories
-                for item in plugin_dir.iterdir():
-                    if item.is_dir() and not item.name.startswith('.'):
-                        try:
-                            plugin_id = await self._discover_single_plugin(item)
-                            if plugin_id:
-                                discovered_plugins.append(plugin_id)
-                        except Exception as e:
-                            self.logger.warning(f"Failed to discover plugin in {item}: {str(e)}")
-                
-                # Look for plugin archives
-                for item in plugin_dir.iterdir():
-                    if item.is_file() and item.suffix in ['.zip', '.tar.gz']:
-                        try:
-                            plugin_id = await self._discover_plugin_archive(item)
-                            if plugin_id:
-                                discovered_plugins.append(plugin_id)
-                        except Exception as e:
-                            self.logger.warning(f"Failed to discover plugin archive {item}: {str(e)}")
-        
-        self.logger.info(f"Discovered {len(discovered_plugins)} plugins: {discovered_plugins}")
-        return discovered_plugins
-
-    async def _discover_single_plugin(self, plugin_path: Path) -> Optional[str]:
-        """Discover a single plugin from a directory."""
-        metadata_file = plugin_path / "plugin.json"
-        if not metadata_file.exists():
-            return None
-        
         try:
-            with open(metadata_file, 'r') as f:
+            # Scan plugin directory
+            for item in self.plugin_directory.iterdir():
+                if item.is_dir() and (item / "plugin.json").exists():
+                    plugin_id = await self._discover_single_plugin(item)
+                    if plugin_id:
+                        discovered_plugins.append(plugin_id)
+                elif item.suffix in ['.zip', '.tar.gz']:
+                    plugin_id = await self._discover_plugin_archive(item)
+                    if plugin_id:
+                        discovered_plugins.append(plugin_id)
+            
+            self.logger.info(f"Discovered {len(discovered_plugins)} plugins")
+            return discovered_plugins
+            
+        except Exception as e:
+            self.logger.error(f"Error during plugin discovery: {str(e)}")
+            return discovered_plugins
+    
+    async def _discover_single_plugin(self, plugin_path: Path) -> Optional[str]:
+        """Discover a single plugin."""
+        try:
+            # Load plugin metadata
+            metadata_path = plugin_path / "plugin.json"
+            with open(metadata_path, 'r') as f:
                 metadata_dict = json.load(f)
             
             metadata = self.plugin_loader._parse_metadata(metadata_dict)
             
-            # Validate plugin
-            if self._security_validation_enabled:
-                await self._validate_plugin_security(plugin_path, metadata)
+            # Validate plugin if required
+            validation_report = None
+            validation_passed = True
+            
+            if self.validation_required:
+                try:
+                    validation_report = await self.plugin_validator.validate_plugin(
+                        plugin_path, metadata
+                    )
+                    validation_passed = validation_report.is_valid
+                except Exception as e:
+                    self.logger.error(f"Plugin validation failed for {metadata.plugin_id}: {str(e)}")
+                    validation_passed = False
             
             # Create plugin info
             plugin_info = PluginInfo(
                 metadata=metadata,
                 state=PluginState.DISCOVERED,
-                installation_path=plugin_path
+                installation_path=plugin_path,
+                validation_report=validation_report,
+                validation_passed=validation_passed
             )
             
-            # Register plugin
-            await self.plugin_registry.register_plugin(plugin_info)
+            # Store plugin info
+            self.plugins[metadata.plugin_id] = plugin_info
+            self.plugins_by_type[metadata.plugin_type].add(metadata.plugin_id)
             
-            # Auto-load if configured
-            if metadata.load_mode == PluginLoadMode.EAGER:
-                await self.load_plugin(metadata.plugin_id)
+            # Fire event
+            await self.event_bus.emit(ComponentRegistered(
+                component_id=metadata.plugin_id,
+                component_type="plugin",
+                metadata={"plugin_type": metadata.plugin_type.value}
+            ))
             
+            self.logger.info(f"Discovered plugin: {metadata.plugin_id} (validated: {validation_passed})")
             return metadata.plugin_id
             
         except Exception as e:
-            self.logger.error(f"Failed to discover plugin {plugin_path}: {str(e)}")
+            self.logger.error(f"Failed to discover plugin at {plugin_path}: {str(e)}")
             return None
-
+    
     async def _discover_plugin_archive(self, archive_path: Path) -> Optional[str]:
-        """Discover a plugin from an archive file."""
-        temp_dir = Path(tempfile.mkdtemp(prefix="plugin_extract_"))
+        """Discover plugin from archive."""
+        # Extract to temporary directory
+        temp_dir = Path(tempfile.mkdtemp())
         
         try:
             # Extract archive
             if archive_path.suffix == '.zip':
-                with zipfile.ZipFile(archive_path, 'r') as zip_file:
-                    zip_file.extractall(temp_dir)
-            elif archive_path.suffix == '.tar.gz':
-                with tarfile.open(archive_path, 'r:gz') as tar_file:
-                    tar_file.extractall(temp_dir)
+                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+            else:
+                # Handle tar.gz
+                import tarfile
+                with tarfile.open(archive_path, 'r:gz') as tar_ref:
+                    tar_ref.extractall(temp_dir)
             
-            # Find plugin directory in extracted files
-            for item in temp_dir.iterdir():
-                if item.is_dir():
-                    plugin_id = await self._discover_single_plugin(item)
-                    if plugin_id:
-                        # Move to permanent location
-                        plugin_dir = self._plugin_directories[0] / plugin_id
-                        shutil.move(str(item), str(plugin_dir))
-                        
-                        # Update installation path
-                        plugin_info = self.plugin_registry.get_plugin(plugin_id)
-                        if plugin_info:
-                            plugin_info.installation_path = plugin_dir
-                        
-                        return plugin_id
+            # Find plugin.json
+            for root, dirs, files in os.walk(temp_dir):
+                if "plugin.json" in files:
+                    plugin_path = Path(root)
+                    return await self._discover_single_plugin(plugin_path)
             
             return None
             
         finally:
             # Cleanup temp directory
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    async def _validate_plugin_security(self, plugin_path: Path, metadata: PluginMetadata) -> None:
-        """Validate plugin security."""
-        if self.security_sanitizer is None:
-            return
-        
-        # Check file permissions
-        for file_path in plugin_path.rglob("*"):
-            if file_path.is_file():
-                # Basic security checks
-                if file_path.suffix in ['.exe', '.bat', '.sh'] and metadata.security_level != SecurityLevel.TRUSTED:
-                    raise PluginError(f"Executable files not allowed in untrusted plugins: {file_path}")
-        
-        # Validate metadata signature if present
-        if metadata.signature and self.auth_manager:
-            # Implement signature validation
-            pass
-
-    @handle_exceptions
+            shutil.rmtree(temp_dir)
+    
     async def load_plugin(self, plugin_id: str) -> None:
-        """
-        Load a plugin into the system.
+        """Load and initialize a plugin with proper sandboxing."""
+        if plugin_id not in self.plugins:
+            raise PluginError(f"Plugin {plugin_id} not found")
         
-        Args:
-            plugin_id: Plugin identifier
-        """
-        plugin_info = self.plugin_registry.get_plugin(plugin_id)
-        if not plugin_info:
-            raise PluginError(f"Plugin {plugin_id} not found in registry")
+        plugin_info = self.plugins[plugin_id]
         
-        if plugin_info.state in [PluginState.LOADED, PluginState.ENABLED]:
-            self.logger.warning(f"Plugin {plugin_id} is already loaded")
+        if plugin_info.state >= PluginState.LOADED:
+            self.logger.warning(f"Plugin {plugin_id} already loaded")
             return
-        
-        start_time = time.time()
         
         try:
-            with self.tracer.trace("plugin_loading") if self.tracer else None:
-                self.logger.info(f"Loading plugin: {plugin_id}")
+            # Check validation status
+            if self.validation_required and not plugin_info.validation_passed:
+                raise PluginError(f"Plugin {plugin_id} failed validation")
+            
+            # Create sandbox if required
+            if self.enable_sandboxing and plugin_info.metadata.security_level <= SecurityLevel.SANDBOX:
+                sandbox = PluginSandbox(
+                    plugin_id,
+                    plugin_info.metadata.security_level,
+                    {
+                        'memory_mb': plugin_info.metadata.memory_limit_mb,
+                        'cpu_seconds': 30,
+                        'timeout_seconds': 30
+                    }
+                )
+                self.plugin_sandboxes[plugin_id] = sandbox
+                plugin_info.sandbox_enabled = True
+            
+            # Load the plugin module
+            module = await self.plugin_loader.load_plugin_from_path(
+                plugin_info.installation_path,
+                validate=False  # Already validated during discovery
+            )
+            
+            if not module:
+                raise PluginError(f"Failed to load plugin module for {plugin_id}")
+            
+            plugin_info.module = module
+            plugin_info.state = PluginState.LOADED
+            
+            # Find and instantiate main class
+            main_class = None
+            if plugin_info.metadata.main_class:
+                main_class = getattr(module, plugin_info.metadata.main_class, None)
+            else:
+                # Try to find a class that implements PluginInterface
+                for name, obj in inspect.getmembers(module, inspect.isclass):
+                    if issubclass(obj, PluginInterface) and obj != PluginInterface:
+                        main_class = obj
+                        break
+            
+            if main_class:
+                # Create instance
+                if plugin_info.sandbox_enabled:
+                    sandbox = self.plugin_sandboxes[plugin_id]
+                    instance = sandbox.execute_in_sandbox(main_class)
+                else:
+                    instance = main_class()
                 
-                # Check dependencies
-                await self._resolve_plugin_dependencies(plugin_info)
-                
-                # Load plugin module
-                if plugin_info.installation_path:
-                    instance = await self.plugin_loader.load_plugin_from_path(
-                        plugin_info.installation_path
-                    )
-                    plugin_info.instance = instance
+                plugin_info.instance = instance
                 
                 # Initialize plugin
-                if hasattr(plugin_info.instance, 'initialize'):
-                    await plugin_info.instance.initialize(self.container)
+                config = plugin_info.metadata.default_config.copy()
+                await instance.initialize(config)
                 
-                # Update state
-                plugin_info.state = PluginState.LOADED
-                plugin_info.load_time = time.time() - start_time
+                plugin_info.state = PluginState.INITIALIZED
                 
-                # Register with component manager if it's a component
-                await self._register_plugin_as_component(plugin_info)
+                # Register as skill if applicable
+                if plugin_info.metadata.plugin_type == PluginType.SKILL:
+                    success = await self.skill_adapter.register_plugin_as_skill(plugin_info)
+                    if success:
+                        self.logger.info(f"Plugin {plugin_id} registered as skill")
                 
-                # Register skills if it's a skill plugin
-                await self._register_plugin_skills(plugin_info)
-                
-                # Register workflows if it provides them
-                await self._register_plugin_workflows(plugin_info)
-                
-                # Emit event
-                await self.event_bus.emit(PluginLoaded(
-                    plugin_id=plugin_id,
-                    plugin_type=plugin_info.metadata.plugin_type.value,
-                    load_time=plugin_info.load_time
-                ))
-                
-                if self.metrics:
-                    self.metrics.increment("plugins_loaded_total")
-                    self.metrics.record("plugin_load_duration_seconds", plugin_info.load_time)
-                
-                self.logger.info(f"Successfully loaded plugin {plugin_id} in {plugin_info.load_time:.2f}s")
-                
+                # Call on_install hook
+                if hasattr(instance, 'on_install'):
+                    await instance.on_install()
+            
+            # Update metrics
+            self.metrics.increment("plugin_manager.plugins_loaded")
+            
+            self.logger.info(f"Successfully loaded plugin: {plugin_id}")
+            
         except Exception as e:
             plugin_info.state = PluginState.ERROR
             plugin_info.last_error = e
             plugin_info.error_count += 1
             
-            await self.event_bus.emit(PluginError(
-                plugin_id=plugin_id,
-                error_message=str(e),
-                error_type=type(e).__name__
-            ))
-            
-            if self.metrics:
-                self.metrics.increment("plugins_failed_total")
+            # Cleanup sandbox if created
+            if plugin_id in self.plugin_sandboxes:
+                self.plugin_sandboxes[plugin_id].cleanup()
+                del self.plugin_sandboxes[plugin_id]
             
             self.logger.error(f"Failed to load plugin {plugin_id}: {str(e)}")
-            raise PluginError(f"Failed to load plugin {plugin_id}: {str(e)}")
-
-    async def _resolve_plugin_dependencies(self, plugin_info: PluginInfo) -> None:
-        """Resolve plugin dependencies."""
-        for dependency in plugin_info.metadata.dependencies:
-            dep_plugin = self.plugin_registry.get_plugin(dependency.plugin_id)
-            
-            if not dep_plugin:
-                if dependency.auto_install:
-                    # Try to install dependency
-                    await self._auto_install_plugin(dependency.plugin_id)
-                elif not dependency.optional:
-                    raise PluginError(f"Required dependency {dependency.plugin_id} not found")
-            else:
-                # Ensure dependency is loaded
-                if dep_plugin.state not in [PluginState.LOADED, PluginState.ENABLED]:
-                    await self.load_plugin(dependency.plugin_id)
-
-    async def _auto_install_plugin(self, plugin_id: str) -> None:
-        """Auto-install a plugin dependency."""
-        # This would implement automatic plugin installation from repository
-        self.logger.warning(f"Auto-installation of {plugin_id} not implemented")
-
-    async def _register_plugin_as_component(self, plugin_info: PluginInfo) -> None:
-        """Register plugin as a system component."""
-        if plugin_info.metadata.plugin_type in [PluginType.PROCESSOR, PluginType.INTEGRATION]:
-            try:
-                metadata = ComponentMetadata(
-                    component_id=f"plugin_{plugin_info.metadata.plugin_id}",
-                    component_type=type(plugin_info.instance),
-                    priority=ComponentPriority.NORMAL,
-                    description=plugin_info.metadata.description
-                )
-                
-                self.component_manager.register_component(
-                    f"plugin_{plugin_info.metadata.plugin_id}",
-                    type(plugin_info.instance),
-                    ComponentPriority.NORMAL,
-                    []
-                )
-                
-            except Exception as e:
-                self.logger.warning(f"Failed to register plugin {plugin_info.metadata.plugin_id} as component: {str(e)}")
-
-    async def _register_plugin_skills(self, plugin_info: PluginInfo) -> None:
-        """Register skills provided by plugin."""
-        if plugin_info.metadata.plugin_type == PluginType.SKILL:
-            try:
-                if hasattr(plugin_info.instance, 'get_skills'):
-                    skills = plugin_info.instance.get_skills()
-                    for skill in skills:
-                        self.skill_registry.register_skill(skill)
-                        
-            except Exception as e:
-                self.logger.warning(f"Failed to register skills from plugin {plugin_info.metadata.plugin_id}: {str(e)}")
-
-    async def _register_plugin_workflows(self, plugin_info: PluginInfo) -> None:
-        """Register workflows provided by plugin."""
-        if plugin_info.metadata.plugin_type == PluginType.WORKFLOW_EXTENSION:
-            try:
-                if hasattr(plugin_info.instance, 'get_workflows'):
-                    workflows = plugin_info.instance.get_workflows()
-                    for workflow in workflows:
-                        self.workflow_orchestrator.register_workflow(workflow)
-                        
-            except Exception as e:
-                self.logger.warning(f"Failed to register workflows from plugin {plugin_info.metadata.plugin_id}: {str(e)}")
-
-    @handle_exceptions
+            raise
+    
     async def enable_plugin(self, plugin_id: str) -> None:
-        """
-        Enable a loaded plugin.
-        
-        Args:
-            plugin_id: Plugin identifier
-        """
-        plugin_info = self.plugin_registry.get_plugin(plugin_id)
-        if not plugin_info:
+        """Enable a loaded plugin."""
+        if plugin_id not in self.plugins:
             raise PluginError(f"Plugin {plugin_id} not found")
         
-        if plugin_info.state != PluginState.LOADED:
-            raise PluginError(f"Plugin {plugin_id} must be loaded before enabling")
+        plugin_info = self.plugins[plugin_id]
         
-        try:
-            # Activate plugin
-            if hasattr(plugin_info.instance, 'activate'):
-                await plugin_info.instance.activate()
+        if plugin_info.state < PluginState.INITIALIZED:
+            await self.load_plugin(plugin_id)
+        
+        if plugin_info.instance:
+            # Call on_enable hook
+            if hasattr(plugin_info.instance, 'on_enable'):
+                await plugin_info.instance.on_enable()
             
             plugin_info.state = PluginState.ENABLED
-            plugin_info.activation_count += 1
-            plugin_info.last_used = datetime.now(timezone.utc)
             
-            await self.event_bus.emit(PluginEnabled(
-                plugin_id=plugin_id,
-                plugin_type=plugin_info.metadata.plugin_type.value
-            ))
+            # Activate in skill registry if applicable
+            if plugin_info.skill_registered:
+                await self.skill_registry.update_skill_state(
+                    plugin_info.skill_id,
+                    SkillType.ACTIVE
+                )
             
             self.logger.info(f"Enabled plugin: {plugin_id}")
-            
-        except Exception as e:
-            plugin_info.state = PluginState.ERROR
-            plugin_info.last_error = e
-            self.logger.error(f"Failed to enable plugin {plugin_id}: {str(e)}")
-            raise PluginError(f"Failed to enable plugin {plugin_id}: {str(e)}")
-
-    @handle_exceptions
+    
     async def disable_plugin(self, plugin_id: str) -> None:
-        """
-        Disable an enabled plugin.
-        
-        Args:
-            plugin_id: Plugin identifier
-        """
-        plugin_info = self.plugin_registry.get_plugin(plugin_id)
-        if not plugin_info:
+        """Disable a plugin."""
+        if plugin_id not in self.plugins:
             raise PluginError(f"Plugin {plugin_id} not found")
         
-        if plugin_info.state != PluginState.ENABLED:
-            self.logger.warning(f"Plugin {plugin_id} is not enabled")
-            return
+        plugin_info = self.plugins[plugin_id]
         
-        try:
-            # Deactivate plugin
-            if hasattr(plugin_info.instance, 'deactivate'):
-                await plugin_info.instance.deactivate()
+        if plugin_info.instance:
+            # Call on_disable hook
+            if hasattr(plugin_info.instance, 'on_disable'):
+                await plugin_info.instance.on_disable()
             
             plugin_info.state = PluginState.DISABLED
             
-            await self.event_bus.emit(PluginDisabled(
-                plugin_id=plugin_id,
-                plugin_type=plugin_info.metadata.plugin_type.value
-            ))
+            # Deactivate in skill registry if applicable
+            if plugin_info.skill_registered:
+                await self.skill_registry.update_skill_state(
+                    plugin_info.skill_id,
+                    SkillType.INACTIVE
+                )
             
             self.logger.info(f"Disabled plugin: {plugin_id}")
-            
-        except Exception as e:
-            plugin_info.state = PluginState.ERROR
-            plugin_info.last_error = e
-            self.logger.error(f"Failed to disable plugin {plugin_id}: {str(e)}")
-            raise PluginError(f"Failed to disable plugin {plugin_id}: {str(e)}")
-
-    @handle_exceptions
+    
     async def unload_plugin(self, plugin_id: str, force: bool = False) -> None:
-        """
-        Unload a plugin from the system.
+        """Unload a plugin and clean up resources."""
+        if plugin_id not in self.plugins:
+            raise PluginError(f"Plugin {plugin_id} not found")
         
-        Args:
-            plugin_id: Plugin identifier
-            force: Force unload even if plugin is in use
-        """
-        plugin_info = self.plugin_registry.get_plugin(plugin_id)
-        if not plugin_info:
-            self.logger.warning(f"Plugin {plugin_id} not found in registry")
-            return
+        plugin_info = self.plugins[plugin_id]
         
         try:
-            # Disable plugin first if enabled
+            # Disable first if enabled
             if plugin_info.state == PluginState.ENABLED:
                 await self.disable_plugin(plugin_id)
             
-            # Cleanup plugin resources
-            if hasattr(plugin_info.instance, 'cleanup'):
+            # Unregister from skill registry
+            if plugin_info.skill_registered:
+                await self.skill_adapter.unregister_plugin_skill(plugin_info)
+            
+            # Call on_uninstall hook
+            if plugin_info.instance and hasattr(plugin_info.instance, 'on_uninstall'):
+                await plugin_info.instance.on_uninstall()
+            
+            # Cleanup instance
+            if plugin_info.instance and hasattr(plugin_info.instance, 'cleanup'):
                 await plugin_info.instance.cleanup()
             
             # Unload module
             await self.plugin_loader.unload_plugin(plugin_id)
             
+            # Cleanup sandbox
+            if plugin_id in self.plugin_sandboxes:
+                self.plugin_sandboxes[plugin_id].cleanup()
+                del self.plugin_sandboxes[plugin_id]
+            
             # Update state
             plugin_info.state = PluginState.UNLOADED
-            plugin_info.instance = None
             plugin_info.module = None
+            plugin_info.instance = None
             
-            await self.event_bus.emit(PluginUnloaded(
-                plugin_id=plugin_id,
-                plugin_type=plugin_info.metadata.plugin_type.value
+            # Fire event
+            await self.event_bus.emit(ComponentUnregistered(
+                component_id=plugin_id,
+                component_type="plugin",
+                reason="unloaded"
             ))
             
             self.logger.info(f"Unloaded plugin: {plugin_id}")
             
         except Exception as e:
-            plugin_info.state = PluginState.ERROR
-            plugin_info.last_error = e
-            self.logger.error(f"Failed to unload plugin {plugin_id}: {str(e)}")
             if not force:
-                raise PluginError(f"Failed to unload plugin {plugin_id}: {str(e)}")
-
+                raise
+            self.logger.error(f"Error unloading plugin {plugin_id}: {str(e)}")
+    
     async def hot_reload_plugin(self, plugin_id: str) -> None:
-        """
-        Hot-reload a plugin (unload and reload).
-        
-        Args:
-            plugin_id: Plugin identifier
-        """
-        plugin_info = self.plugin_registry.get_plugin(plugin_id)
-        if not plugin_info:
+        """Hot reload a plugin without full restart."""
+        if plugin_id not in self.plugins:
             raise PluginError(f"Plugin {plugin_id} not found")
         
-        self.logger.info(f"Hot-reloading plugin: {plugin_id}")
-        
-        # Save current state
-        was_enabled = plugin_info.state == PluginState.ENABLED
+        plugin_info = self.plugins[plugin_id]
+        original_state = plugin_info.state
         
         try:
-            # Unload plugin
-            await self.unload_plugin(plugin_id)
+            # Unload the plugin
+            await self.unload_plugin(plugin_id, force=True)
             
-            # Wait a moment
-            await asyncio.sleep(0.1)
+            # Re-discover the plugin
+            await self._discover_single_plugin(plugin_info.installation_path)
             
-            # Reload plugin
-            await self.load_plugin(plugin_id)
+            # Reload to original state
+            if original_state >= PluginState.LOADED:
+                await self.load_plugin(plugin_id)
             
-            # Re-enable if it was enabled
-            if was_enabled:
+            if original_state == PluginState.ENABLED:
                 await self.enable_plugin(plugin_id)
             
-            await self.event_bus.emit(PluginHotReloaded(
-                plugin_id=plugin_id,
-                plugin_type=plugin_info.metadata.plugin_type.value
-            ))
-            
-            self.logger.info(f"Successfully hot-reloaded plugin: {plugin_id}")
+            self.logger.info(f"Hot reloaded plugin: {plugin_id}")
             
         except Exception as e:
-            self.logger.error(f"Failed to hot-reload plugin {plugin_id}: {str(e)}")
-            raise PluginError(f"Hot-reload failed for {plugin_id}: {str(e)}")
-
+            self.logger.error(f"Failed to hot reload plugin {plugin_id}: {str(e)}")
+            raise
+    
     def get_plugin_info(self, plugin_id: str) -> Optional[PluginInfo]:
-        """Get plugin information."""
-        return self.plugin_registry.get_plugin(plugin_id)
-
+        """Get information about a specific plugin."""
+        return self.plugins.get(plugin_id)
+    
     def list_plugins(self, 
+                    plugin_type: Optional[PluginType] = None,
                     state: Optional[PluginState] = None,
-                    plugin_type: Optional[PluginType] = None) -> List[Dict[str, Any]]:
-        """List plugins with optional filtering."""
-        plugins = self.plugin_registry.list_plugins(state, plugin_type)
+                    validated_only: bool = False) -> List[PluginInfo]:
+        """List plugins with optional filters."""
+        plugins = list(self.plugins.values())
         
-        return [
-            {
-                "plugin_id": p.metadata.plugin_id,
-                "name": p.metadata.name,
-                "version": p.metadata.version,
-                "type": p.metadata.plugin_type.value,
-                "state": p.state.value,
-                "description": p.metadata.description,
-                "author": p.metadata.author,
-                "load_time": p.load_time,
-                "memory_usage": p.memory_usage,
-                "error_count": p.error_count,
-                "last_used": p.last_used.isoformat() if p.last_used else None
-            }
-            for p in plugins
-        ]
-
+        if plugin_type:
+            plugins = [p for p in plugins if p.metadata.plugin_type == plugin_type]
+        
+        if state:
+            plugins = [p for p in plugins if p.state == state]
+        
+        if validated_only:
+            plugins = [p for p in plugins if p.validation_passed]
+        
+        return plugins
+    
     def get_plugin_capabilities(self) -> Dict[str, List[str]]:
-        """Get all available plugin capabilities."""
-        return dict(self.plugin_registry._capabilities)
-
+        """Get all capabilities provided by loaded plugins."""
+        capabilities = {}
+        
+        for plugin_info in self.plugins.values():
+            if plugin_info.state >= PluginState.LOADED:
+                for capability in plugin_info.metadata.provides:
+                    if capability.name not in capabilities:
+                        capabilities[capability.name] = []
+                    capabilities[capability.name].append(plugin_info.metadata.plugin_id)
+        
+        return capabilities
+    
     async def get_plugin_status(self) -> Dict[str, Any]:
         """Get comprehensive plugin system status."""
-        plugins = self.plugin_registry.list_plugins()
+        total_plugins = len(self.plugins)
         
-        return {
-            "total_plugins": len(plugins),
-            "loaded_plugins": len([p for p in plugins if p.state == PluginState.LOADED]),
-            "enabled_plugins": len([p for p in plugins if p.state == PluginState.ENABLED]),
-            "failed_plugins": len([p for p in plugins if p.state == PluginState.ERROR]),
-            "auto_discovery_enabled": self._auto_discovery_enabled,
-            "hot_reload_enabled": self._hot_reload_enabled,
-            "security_validation_enabled": self._security_validation_enabled,
-            "plugin_directories": [str(d) for d in self._plugin_directories]
+        status = {
+            "total_plugins": total_plugins,
+            "plugins_by_type": {
+                pt.value: len(self.plugins_by_type[pt])
+                for pt in PluginType
+            },
+            "plugins_by_state": {},
+            "sandboxed_plugins": len(self.plugin_sandboxes),
+            "skill_plugins": sum(1 for p in self.plugins.values() if p.skill_registered),
+            "validation_failures": sum(1 for p in self.plugins.values() if not p.validation_passed),
+            "error_count": sum(p.error_count for p in self.plugins.values()),
+            "total_activations": sum(p.activation_count for p in self.plugins.values())
         }
-
+        
+        # Count by state
+        for plugin_info in self.plugins.values():
+            state_name = plugin_info.state.value
+            status["plugins_by_state"][state_name] = status["plugins_by_state"].get(state_name, 0) + 1
+        
+        return status
+    
     async def _plugin_health_monitor_loop(self) -> None:
-        """Background task for plugin health monitoring."""
+        """Monitor plugin health."""
         while not self._shutdown_event.is_set():
             try:
-                plugins = self.plugin_registry.list_plugins(PluginState.ENABLED)
-                
-                for plugin_info in plugins:
-                    try:
-                        if hasattr(plugin_info.instance, 'health_check'):
-                            health_result = await plugin_info.instance.health_check()
-                            plugin_info.health_status = health_result.get('status', 'unknown')
-                            plugin_info.last_health_check = datetime.now(timezone.utc)
-                            
-                            # Check for performance issues
-                            if 'memory_usage' in health_result:
-                                plugin_info.memory_usage = health_result['memory_usage']
-                                
-                                if plugin_info.memory_usage > plugin_info.metadata.memory_limit_mb:
-                                    await self.event_bus.emit(PluginPerformanceWarning(
-                                        plugin_id=plugin_info.metadata.plugin_id,
-                                        metric="memory_usage",
-                                        value=plugin_info.memory_usage,
-                                        limit=plugin_info.metadata.memory_limit_mb
-                                    ))
-                    
-                    except Exception as e:
-                        plugin_info.error_count += 1
-                        plugin_info.last_error = e
-                        self.logger.warning(f"Health check failed for plugin {plugin_info.metadata.plugin_id}: {str(e)}")
+                for plugin_id, plugin_info in self.plugins.items():
+                    if plugin_info.state == PluginState.ENABLED and plugin_info.instance:
+                        try:
+                            # Check plugin health
+                            if hasattr(plugin_info.instance, 'health_check'):
+                                health = await plugin_info.instance.health_check()
+                                plugin_info.health_status = health.get('status', 'unknown')
+                                plugin_info.last_health_check = datetime.now(timezone.utc)
+                        except Exception as e:
+                            plugin_info.health_status = 'error'
+                            plugin_info.error_count += 1
+                            self.logger.error(f"Health check failed for plugin {plugin_id}: {str(e)}")
                 
                 await asyncio.sleep(60)  # Check every minute
                 
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                self.logger.error(f"Plugin health monitoring error: {str(e)}")
+                self.logger.error(f"Error in plugin health monitor: {str(e)}")
                 await asyncio.sleep(60)
-
+    
     async def _hot_reload_monitor_loop(self) -> None:
-        """Background task for hot-reload monitoring."""
-        if not self._hot_reload_enabled:
+        """Monitor for plugin changes and hot reload."""
+        if not self.config.get("plugins.hot_reload", False):
             return
         
-        file_mtimes = {}
+        plugin_mtimes = {}
         
         while not self._shutdown_event.is_set():
             try:
-                plugins = self.plugin_registry.list_plugins()
-                
-                for plugin_info in plugins:
-                    if plugin_info.installation_path and plugin_info.installation_path.exists():
-                        # Check for file modifications
-                        for py_file in plugin_info.installation_path.rglob("*.py"):
-                            try:
-                                mtime = py_file.stat().st_mtime
-                                file_key = str(py_file)
-                                
-                                if file_key in file_mtimes and file_mtimes[file_key] != mtime:
-                                    self.logger.info(f"File modified: {py_file}, hot-reloading plugin {plugin_info.metadata.plugin_id}")
-                                    await self.hot_reload_plugin(plugin_info.metadata.plugin_id)
-                                
-                                file_mtimes[file_key] = mtime
-                                
-                            except Exception as e:
-                                self.logger.warning(f"Error checking file {py_file}: {str(e)}")
-                
-                await asyncio.sleep(2)  # Check every 2 seconds
-                
-            except Exception as e:
-                self.logger.error(f"Hot-reload monitoring error: {str(e)}")
-                await asyncio.sleep(2)
-
-    async def _performance_monitor_loop(self) -> None:
-        """Background task for performance monitoring."""
-        while not self._shutdown_event.is_set():
-            try:
-                plugins = self.plugin_registry.list_plugins(PluginState.ENABLED)
-                
-                for plugin_info in plugins:
-                    # Update metrics
-                    if self.metrics:
-                        self.metrics.set(
-                            "plugin_memory_usage_mb",
-                            plugin_info.memory_usage,
-                            tags={'plugin_id': plugin_info.metadata.plugin_id}
+                for plugin_id, plugin_info in self.plugins.items():
+                    if plugin_info.installation_path:
+                        # Check if plugin files have changed
+                        current_mtime = max(
+                            f.stat().st_mtime
+                            for f in plugin_info.installation_path.rglob("*.py")
+                            if f.is_file()
                         )
                         
-                        self.metrics.set(
-                            "plugin_error_count",
-                            plugin_info.error_count,
-                            tags={'plugin_id': plugin_info.metadata.plugin_id}
-                        )
+                        if plugin_id in plugin_mtimes and current_mtime > plugin_mtimes[plugin_id]:
+                            self.logger.info(f"Detected changes in plugin {plugin_id}, hot reloading...")
+                            await self.hot_reload_plugin(plugin_id)
+                        
+                        plugin_mtimes[plugin_id] = current_mtime
                 
-                # Update global metrics
-                if self.metrics:
-                    enabled_count = len([p for p in plugins if p.state == PluginState.ENABLED])
-                    self.metrics.set("plugins_active", enabled_count)
+                await asyncio.sleep(5)  # Check every 5 seconds
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Error in hot reload monitor: {str(e)}")
+                await asyncio.sleep(5)
+    
+    async def _performance_monitor_loop(self) -> None:
+        """Monitor plugin performance metrics."""
+        while not self._shutdown_event.is_set():
+            try:
+                for plugin_id, plugin_info in self.plugins.items():
+                    if plugin_info.state == PluginState.ENABLED:
+                        # Collect performance metrics
+                        if plugin_id in self.plugin_sandboxes:
+                            # Get sandbox resource usage
+                            # This would need actual implementation
+                            pass
                 
                 await asyncio.sleep(30)  # Monitor every 30 seconds
                 
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                self.logger.error(f"Performance monitoring error: {str(e)}")
+                self.logger.error(f"Error in performance monitor: {str(e)}")
                 await asyncio.sleep(30)
-
+    
     async def _cleanup_monitor_loop(self) -> None:
-        """Background task for plugin cleanup."""
+        """Clean up stale plugin resources."""
         while not self._shutdown_event.is_set():
             try:
-                # Cleanup failed plugins
-                failed_plugins = self.plugin_registry.list_plugins(PluginState.ERROR)
+                # Clean up failed plugins
+                for plugin_id, plugin_info in list(self.plugins.items()):
+                    if plugin_info.state == PluginState.ERROR and plugin_info.error_count > 5:
+                        self.logger.warning(f"Removing failed plugin {plugin_id} after {plugin_info.error_count} errors")
+                        await self.unload_plugin(plugin_id, force=True)
+                        del self.plugins[plugin_id]
                 
-                for plugin_info in failed_plugins:
-                    # Auto-recovery for certain types of errors
-                    if plugin_info.error_count < 3:
-                        try:
-                            self.logger.info(f"Attempting recovery for failed plugin: {plugin_info.metadata.plugin_id}")
-                            await self.hot_reload_plugin(plugin_info.metadata.plugin_id)
-                        except Exception as e:
-                            self.logger.warning(f"Recovery failed for {plugin_info.metadata.plugin_id}: {str(e)}")
+                await asyncio.sleep(300)  # Clean up every 5 minutes
                 
-                await asyncio.sleep(300)  # Cleanup every 5 minutes
-                
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                self.logger.error(f"Cleanup monitoring error: {str(e)}")
+                self.logger.error(f"Error in cleanup monitor: {str(e)}")
                 await asyncio.sleep(300)
-
+    
     async def _handle_component_registered(self, event) -> None:
         """Handle component registration events."""
-        # Check if any plugins are waiting for this component
-        pass
-
+        # Check if any plugins depend on this component
+        component_id = event.component_id
+        
+        for plugin_id, plugin_info in self.plugins.items():
+            if component_id in [dep.plugin_id for dep in plugin_info.metadata.dependencies]:
+                if plugin_info.state == PluginState.DISCOVERED:
+                    # Try to load the plugin now that dependency is available
+                    self.logger.info(f"Dependency {component_id} available, loading plugin {plugin_id}")
+                    await self.load_plugin(plugin_id)
+    
     async def _handle_component_failed(self, event) -> None:
         """Handle component failure events."""
-        # Check if this affects any plugins
-        pass
-
-    async def _handle_workflow_completed(self, event) -> None:
-        """Handle workflow completion events."""
-        # Update plugin usage statistics
-        pass
-
-    async def _handle_session_started(self, event) -> None:
-        """Handle session start events."""
-        # Initialize session-specific plugins
-        pass
-
-    async def _handle_session_ended(self, event) -> None:
-        """Handle session end events."""
-        # Cleanup session-specific plugin resources
-        pass
-
+        component_id = event.component_id
+        
+        # Check if this is a plugin
+        if component_id in self.plugins:
+            plugin_info = self.plugins[component_id]
+            plugin_info.state = PluginState.ERROR
+            plugin_info.error_count += 1
+    
     async def _handle_system_shutdown(self, event) -> None:
-        """Handle system shutdown events."""
+        """Handle system shutdown event."""
         self._shutdown_event.set()
-        await self.shutdown()
-
+        
+        # Disable all plugins
+        for plugin_id in list(self.plugins.keys()):
+            try:
+                await self.unload_plugin(plugin_id, force=True)
+            except Exception as e:
+                self.logger.error(f"Error unloading plugin {plugin_id} during shutdown: {str(e)}")
+    
     async def _health_check_callback(self) -> Dict[str, Any]:
-        """Health check callback for the plugin manager."""
+        """Health check callback."""
         try:
-            plugins = self.plugin_registry.list_plugins()
-            enabled_plugins = [p for p in plugins if p.state == PluginState.ENABLED]
-            failed_plugins = [p for p in plugins if p.state == PluginState.ERROR]
+            total_plugins = len(self.plugins)
+            enabled_plugins = sum(1 for p in self.plugins.values() if p.state == PluginState.ENABLED)
+            failed_plugins = sum(1 for p in self.plugins.values() if p.state == PluginState.ERROR)
+            
+            health_status = "healthy"
+            if failed_plugins > total_plugins * 0.2:  # More than 20% failed
+                health_status = "degraded"
+            elif failed_plugins > total_plugins * 0.5:  # More than 50% failed
+                health_status = "unhealthy"
             
             return {
-                "status": "healthy" if len(failed_plugins) == 0 else "degraded",
-                "total_plugins": len(plugins),
-                "enabled_plugins": len(enabled_plugins),
-                "failed_plugins": len(failed_plugins),
-                "auto_discovery_enabled": self._auto_discovery_enabled,
-                "hot_reload_enabled": self._hot_reload_enabled
+                "status": health_status,
+                "total_plugins": total_plugins,
+                "enabled_plugins": enabled_plugins,
+                "failed_plugins": failed_plugins,
+                "sandboxed_plugins": len(self.plugin_sandboxes)
             }
-            
         except Exception as e:
             return {
-                "status": "unhealthy",
+                "status": "error",
                 "error": str(e)
             }
-
+    
     async def shutdown(self) -> None:
-        """Gracefully shutdown the plugin manager."""
-        self.logger.info("Starting plugin manager shutdown...")
+        """Shutdown the plugin manager."""
+        self.logger.info("Shutting down plugin manager...")
         
-        try:
-            # Cancel background tasks
-            for task in self._background_tasks:
+        # Signal shutdown
+        self._shutdown_event.set()
+        
+        # Cancel background tasks
+        for task in self._background_tasks:
+            if not task.done():
                 task.cancel()
-            
-            if self._background_tasks:
-                await asyncio.gather(*self._background_tasks, return_exceptions=True)
-            
-            # Disable all enabled plugins
-            enabled_plugins = self.plugin_registry.list_plugins(PluginState.ENABLED)
-            for plugin_info in enabled_plugins:
-                try:
-                    await self.disable_plugin(plugin_info.metadata.plugin_id)
-                except Exception as e:
-                    self.logger.error(f"Error disabling plugin {plugin_info.metadata.plugin_id}: {str(e)}")
-            
-            # Unload all loaded plugins
-            loaded_plugins = self.plugin_registry.list_plugins(PluginState.LOADED)
-            for plugin_info in loaded_plugins:
-                try:
-                    await self.unload_plugin(plugin_info.metadata.plugin_id, force=True)
-                except Exception as e:
-                    self.logger.error(f"Error unloading plugin {plugin_info.metadata.plugin_id}: {str(e)}")
-            
-            # Shutdown thread pool
-            self.thread_pool.shutdown(wait=True)
-            
-            self.logger.info("Plugin manager shutdown completed")
-            
-        except Exception as e:
-            self.logger.error(f"Error during plugin manager shutdown: {str(e)}")
-            raise PluginError(f"Plugin manager shutdown failed: {str(e)}")
-
-    def __del__(self):
-        """Destructor to ensure cleanup."""
-        try:
-            if hasattr(self, 'thread_pool'):
-                self.thread_pool.shutdown(wait=False)
-        except Exception:
-            pass  # Ignore cleanup errors in destructor
+        
+        # Wait for tasks to complete
+        await asyncio.gather(*self._background_tasks, return_exceptions=True)
+        
+        # Unload all plugins
+        for plugin_id in list(self.plugins.keys()):
+            try:
+                await self.unload_plugin(plugin_id, force=True)
+            except Exception as e:
+                self.logger.error(f"Error unloading plugin {plugin_id}: {str(e)}")
+        
+        # Cleanup sandboxes
+        for sandbox in self.plugin_sandboxes.values():
+            sandbox.cleanup()
+        
+        self.plugin_sandboxes.clear()
+        self.plugins.clear()
+        
+        self.logger.info("Plugin manager shutdown complete")
