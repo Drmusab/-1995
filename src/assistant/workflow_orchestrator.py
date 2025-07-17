@@ -1,7 +1,7 @@
 """
 Advanced Workflow Orchestration Engine
 Author: Drmusab
-Last Modified: 2025-05-26 15:06:22 UTC
+Last Modified: 2025-07-17 17:35:30 UTC
 
 This module provides comprehensive workflow orchestration for the AI assistant,
 managing complex multi-step processes, parallel execution, conditional branching,
@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 # Core imports
 from src.core.config.loader import ConfigLoader
-from src.core.events.event_bus import EventBus
+from src.core.events.event_bus import EnhancedEventBus  # FIXED: Use EnhancedEventBus instead of EventBus
 from src.core.events.event_types import (
     WorkflowStarted, WorkflowCompleted, WorkflowFailed, WorkflowPaused, WorkflowResumed,
     WorkflowStepStarted, WorkflowStepCompleted, WorkflowStepFailed, WorkflowStepSkipped,
@@ -553,7 +553,8 @@ class WorkflowOrchestrator:
         
         # Core services
         self.config = container.get(ConfigLoader)
-        self.event_bus = container.get(EventBus)
+        # FIXED: Use EnhancedEventBus instead of EventBus
+        self.event_bus = container.get(EnhancedEventBus)
         self.error_handler = container.get(ErrorHandler)
         self.health_check = container.get(HealthCheck)
         
@@ -729,11 +730,59 @@ class WorkflowOrchestrator:
             if self.enable_workflow_learning:
                 asyncio.create_task(self._learning_update_loop())
             
+            # FIXED: Add event bus subscription for relevant events
+            self._register_event_bus_handlers()
+            
             self.logger.info("WorkflowOrchestrator initialization completed")
             
         except Exception as e:
             self.logger.error(f"Failed to initialize WorkflowOrchestrator: {str(e)}")
             raise WorkflowError(f"Initialization failed: {str(e)}")
+
+    def _register_event_bus_handlers(self) -> None:
+        """Register event handlers with the event bus."""
+        try:
+            # Register handlers for relevant events
+            self.event_bus.subscribe(
+                event_types=["system.component_health_changed"],
+                handler=self._handle_component_health_event,
+                subscription_type=self.event_bus.subscription_types.EXACT
+            )
+            
+            self.event_bus.subscribe(
+                event_types=["system.error_occurred"],
+                handler=self._handle_error_event,
+                subscription_type=self.event_bus.subscription_types.EXACT
+            )
+            
+            self.logger.info("Registered event handlers with event bus")
+        except Exception as e:
+            self.logger.error(f"Failed to register event handlers: {str(e)}")
+
+    async def _handle_component_health_event(self, event: ComponentHealthChanged) -> None:
+        """Handle component health change events."""
+        # Adjust workflow orchestrator behavior based on component health
+        component_name = event.component_name
+        health_status = event.status
+        
+        self.logger.info(f"Component health changed: {component_name} -> {health_status}")
+        
+        # If a critical component is unhealthy, mark affected workflows
+        if health_status == "unhealthy":
+            # Find active executions that use this component
+            for execution_id, execution in list(self.active_executions.items()):
+                execution.warnings.append(f"Component {component_name} is unhealthy")
+
+    async def _handle_error_event(self, event: ErrorOccurred) -> None:
+        """Handle system error events."""
+        self.logger.warning(f"System error occurred: {event.error_message}")
+        
+        # Check if error affects any active workflows
+        if event.component_name in ["skill_factory", "component_manager", "memory_manager"]:
+            # These are critical components for workflow execution
+            for execution_id, execution in list(self.active_executions.items()):
+                if execution.state == WorkflowState.RUNNING:
+                    execution.warnings.append(f"System error in {event.component_name}: {event.error_message}")
 
     @handle_exceptions
     def register_workflow(self, workflow: WorkflowDefinition) -> None:
@@ -963,6 +1012,9 @@ class WorkflowOrchestrator:
                 # Move to execution history
                 self.execution_history.append(execution)
                 self.active_executions.pop(execution.execution_id, None)
+                
+                # Update active workflows metric
+                self.metrics.set("active_workflows", len(self.active_executions))
 
     async def _initialize_execution_context(
         self,
@@ -1525,91 +1577,3 @@ class WorkflowOrchestrator:
             builder.set_start_steps("step_0")
             builder.set_end_steps(f"step_{len(plan['tasks'])-1}")
         
-        return builder.build()
-
-    def _serialize_workflow(self, workflow: WorkflowDefinition) -> Dict[str, Any]:
-        """Serialize workflow definition to dictionary."""
-        return asdict(workflow)
-
-    def _deserialize_workflow(self, data: Dict[str, Any]) -> WorkflowDefinition:
-        """Deserialize workflow definition from dictionary."""
-        # Convert step data back to WorkflowStep objects
-        steps = {}
-        for step_id, step_data in data.get('steps', {}).items():
-            # Convert enums back
-            step_data['step_type'] = StepType(step_data['step_type'])
-            step_data['state'] = StepState(step_data['state'])
-            step_data['priority'] = WorkflowPriority(step_data['priority'])
-            
-            # Convert conditions
-            conditions = []
-            for cond_data in step_data.get('conditions', []):
-                conditions.append(WorkflowCondition(**cond_data))
-            step_data['conditions'] = conditions
-            
-            # Convert dates
-            if step_data.get('start_time'):
-                step_data['start_time'] = datetime.fromisoformat(step_data['start_time'])
-            if step_data.get('end_time'):
-                step_data['end_time'] = datetime.fromisoformat(step_data['end_time'])
-            
-            steps[step_id] = WorkflowStep(**step_data)
-        
-        data['steps'] = steps
-        
-        # Convert enums and dates at workflow level
-        data['execution_mode'] = ExecutionMode(data['execution_mode'])
-        data['created_at'] = datetime.fromisoformat(data['created_at'])
-        
-        return WorkflowDefinition(**data)
-
-    async def _execution_monitor_loop(self) -> None:
-        """Background task to monitor workflow executions."""
-        while True:
-            try:
-                current_time = datetime.now(timezone.utc)
-                
-                # Check for timed out executions
-                for execution_id, execution in list(self.active_executions.items()):
-                    if execution.start_time:
-                        runtime = (current_time - execution.start_time).total_seconds()
-                        
-                        # Check for global timeout
-                        workflow_def = self.workflow_definitions.get(execution.workflow_id)
-                        if workflow_def and runtime > workflow_def.timeout_seconds:
-                            execution.state = WorkflowState.FAILED
-                            execution.errors.append(f"Workflow execution timed out after {runtime:.2f}s")
-                            
-                            # Emit timeout event
-                            await self.event_bus.emit(WorkflowFailed(
-                                workflow_id=execution.workflow_id,
-                                execution_id=execution.execution_id,
-                                session_id=execution.session_id,
-                                error_message="Execution timed out",
-                                execution_time=runtime
-                            ))
-                            
-                            # Move to history
-                            execution.end_time = current_time
-                            execution.execution_time = runtime
-                            self.execution_history.append(execution)
-                            self.active_executions.pop(execution_id, None)
-                
-                # Update metrics
-                self.metrics.set("active_workflows", len(self.active_executions))
-                
-                await asyncio.sleep(5)  # Check every 5 seconds
-                
-            except Exception as e:
-                self.logger.error(f"Error in execution monitor: {str(e)}")
-                await asyncio.sleep(5)
-
-    async def _performance_optimization_loop(self) -> None:
-        """Background task for workflow performance optimization."""
-        while True:
-            try:
-                # Analyze step performance
-                for step_key, timings in self.step_performance.items():
-                    if len(timings) >= 10:  # Need enough data points
-                        avg_time = sum(timings) / len(timings)
-                        self.execution_stats[
