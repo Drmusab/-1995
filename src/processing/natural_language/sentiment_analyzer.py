@@ -1515,4 +1515,10 @@ class EnhancedSentimentAnalyzer:
             
             summary = {
                 "total_analyses": len(history),
-                "avg_sentiment": sum(scores) / len(scores) if scores
+                "avg_sentiment": sum(scores) / len(scores) if scores else 0.0,
+                "common_emotions": emotions[:5] if emotions else [],
+                "time_range": {
+                    "start": history[0].get("timestamp"),
+                    "end": history[-1].get("timestamp")
+                } if history else {}
+            }

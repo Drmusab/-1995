@@ -1666,4 +1666,10 @@ class EnhancedHandlerManager:
         """Get information about active handler executions."""
         return [
             {
-                'execution_id': context.execution_i
+                'execution_id': context.execution_id,
+                'handler_type': context.handler_type,
+                'status': context.status,
+                'start_time': context.start_time.isoformat()
+            }
+            for context in self.active_executions.values()
+        ]

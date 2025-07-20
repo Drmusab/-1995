@@ -1550,4 +1550,4 @@ class EnhancedCrossModalAttention:
             return torch.tensor(data, dtype=torch.float32, device=self.device)
         elif isinstance(data, dict):
             # Look for features in dictionary
-            for key in ['features', 'embeddings', 'data
+            for key in ['features', 'embeddings', 'data']:

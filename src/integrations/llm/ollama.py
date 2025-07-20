@@ -1532,4 +1532,4 @@ class EnhancedOllamaProvider(BaseLLMProvider):
                 "status": "healthy" if healthy_instances > 0 else "unhealthy",
                 "healthy_instances": healthy_instances,
                 "total_instances": total_instances,
-                "active_requests": len(self.active_requests
+                "active_requests": len(self.active_requests)

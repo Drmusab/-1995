@@ -1514,4 +1514,4 @@ class ConnectionManager:
 
     # Background Tasks
     
-    async def _heart
+    async def _heartbeat_monitor(self) -> None:
