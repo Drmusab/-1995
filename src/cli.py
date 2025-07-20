@@ -1612,3 +1612,205 @@ class AssistantCLI:
             action: Action to perform (get, set, list)
             key: Setting key
             value: Setting value for set action
+        """
+        if action == "list":
+            # List all settings
+            if RICH_AVAILABLE:
+                table = Table(title="CLI Settings")
+                table.add_column("Setting", style="cyan")
+                table.add_column("Value", style="green")
+                
+                for key, value in sorted(self.settings.items()):
+                    table.add_row(key, str(value))
+                
+                self.console.print(table)
+            else:
+                print("CLI Settings:")
+                for key, value in sorted(self.settings.items()):
+                    print(f"{key}: {value}")
+        
+        elif action == "get":
+            # Get a specific setting
+            if not key:
+                self.print_error("Setting key required for get action")
+                return
+            
+            value = self.settings.get(key)
+            if value is not None:
+                self.print_system_message(f"{key}: {value}")
+            else:
+                self.print_error(f"Setting not found: {key}")
+        
+        elif action == "set":
+            # Set a setting value
+            if not key:
+                self.print_error("Setting key required for set action")
+                return
+            
+            if value is None:
+                self.print_error("Setting value required for set action")
+                return
+            
+            # Try to convert value to appropriate type
+            try:
+                # Try as number
+                if value.isdigit():
+                    value = int(value)
+                elif value.replace(".", "", 1).isdigit():
+                    value = float(value)
+                # Try as boolean
+                elif value.lower() in ["true", "yes", "on"]:
+                    value = True
+                elif value.lower() in ["false", "no", "off"]:
+                    value = False
+            except (ValueError, AttributeError):
+                # Keep as string if conversion fails
+                pass
+            
+            # Set the setting value
+            self.settings[key] = value
+            self.print_system_message(f"Set {key} = {value}")
+        
+        else:
+            self.print_error(f"Unknown settings action: {action}")
+            self.print_system_message("Available actions: get, set, list")
+
+    def _cmd_history(self, action: str = "list", count: str = "10"):
+        """
+        View or manage command history.
+        
+        Args:
+            action: Action to perform (list, clear, save, load)
+            count: Number of history items to show for list action
+        """
+        if action == "list":
+            # List command history
+            try:
+                count_int = int(count)
+            except ValueError:
+                count_int = 10
+            
+            history_length = readline.get_current_history_length()
+            start_index = max(1, history_length - count_int + 1)
+            
+            if RICH_AVAILABLE:
+                table = Table(title=f"Command History (last {count_int})")
+                table.add_column("#", style="cyan")
+                table.add_column("Command", style="green")
+                
+                for i in range(start_index, history_length + 1):
+                    command = readline.get_history_item(i)
+                    if command:
+                        table.add_row(str(i), command)
+                
+                self.console.print(table)
+            else:
+                print(f"Command History (last {count_int}):")
+                for i in range(start_index, history_length + 1):
+                    command = readline.get_history_item(i)
+                    if command:
+                        print(f"{i}: {command}")
+        
+        elif action == "clear":
+            # Clear command history
+            readline.clear_history()
+            self.print_system_message("Command history cleared")
+        
+        elif action == "save":
+            # Save history to file
+            try:
+                readline.write_history_file(self.command_history_file)
+                self.print_system_message(f"History saved to {self.command_history_file}")
+            except Exception as e:
+                self.print_error(f"Error saving history: {str(e)}")
+        
+        elif action == "load":
+            # Load history from file
+            if os.path.exists(self.command_history_file):
+                try:
+                    readline.read_history_file(self.command_history_file)
+                    self.print_system_message(f"History loaded from {self.command_history_file}")
+                except Exception as e:
+                    self.print_error(f"Error loading history: {str(e)}")
+            else:
+                self.print_error(f"History file not found: {self.command_history_file}")
+        
+        else:
+            self.print_error(f"Unknown history action: {action}")
+            self.print_system_message("Available actions: list, clear, save, load")
+
+    # ----- Utility Methods -----
+    
+    def print_system_message(self, message: str):
+        """Print a system message with appropriate formatting."""
+        if RICH_AVAILABLE:
+            self.console.print(f"[{self.settings['system_color']}]System: {message}[/{self.settings['system_color']}]")
+        else:
+            print(f"System: {message}")
+    
+    def print_error(self, message: str):
+        """Print an error message with appropriate formatting."""
+        if RICH_AVAILABLE:
+            self.console.print(f"[{self.settings['error_color']}]Error: {message}[/{self.settings['error_color']}]")
+        else:
+            print(f"Error: {message}")
+    
+    def print_user_message(self, message: str):
+        """Print a user message with appropriate formatting."""
+        if RICH_AVAILABLE:
+            self.console.print(f"[{self.settings['user_color']}]User: {message}[/{self.settings['user_color']}]")
+        else:
+            print(f"User: {message}")
+    
+    def print_assistant_message(self, message: str):
+        """Print an assistant message with appropriate formatting."""
+        if RICH_AVAILABLE:
+            if self.settings["use_markdown"]:
+                self.console.print(Markdown(message))
+            else:
+                self.console.print(f"[{self.settings['assistant_color']}]Assistant: {message}[/{self.settings['assistant_color']}]")
+        else:
+            print(f"Assistant: {message}")
+    
+    async def _shutdown(self):
+        """Shutdown the CLI and assistant."""
+        if self.assistant and self._assistant_initialized:
+            await self.assistant.shutdown()
+        
+        # Save history if enabled
+        if self.settings["save_history"]:
+            try:
+                readline.write_history_file(self.command_history_file)
+            except Exception as e:
+                self.logger.warning(f"Could not save history: {str(e)}")
+
+
+async def async_main(args=None):
+    """Async entry point for the CLI."""
+    cli = AssistantCLI()
+    try:
+        await cli.run(args)
+    except KeyboardInterrupt:
+        print("\nShutdown requested...")
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        traceback.print_exc()
+    finally:
+        await cli._shutdown()
+
+
+def main(args=None):
+    """Main entry point for the CLI."""
+    try:
+        asyncio.run(async_main(args))
+    except KeyboardInterrupt:
+        print("\nShutdown completed")
+    except Exception as e:
+        print(f"Fatal error: {str(e)}")
+        traceback.print_exc()
+        import sys
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -38,15 +38,6 @@ import sys
 T = TypeVar('T')
 Factory = Callable[..., T]
 AsyncFactory = Callable[..., Any]  # Returns awaitable
-async def register_plugin_manager_update(container: Container):
-    """Register the enhanced plugin manager."""
-    from src.assistant.plugin_manager_enhanced import EnhancedPluginManager
-    
-    # Register as singleton
-    container.register_singleton(EnhancedPluginManager)
-    
-    # Also register with the original PluginManager interface for compatibility
-    container.register_alias('PluginManager', EnhancedPluginManager)
 
 class LifecycleScope(Enum):
     """Dependency lifecycle scopes."""
@@ -456,7 +447,6 @@ class Container:
             return f"{type_name}#{name}"
         return type_name
 
-    @_with_lock
     def _register_metadata(self, metadata: DependencyMetadata) -> 'Container':
         """Register dependency metadata."""
         # Validate registration
@@ -739,7 +729,6 @@ class Container:
         else:
             raise DependencyError(f"Unsupported scope: {metadata.scope}")
 
-    @_with_lock
     def _get_singleton_instance(self, metadata: DependencyMetadata, context: ResolutionContext) -> Any:
         """Get or create singleton instance."""
         if metadata.registration_id in self._singleton_instances:
@@ -1029,7 +1018,6 @@ class Container:
         
         return self._unregister_by_id(registration_id)
 
-    @_with_lock
     def _unregister_by_id(self, registration_id: str) -> bool:
         """Unregister dependency by registration ID."""
         if registration_id not in self._registrations:
@@ -1414,3 +1402,14 @@ def create_container(config_path: Optional[Union[str, Path]] = None,
 def nullcontext():
     """Null context manager for conditional locking."""
     yield
+
+
+async def register_plugin_manager_update(container: Container):
+    """Register the enhanced plugin manager."""
+    from src.assistant.plugin_manager_enhanced import EnhancedPluginManager
+    
+    # Register as singleton
+    container.register_singleton(EnhancedPluginManager)
+    
+    # Also register with the original PluginManager interface for compatibility
+    container.register_alias('PluginManager', EnhancedPluginManager)
