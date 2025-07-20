@@ -1521,4 +1521,10 @@ class GoalDecomposer:
         hierarchy = self.active_hierarchies[hierarchy_id]
         
         try:
-            # Update context for all
+            # Update context for all goals in hierarchy
+            for goal in hierarchy.goals:
+                goal.context.update(update_context)
+                
+        except Exception as e:
+            self.logger.error(f"Error updating goal hierarchy context: {str(e)}")
+            raise

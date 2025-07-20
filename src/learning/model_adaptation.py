@@ -1584,4 +1584,10 @@ class ModelAdaptationManager:
                 elif self.adaptation_frequency == "daily":
                     sleep_time = 86400
                 else:
-                    sleep_time = 3
+                    sleep_time = 3600  # Default to hourly
+                
+                await asyncio.sleep(sleep_time)
+                
+            except Exception as e:
+                self.logger.error(f"Error in auto adaptation loop: {str(e)}")
+                await asyncio.sleep(3600)  # Sleep before retrying

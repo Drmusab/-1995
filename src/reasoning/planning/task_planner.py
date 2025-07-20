@@ -1572,4 +1572,11 @@ class TaskPlanner:
             try:
                 # Collect execution feedback
                 if self.execution_feedback:
-                    # Update planning
+                    # Update planning strategies based on feedback
+                    self.logger.info(f"Processing {len(self.execution_feedback)} feedback items")
+                    
+                await asyncio.sleep(300)  # Sleep for 5 minutes between updates
+                
+            except Exception as e:
+                self.logger.error(f"Error in learning update loop: {str(e)}")
+                await asyncio.sleep(300)

@@ -1539,4 +1539,4 @@ class GraphReasoningEngine:
                     })
     
     async def _apply_inverse_inference(self, result: ReasoningResult, context: Dict[str, Any]) -> None:
-        """Apply
+        """Apply inverse relationship inference rules to enhance reasoning results."""

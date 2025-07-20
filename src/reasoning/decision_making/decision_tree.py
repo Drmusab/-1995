@@ -1607,4 +1607,8 @@ class EnhancedDecisionTree:
                     if tree.enable_learning and tree.total_decisions >= tree.min_samples_for_adaptation:
                         await self._perform_tree_adaptation(tree)
                 
-                await asyncio.sleep(300)  #
+                await asyncio.sleep(300)  # Sleep for 5 minutes between adaptations
+                
+            except Exception as e:
+                self.logger.error(f"Error in decision tree adaptation loop: {str(e)}")
+                await asyncio.sleep(300)

@@ -1518,4 +1518,6 @@ class ContinualLearner:
     async def _handle_feedback_event(self, event) -> None:
         """Handle feedback received events."""
         try:
-            await self.incorporate_feedback(event
+            await self.incorporate_feedback(event.feedback)
+        except Exception as e:
+            self.logger.error(f"Error handling feedback event: {str(e)}")
