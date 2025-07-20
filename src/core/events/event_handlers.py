@@ -1375,4 +1375,4 @@ class InteractionEventHandler(BaseEventHandler):
         
         self.logger.debug(f"Message processed: {message_id} in {event.processing_time:.3f}s")
         
-        return {'status
+        return {'status': 'processed'}

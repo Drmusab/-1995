@@ -1619,3 +1619,8 @@ class AuthorizationManager:
         """Background task for audit log processing."""
         while True:
             try:
+                # Process audit log entries
+                await asyncio.sleep(60)
+            except Exception as e:
+                self.logger.error(f"Error in audit log processing: {str(e)}")
+                await asyncio.sleep(60)

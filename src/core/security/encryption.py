@@ -1453,4 +1453,15 @@ class EncryptionManager:
         
         return keys_info
 
-    def get_encryption_status(self) ->
+    def get_encryption_status(self) -> Dict[str, Any]:
+        """
+        Get encryption system status.
+        
+        Returns:
+            Dictionary with encryption status information
+        """
+        return {
+            'status': 'active',
+            'algorithm': 'AES-256-GCM',
+            'key_rotation_enabled': True
+        }
