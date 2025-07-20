@@ -1619,3 +1619,11 @@ class EnhancedCoreEngine:
                 content_preview=str(episodic_data)[:100]
             ))
             
+        except Exception as e:
+            self.logger.error(f"Failed to store episodic memory: {e}")
+            await self.event_bus.emit(ErrorOccurred(
+                error_type="MemoryStorageError",
+                error_message=str(e),
+                component="core_engine",
+                session_id=context.session_id if context else None
+            ))

@@ -1491,4 +1491,12 @@ class EnhancedModelRouter:
             avg_cost = np.mean([m.cost for m in recent_metrics]) if recent_metrics else model_config.cost_per_1k_tokens
             
             available_models.append({
-                'model_id': model_i
+                'model_id': model_id,
+                'provider': provider_name,
+                'capabilities': model_config.capabilities,
+                'success_rate': success_rate,
+                'avg_latency': avg_latency,
+                'avg_cost': avg_cost,
+                'health_score': health_score,
+                'weighted_score': weighted_score
+            })

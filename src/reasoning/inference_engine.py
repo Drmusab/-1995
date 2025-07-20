@@ -1422,4 +1422,35 @@ class EnhancedInferenceEngine:
         
         self.logger.info("EnhancedInferenceEngine initialized successfully")
 
-    def _setup_inference_engines(self) ->
+    def _setup_inference_engines(self) -> None:
+        """Initialize all inference engines."""
+        try:
+            # Initialize logical reasoning engine
+            self.logical_engine = LogicalReasoningEngine(
+                config=self.config.get('logical_reasoning', {}),
+                logger=self.logger
+            )
+            
+            # Initialize probabilistic inference engine  
+            self.probabilistic_engine = ProbabilisticInferenceEngine(
+                config=self.config.get('probabilistic_inference', {}),
+                logger=self.logger
+            )
+            
+            # Initialize temporal reasoning engine
+            self.temporal_engine = TemporalReasoningEngine(
+                config=self.config.get('temporal_reasoning', {}),
+                logger=self.logger
+            )
+            
+            # Initialize causal reasoning engine
+            self.causal_engine = CausalReasoningEngine(
+                config=self.config.get('causal_reasoning', {}),
+                logger=self.logger
+            )
+            
+            self.logger.info("All inference engines initialized successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to setup inference engines: {e}")
+            raise
