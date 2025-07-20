@@ -1458,4 +1458,8 @@ class LogicEngine:
                     self.metrics.increment("logic_inferences_total", len(result.conclusions))
                     self.metrics.record("logic_reasoning_duration_seconds", result.execution_time)
                     
-                    #
+                    return result
+                    
+                except Exception as e:
+                    self.logger.error(f"Error in logical reasoning: {str(e)}")
+                    raise

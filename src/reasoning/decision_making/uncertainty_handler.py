@@ -1506,4 +1506,4 @@ class EnhancedUncertaintyHandler:
                     
                     # Update continual learning
                     if hasattr(self.continual_learner, 'update_uncertainty_knowledge'):
-                        await self.continual_learner.
+                        await self.continual_learner.update_uncertainty_knowledge(uncertainty_info)

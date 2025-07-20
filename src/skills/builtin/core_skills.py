@@ -1658,4 +1658,8 @@ class SystemUtilitySkill(BaseSkill):
                 }
             )
         else:
-            
+            return SkillResult(
+                success=False,
+                data={"error": "Health check service not available"},
+                message="Health check system not available"
+            )

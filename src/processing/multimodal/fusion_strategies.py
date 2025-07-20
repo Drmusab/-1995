@@ -1574,4 +1574,4 @@ class MultimodalFusionStrategy:
         self, 
         data: Any
     ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], float, float, Dict[str, Any]]:
-        """Extract features, embeddings, confidence, quality, and metadata from
+        """Extract features, embeddings, confidence, quality, and metadata from modal data."""

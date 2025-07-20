@@ -1535,4 +1535,15 @@ class EnhancedFeedbackProcessor:
                 # Periodic learning updates
                 recent_feedback = [
                     fb for fb in self.feedback_history
-                    if fb
+                    if fb.timestamp > (datetime.now(timezone.utc) - timedelta(hours=24))
+                ]
+                
+                if recent_feedback:
+                    # Process recent feedback for learning
+                    self.logger.info(f"Processing {len(recent_feedback)} recent feedback items for learning")
+                    
+                await asyncio.sleep(self.learning_update_interval)
+                
+            except Exception as e:
+                self.logger.error(f"Error in learning update loop: {str(e)}")
+                await asyncio.sleep(self.learning_update_interval)

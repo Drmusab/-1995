@@ -1599,4 +1599,4 @@ class RedisCache:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "connecte
+                "connected": False

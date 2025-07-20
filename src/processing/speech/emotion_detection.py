@@ -1500,4 +1500,5 @@ class EnhancedEmotionDetector:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "models_loaded": len(self.models) if hasattr(self, 'models') else 
+                "models_loaded": len(self.models) if hasattr(self, 'models') else 0
+            }

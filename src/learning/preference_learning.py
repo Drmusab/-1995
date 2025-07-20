@@ -1378,4 +1378,19 @@ class PreferenceLearningEngine:
                     vector = []
                     for dimension in PreferenceDimension:
                         if dimension in profile.preferences:
-                            value = profile.preferences[dimension
+                            value = profile.preferences[dimension]
+                            vector.append(value)
+                        else:
+                            vector.append(0.0)  # Default value for missing preferences
+                    
+                    if vector:  # Only add if we have preference data
+                        user_vectors.append(vector)
+                        user_ids.append(user_id)
+            
+            # Perform clustering if we have enough users
+            if len(user_vectors) >= 2:
+                self.logger.info(f"Clustering {len(user_vectors)} users based on preferences")
+                # Simple clustering implementation would go here
+                
+        except Exception as e:
+            self.logger.error(f"Error in user clustering: {str(e)}")

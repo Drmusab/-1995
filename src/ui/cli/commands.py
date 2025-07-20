@@ -1816,3 +1816,9 @@ class UtilityCommands(CommandHandler):
             
             # Simulate component dependency check
             console.print("Component dependency validation completed - all dependencies satisfied.")
+            
+            return 0
+            
+        except Exception as e:
+            error_console.print(f"[bold red]Error running diagnostics:[/] {str(e)}")
+            return 1

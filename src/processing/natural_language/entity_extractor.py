@@ -1552,4 +1552,5 @@ class EnhancedEntityExtractor:
             request.strategy.value,
             request.mode.value,
             str(sorted(request.target_entities)),
-            str(
+            str(request.confidence_threshold)
+        ]

@@ -1565,4 +1565,4 @@ class EnhancedSpeakerRecognition:
             if len(f0_voiced) > 0:
                 characteristics['f0_mean'] = float(np.mean(f0_voiced))
                 characteristics['f0_std'] = float(np.std(f0_voiced))
-                characteristics['f0_min
+                characteristics['f0_min'] = float(np.min(f0_voiced))
