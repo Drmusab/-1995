@@ -37,8 +37,20 @@ import toml
 import jsonschema
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-import aiofiles
-import aiohttp
+
+try:
+    import aiofiles
+    AIOFILES_AVAILABLE = True
+except ImportError:
+    AIOFILES_AVAILABLE = False
+    aiofiles = None
+
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    AIOHTTP_AVAILABLE = False
+    aiohttp = None
 
 # Core imports (will be available when integrated)
 from src.core.events.event_bus import EventBus
@@ -210,8 +222,13 @@ class FileConfigProvider(ConfigurationProvider):
             raise ConfigError(f"Configuration file not found: {file_path}", source_info.source_id)
         
         try:
-            async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
-                content = await f.read()
+            if AIOFILES_AVAILABLE:
+                async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+                    content = await f.read()
+            else:
+                # Fallback to synchronous file reading
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
             
             # Parse based on format
             if source_info.format == ConfigFormat.YAML:
