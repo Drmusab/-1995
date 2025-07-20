@@ -1,11 +1,14 @@
 """
-Advanced AI Assistant Core Engine
+Advanced AI Assistant Core Engine with Memory Integration
 Author: Drmusab
-Last Modified: 2025-07-17 16:45:00 UTC
+Last Modified: 2025-07-20 13:45:00 UTC
 
 This module provides the main processing pipeline and orchestration engine for the
 AI assistant, integrating all subsystems including speech processing, vision,
 natural language understanding, memory, learning, and multimodal fusion.
+
+Merged functionality from core_engine.py and core_engine_memory.py to provide
+a unified memory-enhanced processing pipeline.
 """
 
 from pathlib import Path
@@ -35,7 +38,8 @@ from src.core.events.event_types import (
     FusionStarted, FusionCompleted, MemoryOperationStarted, MemoryOperationCompleted,
     SkillExecutionStarted, SkillExecutionCompleted, LearningEventOccurred,
     UserInteractionStarted, UserInteractionCompleted, SessionStarted, SessionEnded,
-    ErrorOccurred, SystemStateChanged, ComponentHealthChanged
+    ErrorOccurred, SystemStateChanged, ComponentHealthChanged,
+    MessageReceived, MessageProcessed, MemoryRetrievalRequested, MemoryItemStored
 )
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.dependency_injection import Container
@@ -83,11 +87,21 @@ from src.skills.skill_factory import SkillFactory
 from src.skills.skill_registry import SkillRegistry
 from src.skills.skill_validator import SkillValidator
 
-# Memory systems
+# Memory systems - Enhanced integration
 from src.memory.core_memory.memory_manager import MemoryManager
-from src.memory.operations.context_manager import ContextManager
+from src.memory.core_memory.base_memory import MemoryType
+from src.memory.operations.context_manager import (
+    ContextManager, MemoryContextManager, ContextType, ContextPriority
+)
+from src.memory.operations.retrieval import (
+    MemoryRetriever, RetrievalRequest, RetrievalResult,
+    RetrievalStrategy, MemoryRetrievalMode
+)
 from src.memory.storage.vector_store import VectorStore
 from src.memory.core_memory.memory_types import WorkingMemory, EpisodicMemory, SemanticMemory
+
+# Session memory integration
+from src.assistant.session_memory_integrator import SessionMemoryIntegrator
 
 # Learning and adaptation
 from src.learning.continual_learning import ContinualLearner
@@ -136,6 +150,7 @@ class ProcessingMode(Enum):
     BATCH = "batch"
     STREAMING = "streaming"
     INTERACTIVE = "interactive"
+    MEMORY_ENHANCED = "memory_enhanced"  # NEW: Memory-enhanced processing mode
 
 
 class ModalityType(Enum):
@@ -169,6 +184,7 @@ class ProcessingContext:
     timeout_seconds: float = 30.0
     metadata: Dict[str, Any] = field(default_factory=dict)
     tags: List[str] = field(default_factory=list)
+    memory_enhanced: bool = True  # NEW: Enable memory enhancement by default
 
 
 @dataclass
@@ -182,6 +198,18 @@ class MultimodalInput:
     context: Optional[ProcessingContext] = None
     modality_weights: Dict[str, float] = field(default_factory=dict)
     processing_hints: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class MemoryContext:
+    """Enhanced memory context for processing."""
+    session_id: str
+    context_elements: List[Dict[str, Any]] = field(default_factory=list)
+    entities: List[Dict[str, Any]] = field(default_factory=list)
+    semantic_memories: List[Dict[str, Any]] = field(default_factory=list)
+    episodic_memories: List[Dict[str, Any]] = field(default_factory=list)
+    working_memory_state: Dict[str, Any] = field(default_factory=dict)
+    retrieval_metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -205,6 +233,10 @@ class ProcessingResult:
     intent_result: Optional[Dict[str, Any]] = None
     entity_result: Optional[List[Dict[str, Any]]] = None
     sentiment_result: Optional[Dict[str, Any]] = None
+    
+    # Memory context
+    memory_context: Optional[MemoryContext] = None
+    memory_enhanced: bool = False
     
     # Reasoning and planning
     reasoning_trace: Optional[List[Dict[str, Any]]] = None
@@ -234,7 +266,7 @@ class ProcessingResult:
     
     # Metadata
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    engine_version: str = "1.0.0"
+    engine_version: str = "2.0.0"  # Updated version
 
 
 @dataclass
@@ -252,6 +284,7 @@ class EngineConfiguration:
     enable_multimodal_fusion: bool = True
     enable_reasoning: bool = True
     enable_learning: bool = True
+    enable_memory_enhancement: bool = True  # NEW: Memory enhancement setting
     
     # Quality settings
     default_quality_level: str = "balanced"
@@ -262,6 +295,8 @@ class EngineConfiguration:
     working_memory_size: int = 1000
     context_window_size: int = 4096
     memory_consolidation_interval: int = 3600
+    memory_retrieval_limit: int = 10  # NEW: Limit for memory retrieval
+    min_memory_relevance: float = 0.7  # NEW: Minimum relevance threshold
     
     # Caching settings
     enable_response_caching: bool = True
@@ -291,7 +326,7 @@ class CoreEngineError(Exception):
 
 class EnhancedCoreEngine:
     """
-    Advanced AI Assistant Core Engine - The central orchestrator.
+    Advanced AI Assistant Core Engine with Memory Integration.
     
     This engine coordinates all AI assistant capabilities including:
     - Multimodal input processing (speech, vision, text, gestures)
@@ -300,7 +335,7 @@ class EnhancedCoreEngine:
     - Emotion detection and speaker recognition
     - Visual processing and scene understanding
     - Reasoning, planning, and decision making
-    - Memory management and context awareness
+    - Memory management and context awareness (ENHANCED)
     - Skill execution and workflow orchestration
     - Learning and adaptation
     - Multimodal fusion and output generation
@@ -314,6 +349,7 @@ class EnhancedCoreEngine:
     - Event-driven architecture
     - Session and conversation management
     - Adaptive quality and performance tuning
+    - Enhanced memory integration for context-aware responses
     """
 
     def __init__(self, container: Container, config: Optional[EngineConfiguration] = None):
@@ -342,13 +378,18 @@ class EnhancedCoreEngine:
         # Set up component manager
         self.component_manager = container.get(EnhancedComponentManager)
         
+        # Memory integration components
+        self.memory_integrator = None  # Will be initialized after components
+        self.memory_retriever = None
+        self.memory_context_manager = None
+        
         # Register with health check system
         self.health_check.register_component("core_engine", self._health_check_callback)
         
         # Setup threading
         self._setup_threading()
         
-        self.logger.info("EnhancedCoreEngine initialized successfully")
+        self.logger.info("EnhancedCoreEngine initialized successfully with memory integration")
 
     def _setup_core_services(self) -> None:
         """Setup core services and utilities."""
@@ -376,6 +417,11 @@ class EnhancedCoreEngine:
         self.metrics.register_gauge("engine_active_sessions")
         self.metrics.register_counter("engine_errors_total")
         self.metrics.register_gauge("engine_component_health")
+        
+        # Memory-specific metrics
+        self.metrics.register_counter("memory_enhanced_responses")
+        self.metrics.register_histogram("memory_retrieval_time")
+        self.metrics.register_counter("memory_context_updates")
 
     def _setup_threading(self) -> None:
         """Setup threading and concurrency."""
@@ -400,6 +446,9 @@ class EnhancedCoreEngine:
                 # Get component references after initialization
                 await self._get_component_references()
                 
+                # Initialize memory integration components
+                await self._initialize_memory_integration()
+                
                 # Register event handlers
                 await self._register_event_handlers()
                 
@@ -413,7 +462,7 @@ class EnhancedCoreEngine:
                 # Emit startup event
                 await self.event_bus.emit(EngineStarted(
                     engine_id=id(self),
-                    version="1.0.0",
+                    version=self.config.engine_version,
                     components_loaded=len(self.component_manager._components),
                     startup_time=self.startup_time
                 ))
@@ -458,6 +507,18 @@ class EnhancedCoreEngine:
             SessionManager,
             priority=ComponentPriority.ESSENTIAL,
             config_section="session"
+        )
+        
+        # Memory Integrator - NEW
+        self.component_manager.register_component(
+            "session_memory_integrator",
+            SessionMemoryIntegrator,
+            priority=ComponentPriority.ESSENTIAL,
+            dependencies=[
+                ComponentDependency("session_manager", DependencyType.REQUIRED),
+                ComponentDependency("memory_manager", DependencyType.REQUIRED)
+            ],
+            config_section="memory.integration"
         )
         
         # Workflow Orchestrator
@@ -680,6 +741,30 @@ class EnhancedCoreEngine:
             config_section="memory.semantic"
         )
         
+        # Memory Context Manager - Enhanced
+        self.component_manager.register_component(
+            "memory_context_manager",
+            MemoryContextManager,
+            priority=ComponentPriority.HIGH,
+            dependencies=[
+                ComponentDependency("working_memory", DependencyType.REQUIRED),
+                ComponentDependency("episodic_memory", DependencyType.REQUIRED),
+                ComponentDependency("semantic_memory", DependencyType.REQUIRED)
+            ],
+            config_section="memory.context"
+        )
+        
+        # Memory Retriever - NEW
+        self.component_manager.register_component(
+            "memory_retriever",
+            MemoryRetriever,
+            priority=ComponentPriority.HIGH,
+            dependencies=[
+                ComponentDependency("memory_manager", DependencyType.REQUIRED)
+            ],
+            config_section="memory.retrieval"
+        )
+        
         self.component_manager.register_component(
             "context_manager",
             ContextManager,
@@ -832,6 +917,20 @@ class EnhancedCoreEngine:
             except Exception as e:
                 self.logger.warning(f"Some learning components failed to initialize: {str(e)}")
 
+    async def _initialize_memory_integration(self) -> None:
+        """Initialize memory integration components."""
+        if self.config.enable_memory_enhancement:
+            try:
+                # Get memory integration components
+                self.memory_integrator = await self.component_manager.get_component("session_memory_integrator")
+                self.memory_retriever = await self.component_manager.get_component("memory_retriever")
+                self.memory_context_manager = await self.component_manager.get_component("memory_context_manager")
+                
+                self.logger.info("Memory integration components initialized successfully")
+            except Exception as e:
+                self.logger.warning(f"Memory integration components failed to initialize: {str(e)}")
+                self.config.enable_memory_enhancement = False
+
     async def _register_event_handlers(self) -> None:
         """Register event handlers for system events."""
         # Component health monitoring
@@ -902,7 +1001,8 @@ class EnhancedCoreEngine:
                         "has_text": input_data.text is not None,
                         "has_audio": input_data.audio is not None,
                         "has_image": input_data.image is not None,
-                        "has_video": input_data.video is not None
+                        "has_video": input_data.video is not None,
+                        "memory_enhanced": context.memory_enhanced
                     })
                     
                     # Update engine state
@@ -923,6 +1023,17 @@ class EnhancedCoreEngine:
                         processing_time=0.0
                     )
                     
+                    # Get memory context if enabled
+                    memory_context = None
+                    if context.memory_enhanced and self.config.enable_memory_enhancement:
+                        memory_context = await self._get_memory_context(
+                            context.session_id,
+                            input_data.text or "",
+                            context.user_id
+                        )
+                        result.memory_context = memory_context
+                        result.memory_enhanced = True
+                    
                     # Process each modality
                     modality_results = await self._process_modalities(input_data, context, result)
                     
@@ -942,9 +1053,17 @@ class EnhancedCoreEngine:
                     memory_result = await self._perform_memory_operations(input_data, context, result)
                     result = self._merge_memory_result(result, memory_result)
                     
-                    # Generate response
-                    response_result = await self._generate_response(input_data, context, result)
+                    # Generate response with memory enhancement
+                    response_result = await self._generate_response(input_data, context, result, memory_context)
                     result = self._merge_response_result(result, response_result)
+                    
+                    # Extract and store knowledge from response
+                    if self.config.enable_memory_enhancement:
+                        await self._extract_and_store_knowledge(
+                            result.response_text or "",
+                            context.session_id,
+                            context.user_id
+                        )
                     
                     # Learning and adaptation
                     if self.config.enable_learning:
@@ -959,6 +1078,8 @@ class EnhancedCoreEngine:
                     # Update metrics
                     self.metrics.increment("engine_requests_total")
                     self.metrics.record("engine_processing_duration_seconds", processing_time)
+                    if result.memory_enhanced:
+                        self.metrics.increment("memory_enhanced_responses")
                     
                     # Emit completion event
                     await self.event_bus.emit(ProcessingCompleted(
@@ -972,6 +1093,7 @@ class EnhancedCoreEngine:
                     self.logger.info(
                         f"Multimodal processing completed for session {context.session_id} "
                         f"in {processing_time:.2f}s with confidence {result.overall_confidence:.2f}"
+                        f" (memory_enhanced: {result.memory_enhanced})"
                     )
                     
                     return result
@@ -1003,6 +1125,164 @@ class EnhancedCoreEngine:
             finally:
                 # Reset engine state
                 self.state = EngineState.READY
+
+    @handle_exceptions
+    async def process_message(
+        self,
+        message: str,
+        session_id: str,
+        user_id: Optional[str] = None,
+        context_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Process a user message with memory-enhanced context.
+        
+        This is a convenience method that wraps process_multimodal_input
+        for simple text message processing.
+        
+        Args:
+            message: The user message
+            session_id: Session identifier
+            user_id: Optional user identifier
+            context_data: Optional additional context
+            
+        Returns:
+            Response with memory-enhanced context
+        """
+        # Create processing context
+        context = ProcessingContext(
+            session_id=session_id,
+            user_id=user_id,
+            memory_enhanced=True,
+            metadata=context_data or {}
+        )
+        
+        # Create multimodal input
+        input_data = MultimodalInput(
+            text=message,
+            context=context
+        )
+        
+        # Process through main pipeline
+        result = await self.process_multimodal_input(input_data, context)
+        
+        # Format response for compatibility
+        response = {
+            "text": result.response_text,
+            "session_id": session_id,
+            "success": result.success,
+            "memory_enhanced": result.memory_enhanced,
+            "confidence": result.overall_confidence,
+            "processing_time": result.processing_time,
+            "context_used": len(result.memory_context.context_elements) if result.memory_context else 0,
+            "trace_id": result.request_id
+        }
+        
+        # Add intent and entities if available
+        if result.intent_result:
+            response["intent"] = result.intent_result
+        if result.entity_result:
+            response["entities"] = result.entity_result
+        
+        return response
+
+    async def _get_memory_context(
+        self, 
+        session_id: str, 
+        query: str,
+        user_id: Optional[str] = None
+    ) -> MemoryContext:
+        """
+        Get memory context for message processing.
+        
+        Args:
+            session_id: Session identifier
+            query: User query/message
+            user_id: Optional user identifier
+            
+        Returns:
+            Memory context
+        """
+        try:
+            start_time = asyncio.get_event_loop().time()
+            
+            # Get context from memory context manager
+            context_dict = await self.memory_context_manager.get_context_dict(session_id)
+            
+            # Emit memory retrieval event
+            await self.event_bus.emit(MemoryRetrievalRequested(
+                session_id=session_id,
+                query=query,
+                context_id=context_dict.get("context_id"),
+                timestamp=datetime.now(timezone.utc)
+            ))
+            
+            # Get semantic memories related to the query
+            semantic_request = RetrievalRequest(
+                query=query,
+                session_id=session_id,
+                memory_types=[MemoryType.SEMANTIC],
+                strategy=RetrievalStrategy.SEMANTIC,
+                mode=MemoryRetrievalMode.CONTEXTUAL,
+                max_results=self.config.memory_retrieval_limit,
+                min_relevance=self.config.min_memory_relevance
+            )
+            
+            semantic_results = await self.memory_retriever.retrieve(semantic_request)
+            
+            # Get recent episodic memories
+            episodic_request = RetrievalRequest(
+                query=query,
+                session_id=session_id,
+                memory_types=[MemoryType.EPISODIC],
+                strategy=RetrievalStrategy.RECENCY,
+                max_results=min(5, self.config.memory_retrieval_limit // 2)
+            )
+            
+            episodic_results = await self.memory_retriever.retrieve(episodic_request)
+            
+            # Get working memory state
+            working_memory_state = await self.working_memory.get_state(session_id)
+            
+            # Create memory context
+            memory_context = MemoryContext(
+                session_id=session_id,
+                context_elements=context_dict.get("elements", []),
+                entities=context_dict.get("entities", []),
+                semantic_memories=[
+                    {
+                        "content": memory.content,
+                        "relevance": score,
+                        "memory_id": memory.memory_id
+                    }
+                    for memory, score in semantic_results.items
+                ],
+                episodic_memories=[
+                    {
+                        "content": memory.content,
+                        "memory_id": memory.memory_id,
+                        "timestamp": memory.timestamp.isoformat() if hasattr(memory, 'timestamp') else None
+                    }
+                    for memory in episodic_results.memories
+                ],
+                working_memory_state=working_memory_state or {},
+                retrieval_metadata={
+                    "retrieval_time": asyncio.get_event_loop().time() - start_time,
+                    "semantic_count": len(semantic_results.items),
+                    "episodic_count": len(episodic_results.memories),
+                    "total_elements": len(context_dict.get("elements", []))
+                }
+            )
+            
+            # Record retrieval time
+            self.metrics.record("memory_retrieval_time", memory_context.retrieval_metadata["retrieval_time"])
+            
+            return memory_context
+            
+        except Exception as e:
+            self.logger.error(f"Error getting memory context: {str(e)}")
+            # Return empty context on error
+            return MemoryContext(session_id=session_id)
 
     async def _process_modalities(
         self,
@@ -1176,8 +1456,16 @@ class EnhancedCoreEngine:
                 request_id=context.request_id
             ))
             
-            # Intent recognition
-            intent_result = await self.intent_manager.detect_intent(text)
+            # Use memory context for enhanced processing
+            memory_hints = {}
+            if result.memory_context:
+                memory_hints = {
+                    "context_elements": result.memory_context.context_elements,
+                    "entities": result.memory_context.entities
+                }
+            
+            # Intent recognition with memory context
+            intent_result = await self.intent_manager.detect_intent(text, context=memory_hints)
             result.intent_result = intent_result
             text_results['intent'] = intent_result
             
@@ -1185,6 +1473,17 @@ class EnhancedCoreEngine:
             entity_result = await self.entity_extractor.extract(text)
             result.entity_result = entity_result
             text_results['entities'] = entity_result
+            
+            # Update memory context with new entities
+            if result.memory_context and entity_result:
+                for entity in entity_result:
+                    await self.memory_context_manager.add_entity(
+                        session_id=context.session_id,
+                        entity_id=str(uuid.uuid4()),
+                        name=entity.get("text", ""),
+                        entity_type=entity.get("type", "unknown")
+                    )
+                self.metrics.increment("memory_context_updates")
             
             # Sentiment analysis
             sentiment_result = await self.sentiment_analyzer.analyze(text)
@@ -1248,19 +1547,24 @@ class EnhancedCoreEngine:
         reasoning_results = {}
         
         try:
+            # Include memory context in reasoning
+            reasoning_context = result.__dict__.copy()
+            if result.memory_context:
+                reasoning_context['memory_context'] = asdict(result.memory_context)
+            
             # Logic reasoning
             if hasattr(self, 'logic_engine'):
-                logic_result = await self.logic_engine.reason(result)
+                logic_result = await self.logic_engine.reason(reasoning_context)
                 reasoning_results['logic'] = logic_result
             
             # Task planning
             if hasattr(self, 'task_planner'):
-                planning_result = await self.task_planner.plan(result)
+                planning_result = await self.task_planner.plan(reasoning_context)
                 reasoning_results['planning'] = planning_result
             
             # Decision making
             if hasattr(self, 'decision_tree'):
-                decision_result = await self.decision_tree.decide(result)
+                decision_result = await self.decision_tree.decide(reasoning_context)
                 reasoning_results['decision'] = decision_result
             
             return reasoning_results
@@ -1290,325 +1594,28 @@ class EnhancedCoreEngine:
             episodic_data = {
                 'session_id': context.session_id,
                 'user_id': context.user_id,
-                'input_data': input_data,
-                'processing_result': result,
-                'timestamp': context.timestamp
+                'input_data': {
+                    'text': input_data.text,
+                    'has_audio': input_data.audio is not None,
+                    'has_image': input_data.image is not None
+                },
+                'processing_result': {
+                    'intent': result.intent_result,
+                    'entities': result.entity_result,
+                    'sentiment': result.sentiment_result,
+                    'confidence': result.overall_confidence
+                },
+                'timestamp': context.timestamp,
+                'memory_enhanced': result.memory_enhanced
             }
             
-            await self.episodic_memory.store(episodic_data)
+            memory_item = await self.episodic_memory.store(episodic_data)
             
-            # Update working memory
-            await self.working_memory.update(context.session_id, result)
-            
-            # Retrieve relevant memories
-            relevant_memories = await self.semantic_memory.retrieve_relevant(
-                query=input_data.text or "",
-                context=context
-            )
-            result.retrieved_memories = relevant_memories
-            memory_results['retrieved'] = relevant_memories
-            
-            await self.event_bus.emit(MemoryOperationCompleted(
+            # Emit memory stored event
+            await self.event_bus.emit(MemoryItemStored(
+                memory_id=memory_item.get('memory_id', ''),
+                memory_type=MemoryType.EPISODIC,
                 session_id=context.session_id,
-                operations_completed=["store", "retrieve"],
-                request_id=context.request_id
+                content_preview=str(episodic_data)[:100]
             ))
             
-            return memory_results
-            
-        except Exception as e:
-            self.logger.error(f"Memory operations failed: {str(e)}")
-            result.errors.append(f"Memory error: {str(e)}")
-            return {}
-
-    async def _generate_response(
-        self,
-        input_data: MultimodalInput,
-        context: ProcessingContext,
-        result: ProcessingResult
-    ) -> Dict[str, Any]:
-        """Generate multimodal response."""
-        response_results = {}
-        
-        try:
-            # Generate text response using language model
-            if hasattr(self, 'language_chain'):
-                text_response = await self.language_chain.generate_response(
-                    input_data, result, context
-                )
-                result.response_text = text_response
-                response_results['text'] = text_response
-            
-            # Generate speech response if requested
-            if hasattr(self, 'text_to_speech') and result.response_text:
-                synthesis_request = SynthesisRequest(
-                    text=result.response_text,
-                    session_id=context.session_id,
-                    user_id=context.user_id,
-                    quality=VoiceQuality.BALANCED
-                )
-                
-                synthesis_result = await self.text_to_speech.synthesize(synthesis_request)
-                result.synthesized_audio = synthesis_result.audio_data
-                response_results['audio'] = synthesis_result
-            
-            return response_results
-            
-        except Exception as e:
-            self.logger.error(f"Response generation failed: {str(e)}")
-            result.errors.append(f"Response error: {str(e)}")
-            return {}
-
-    async def _perform_learning_updates(
-        self,
-        input_data: MultimodalInput,
-        context: ProcessingContext,
-        result: ProcessingResult
-    ) -> None:
-        """Perform learning and adaptation updates."""
-        try:
-            await self.event_bus.emit(LearningEventOccurred(
-                session_id=context.session_id,
-                event_type="interaction_learning",
-                data={
-                    'input': input_data,
-                    'result': result,
-                    'context': context
-                }
-            ))
-            
-            # Update user preferences
-            if hasattr(self, 'preference_learner') and context.user_id:
-                await self.preference_learner.update_preferences(
-                    context.user_id, input_data, result
-                )
-            
-            # Continual learning updates
-            if hasattr(self, 'continual_learner'):
-                await self.continual_learner.learn_from_interaction(
-                    input_data, result, context
-                )
-            
-        except Exception as e:
-            self.logger.error(f"Learning updates failed: {str(e)}")
-            result.warnings.append(f"Learning warning: {str(e)}")
-
-    def _merge_fusion_result(self, result: ProcessingResult, fusion_result: Dict[str, Any]) -> ProcessingResult:
-        """Merge fusion results into main result."""
-        if fusion_result:
-            result.modality_confidences.update(fusion_result.get('modality_confidences', {}))
-            result.quality_metrics.update(fusion_result.get('quality_metrics', {}))
-        return result
-
-    def _merge_reasoning_result(self, result: ProcessingResult, reasoning_result: Dict[str, Any]) -> ProcessingResult:
-        """Merge reasoning results into main result."""
-        if reasoning_result:
-            result.reasoning_trace = reasoning_result.get('logic', {}).get('trace', [])
-            result.decision_path = reasoning_result.get('decision', {}).get('path', [])
-        return result
-
-    def _merge_memory_result(self, result: ProcessingResult, memory_result: Dict[str, Any]) -> ProcessingResult:
-        """Merge memory results into main result."""
-        if memory_result:
-            result.retrieved_memories = memory_result.get('retrieved', [])
-        return result
-
-    def _merge_response_result(self, result: ProcessingResult, response_result: Dict[str, Any]) -> ProcessingResult:
-        """Merge response results into main result."""
-        if response_result:
-            if 'text' in response_result:
-                result.response_text = response_result['text']
-            if 'audio' in response_result:
-                result.synthesized_audio = response_result['audio'].audio_data
-        return result
-
-    def _calculate_overall_confidence(self, result: ProcessingResult) -> float:
-        """Calculate overall confidence score."""
-        confidences = []
-        
-        if result.transcription_result:
-            confidences.append(result.transcription_result.confidence)
-        if result.emotion_result:
-            confidences.append(result.emotion_result.confidence_score)
-        if result.speaker_result:
-            confidences.append(result.speaker_result.confidence_score)
-        
-        return np.mean(confidences) if confidences else 0.0
-
-    async def create_session(
-        self,
-        user_id: Optional[str] = None,
-        session_config: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """Create a new processing session."""
-        session_id = await self.session_manager.create_session(user_id, session_config)
-        
-        self.active_sessions[session_id] = {
-            'user_id': user_id,
-            'created_at': datetime.now(timezone.utc),
-            'config': session_config or {},
-            'interaction_count': 0
-        }
-        
-        await self.event_bus.emit(SessionStarted(
-            session_id=session_id,
-            user_id=user_id
-        ))
-        
-        return session_id
-
-    async def end_session(self, session_id: str) -> None:
-        """End a processing session."""
-        if session_id in self.active_sessions:
-            session_info = self.active_sessions.pop(session_id)
-            
-            await self.event_bus.emit(SessionEnded(
-                session_id=session_id,
-                user_id=session_info.get('user_id'),
-                duration=(datetime.now(timezone.utc) - session_info['created_at']).total_seconds(),
-                interaction_count=session_info.get('interaction_count', 0)
-            ))
-        
-        await self.session_manager.end_session(session_id)
-
-    async def get_engine_status(self) -> Dict[str, Any]:
-        """Get comprehensive engine status."""
-        # Get component status from component manager
-        component_status = self.component_manager.get_component_status()
-        
-        return {
-            'state': self.state.value,
-            'startup_time': self.startup_time.isoformat() if self.startup_time else None,
-            'uptime_seconds': (
-                datetime.now(timezone.utc) - self.startup_time
-            ).total_seconds() if self.startup_time else 0,
-            'active_sessions': len(self.active_sessions),
-            'component_health': component_status.get('components', {}),
-            'component_count': component_status.get('total_components', 0),
-            'healthy_components': component_status.get('running_components', 0),
-            'processing_queue_size': self.processing_queue.qsize(),
-            'memory_usage': self._get_memory_usage(),
-            'version': "1.0.0"
-        }
-
-    def _get_memory_usage(self) -> Dict[str, Any]:
-        """Get current memory usage statistics."""
-        try:
-            import psutil
-            process = psutil.Process()
-            return {
-                'rss_mb': process.memory_info().rss / 1024 / 1024,
-                'vms_mb': process.memory_info().vms / 1024 / 1024,
-                'percent': process.memory_percent()
-            }
-        except ImportError:
-            return {'error': 'psutil not available'}
-
-    async def _performance_monitoring_loop(self) -> None:
-        """Background task for performance monitoring."""
-        while self.state != EngineState.SHUTTING_DOWN:
-            try:
-                # Get component status from component manager
-                component_status = self.component_manager.get_component_status()
-                
-                # Update session metrics
-                self.metrics.set("engine_active_sessions", len(self.active_sessions))
-                
-                await asyncio.sleep(30)  # Monitor every 30 seconds
-                
-            except Exception as e:
-                self.logger.error(f"Performance monitoring error: {str(e)}")
-
-    async def _memory_consolidation_loop(self) -> None:
-        """Background task for memory consolidation."""
-        while self.state != EngineState.SHUTTING_DOWN:
-            try:
-                if hasattr(self, 'memory_manager'):
-                    await self.memory_manager.consolidate_memories()
-                
-                await asyncio.sleep(self.config.memory_consolidation_interval)
-                
-            except Exception as e:
-                self.logger.error(f"Memory consolidation error: {str(e)}")
-
-    async def _health_monitoring_loop(self) -> None:
-        """Background task for component health monitoring."""
-        # No need to implement custom health monitoring here
-        # The component manager already handles component health monitoring
-        await asyncio.sleep(60)  # Just to keep the task alive
-
-    async def _learning_update_loop(self) -> None:
-        """Background task for learning system updates."""
-        while self.state != EngineState.SHUTTING_DOWN:
-            try:
-                if hasattr(self, 'continual_learner'):
-                    await self.continual_learner.periodic_update()
-                
-                await asyncio.sleep(300)  # Update every 5 minutes
-                
-            except Exception as e:
-                self.logger.error(f"Learning update error: {str(e)}")
-
-    async def _handle_component_health_change(self, event) -> None:
-        """Handle component health change events."""
-        self.logger.info(f"Component {event.component} health changed: {event.healthy}")
-        
-        # Implement recovery strategies if needed
-        if not event.healthy:
-            await self._attempt_component_recovery(event.component)
-
-    async def _handle_error_event(self, event) -> None:
-        """Handle error events."""
-        self.logger.error(f"Error in {event.component}: {event.error_message}")
-        
-        # Implement error recovery strategies
-        if event.severity == "critical":
-            await self._handle_critical_error(event)
-
-    async def _handle_performance_event(self, event) -> None:
-        """Handle performance threshold exceeded events."""
-        self.logger.warning(f"Performance threshold exceeded: {event}")
-        
-        # Implement performance optimization strategies
-        await self._optimize_performance()
-
-    async def _handle_learning_event(self, event) -> None:
-        """Handle learning events."""
-        self.logger.debug(f"Learning event: {event.event_type}")
-        
-        # Process learning data
-        if hasattr(self, 'feedback_processor'):
-            await self.feedback_processor.process_event(event)
-
-    async def _attempt_component_recovery(self, component_id: str) -> None:
-        """Attempt to recover a failed component."""
-        try:
-            await self.component_manager.restart_component(component_id)
-            self.logger.info(f"Successfully restarted component: {component_id}")
-        except Exception as e:
-            self.logger.error(f"Failed to recover component {component_id}: {str(e)}")
-
-    async def _handle_critical_error(self, event) -> None:
-        """Handle critical errors that may require system intervention."""
-        # Implement critical error handling
-        # This might involve alerting administrators, graceful degradation, etc.
-        pass
-
-    async def _optimize_performance(self) -> None:
-        """Optimize system performance when thresholds are exceeded."""
-        # Implement performance optimization strategies
-        # This might involve adjusting quality settings, clearing caches, etc.
-        pass
-
-    async def _health_check_callback(self) -> Dict[str, Any]:
-        """Health check callback for the core engine."""
-        try:
-            # Get component status from component manager
-            component_status = self.component_manager.get_component_status()
-            healthy_components = component_status.get('running_components', 0)
-            total_components = component_status.get('total_components', 0)
-            
-            return {
-                "status": "healthy" if self.state == EngineState.READY else "degraded",
-                "state": self.state.value,
-                "component_health_ratio": healthy_components / total_
