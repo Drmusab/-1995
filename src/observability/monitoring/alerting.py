@@ -1578,4 +1578,21 @@ class AlertingEngine:
                     'success': True
                 })
             else:
-                target
+                # Handle notification failure
+                target.failure_count += 1
+                alert.notifications_sent.append({
+                    'target_id': target.target_id,
+                    'channel': target.channel.value,
+                    'sent_at': datetime.now(timezone.utc).isoformat(),
+                    'success': False
+                })
+                self.logger.warning(f"Failed to send notification to target {target.target_id}")
+            
+            return success
+            
+        except asyncio.TimeoutError:
+            self.logger.error(f"Notification timeout for target {target.target_id}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error sending notification to target {target.target_id}: {str(e)}")
+            return False

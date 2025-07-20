@@ -1505,5 +1505,15 @@ class EnhancedUncertaintyHandler:
                     }
                     
                     # Update continual learning
-                    if hasattr(self.continual_learner, 'update_uncertainty_knowledge'):
-                        await self.continual_learner.update_uncertainty_knowledge(uncertainty_info)
+                    try:
+                        if hasattr(self.continual_learner, 'update_uncertainty_knowledge'):
+                            await self.continual_learner.update_uncertainty_knowledge(uncertainty_info)
+                    except Exception as e:
+                        self.logger.error(f"Error updating uncertainty knowledge: {e}")
+                    
+                # Sleep before next update
+                await asyncio.sleep(self.learning_update_interval)
+                
+            except Exception as e:
+                self.logger.error(f"Learning update loop error: {str(e)}")
+                await asyncio.sleep(60)
