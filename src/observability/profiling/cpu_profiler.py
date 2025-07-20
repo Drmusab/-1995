@@ -1579,3 +1579,12 @@ class EnhancedCPUProfiler:
             self.logger.error(f"Failed to save profile data: {str(e)}")
 
     async def _generate_flamegraph_async(self, session: ProfilingSession,
+                                       output_path: str) -> bool:
+        """Generate flamegraph from profiling session data."""
+        try:
+            # Placeholder implementation for flamegraph generation
+            self.logger.info(f"Generating flamegraph for session {session.session_id}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to generate flamegraph: {str(e)}")
+            return False

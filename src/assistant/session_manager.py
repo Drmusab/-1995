@@ -12,7 +12,7 @@ import uuid
 import json
 import hashlib
 import pickle
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, Type
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, Type, TypeVar
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field
 from enum import Enum

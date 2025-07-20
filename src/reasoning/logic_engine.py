@@ -1460,6 +1460,6 @@ class LogicEngine:
                     
                     return result
                     
-                except Exception as e:
+            except Exception as e:
                     self.logger.error(f"Error in logical reasoning: {str(e)}")
                     raise
