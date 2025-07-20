@@ -1,69 +1,46 @@
 """
-Advanced Session Management System for AI Assistant
-Author: Drmusab
-Last Modified: 2025-05-26 15:59:42 UTC
+Unified Session Manager with Memory Integration
+Authors: AI Assistant Contributors
+Last Modified: 2025-07-20
 
-This module provides comprehensive session management for the AI assistant,
-handling user sessions, state persistence, context management, and seamless
-integration with all core system components.
+Enhanced session management system with integrated memory capabilities,
+providing conversational context persistence and intelligent memory recall.
 """
 
-from pathlib import Path
-from typing import Optional, Dict, Any, List, Set, Callable, Type, Union, AsyncGenerator, TypeVar
 import asyncio
-import threading
-import time
-from datetime import datetime, timezone, timedelta
-from dataclasses import dataclass, field, asdict
-from enum import Enum
-from contextlib import asynccontextmanager
 import uuid
 import json
 import hashlib
-from collections import defaultdict, deque
-import weakref
-from abc import ABC, abstractmethod
-import logging
 import pickle
-import base64
-from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, Type
+from datetime import datetime, timezone, timedelta
+from dataclasses import dataclass, field
+from enum import Enum
+from abc import ABC, abstractmethod
+import threading
+from pathlib import Path
 
-# Core imports
+from src.core.dependency_injection import Container
 from src.core.config.loader import ConfigLoader
+from src.core.security.encryption import EncryptionManager
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    SessionStarted, SessionEnded, SessionExpired, SessionRestored,
-    SessionContextUpdated, SessionStateChanged, SessionCleanupStarted,
-    SessionCleanupCompleted, UserJoinedSession, UserLeftSession,
-    SessionMigrated, SessionClusteringStarted, SessionHealthCheckFailed,
-    ErrorOccurred, SystemStateChanged, ComponentHealthChanged
+    ComponentHealthChanged, SystemShutdown, UserAuthentication,
+    UserLogout, SessionStarted, SessionEnded, MessageReceived,
+    MessageProcessed, ErrorOccurred, MemoryRetrievalRequested,
+    MemoryItemStored
 )
-from src.core.error_handling import ErrorHandler, handle_exceptions
-from src.core.dependency_injection import Container
-from src.core.health_check import HealthCheck
-from src.core.security.authentication import AuthenticationManager
-from src.core.security.authorization import AuthorizationManager
-from src.core.security.encryption import EncryptionManager
-
-# Memory and storage
-from src.memory.core_memory.memory_manager import MemoryManager
-from src.memory.operations.context_manager import ContextManager
-from src.memory.core_memory.memory_types import WorkingMemory, EpisodicMemory
-from src.integrations.storage.database import DatabaseManager
 from src.integrations.cache.redis_cache import RedisCache
-from src.integrations.storage.backup_manager import BackupManager
-
-# Learning and adaptation
-from src.learning.continual_learning import ContinualLearner
-from src.learning.preference_learning import PreferenceLearner
-from src.learning.feedback_processor import FeedbackProcessor
-
-# Observability
+from src.integrations.storage.database import DatabaseManager
+from src.observability.logging.config import get_logger
 from src.observability.monitoring.metrics import MetricsCollector
 from src.observability.monitoring.tracing import TraceManager
-from src.observability.logging.config import get_logger
+from src.utils.health import HealthComponent
+from src.assistant.session_memory_integrator import SessionMemoryIntegrator
+from src.memory.operations.retrieval import RetrievalRequest, RetrievalStrategy
+from src.memory.core_memory.base_memory import MemoryType, MemoryItem
 
-# Type definitions
+# TypeVar for generic typing
 T = TypeVar('T')
 
 
@@ -129,11 +106,16 @@ class SessionConfiguration:
     compression_enabled: bool = True
     audit_logging: bool = True
     analytics_enabled: bool = True
+    # Memory integration settings
+    enable_memory: bool = True
+    memory_retention_policy: str = "adaptive"
+    max_memory_items: int = 1000
+    memory_consolidation_enabled: bool = True
 
 
 @dataclass
 class SessionContext:
-    """Comprehensive session context data."""
+    """Comprehensive session context data with memory integration."""
     session_id: str
     user_id: Optional[str] = None
     
@@ -161,6 +143,8 @@ class SessionContext:
     working_memory_data: Dict[str, Any] = field(default_factory=dict)
     episodic_memories: List[str] = field(default_factory=list)
     semantic_context: Dict[str, Any] = field(default_factory=dict)
+    memory_ids: List[str] = field(default_factory=list)
+    important_facts: List[Dict[str, Any]] = field(default_factory=list)
     
     # Environment context
     device_info: Dict[str, Any] = field(default_factory=dict)
@@ -186,7 +170,7 @@ class SessionContext:
 
 @dataclass
 class SessionInfo:
-    """Runtime session information."""
+    """Runtime session information with memory support."""
     session_id: str
     state: SessionState = SessionState.INITIALIZING
     config: SessionConfiguration = field(default_factory=SessionConfiguration)
@@ -225,41 +209,49 @@ class SessionInfo:
     workflow_count: int = 0
     message_count: int = 0
     total_processing_time: float = 0.0
+    
+    # Memory statistics
+    memory_item_count: int = 0
+    memory_retrieval_count: int = 0
+    memory_consolidation_count: int = 0
+    
+    def touch(self) -> None:
+        """Update last activity time."""
+        self.last_activity = datetime.now(timezone.utc)
+        self.interaction_count += 1
 
 
 class SessionError(Exception):
     """Custom exception for session management operations."""
     
     def __init__(self, message: str, session_id: Optional[str] = None, 
-                 error_code: Optional[str] = None, user_id: Optional[str] = None):
+                 error_code: Optional[str] = None):
         super().__init__(message)
         self.session_id = session_id
         self.error_code = error_code
-        self.user_id = user_id
-        self.timestamp = datetime.now(timezone.utc)
 
 
 class SessionStore(ABC):
-    """Abstract interface for session storage backends."""
+    """Abstract base class for session storage backends."""
     
     @abstractmethod
     async def store_session(self, session_info: SessionInfo) -> None:
-        """Store session information."""
+        """Store or update a session."""
         pass
     
     @abstractmethod
     async def load_session(self, session_id: str) -> Optional[SessionInfo]:
-        """Load session information."""
+        """Load a session by ID."""
         pass
     
     @abstractmethod
     async def delete_session(self, session_id: str) -> None:
-        """Delete session information."""
+        """Delete a session."""
         pass
     
     @abstractmethod
     async def list_sessions(self, user_id: Optional[str] = None) -> List[str]:
-        """List session IDs."""
+        """List session IDs, optionally filtered by user."""
         pass
     
     @abstractmethod
@@ -272,54 +264,40 @@ class MemorySessionStore(SessionStore):
     """In-memory session store for development and testing."""
     
     def __init__(self):
-        self.sessions: Dict[str, SessionInfo] = {}
-        self.user_sessions: Dict[str, Set[str]] = defaultdict(set)
-        self.lock = threading.Lock()
+        self._sessions: Dict[str, SessionInfo] = {}
+        self._lock = asyncio.Lock()
     
     async def store_session(self, session_info: SessionInfo) -> None:
-        """Store session in memory."""
-        with self.lock:
-            self.sessions[session_info.session_id] = session_info
-            if session_info.context.user_id:
-                self.user_sessions[session_info.context.user_id].add(session_info.session_id)
+        async with self._lock:
+            self._sessions[session_info.session_id] = session_info
     
     async def load_session(self, session_id: str) -> Optional[SessionInfo]:
-        """Load session from memory."""
-        with self.lock:
-            return self.sessions.get(session_id)
+        async with self._lock:
+            return self._sessions.get(session_id)
     
     async def delete_session(self, session_id: str) -> None:
-        """Delete session from memory."""
-        with self.lock:
-            session_info = self.sessions.pop(session_id, None)
-            if session_info and session_info.context.user_id:
-                self.user_sessions[session_info.context.user_id].discard(session_id)
+        async with self._lock:
+            self._sessions.pop(session_id, None)
     
     async def list_sessions(self, user_id: Optional[str] = None) -> List[str]:
-        """List sessions in memory."""
-        with self.lock:
+        async with self._lock:
             if user_id:
-                return list(self.user_sessions.get(user_id, set()))
-            return list(self.sessions.keys())
+                return [sid for sid, info in self._sessions.items() 
+                       if info.context.user_id == user_id]
+            return list(self._sessions.keys())
     
     async def cleanup_expired_sessions(self) -> int:
-        """Clean up expired sessions."""
-        current_time = datetime.now(timezone.utc)
-        expired_sessions = []
-        
-        with self.lock:
-            for session_id, session_info in self.sessions.items():
-                if session_info.expires_at and current_time > session_info.expires_at:
-                    expired_sessions.append(session_id)
-        
-        for session_id in expired_sessions:
-            await self.delete_session(session_id)
-        
-        return len(expired_sessions)
+        async with self._lock:
+            now = datetime.now(timezone.utc)
+            expired = [sid for sid, info in self._sessions.items()
+                      if info.expires_at and info.expires_at < now]
+            for sid in expired:
+                del self._sessions[sid]
+            return len(expired)
 
 
 class DatabaseSessionStore(SessionStore):
-    """Database-backed session store for production."""
+    """Database-backed session store for production with encryption support."""
     
     def __init__(self, database: DatabaseManager, encryption: Optional[EncryptionManager] = None):
         self.database = database
@@ -327,183 +305,158 @@ class DatabaseSessionStore(SessionStore):
         self.logger = get_logger(__name__)
     
     async def store_session(self, session_info: SessionInfo) -> None:
-        """Store session in database."""
         try:
-            # Serialize session data
             session_data = self._serialize_session(session_info)
             
             # Encrypt if enabled
-            if self.encryption:
+            if self.encryption and session_info.config.encryption_enabled:
                 session_data = await self.encryption.encrypt(session_data)
             
-            # Store in database
             await self.database.execute(
                 """
-                INSERT INTO sessions (session_id, user_id, state, data, created_at, expires_at, checksum)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (session_id) DO UPDATE SET
-                    state = excluded.state,
-                    data = excluded.data,
-                    expires_at = excluded.expires_at,
-                    checksum = excluded.checksum,
-                    updated_at = CURRENT_TIMESTAMP
+                INSERT INTO sessions (session_id, data, user_id, created_at, 
+                                    expires_at, last_activity)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (session_id) 
+                DO UPDATE SET data = EXCLUDED.data, 
+                            last_activity = EXCLUDED.last_activity
                 """,
-                (
-                    session_info.session_id,
-                    session_info.context.user_id,
-                    session_info.state.value,
-                    session_data,
-                    session_info.created_at,
-                    session_info.expires_at,
-                    session_info.checksum
-                )
+                session_info.session_id,
+                session_data,
+                session_info.context.user_id,
+                session_info.created_at,
+                session_info.expires_at,
+                session_info.last_activity
             )
-            
         except Exception as e:
-            self.logger.error(f"Failed to store session {session_info.session_id}: {str(e)}")
-            raise SessionError(f"Failed to store session: {str(e)}", session_info.session_id)
+            self.logger.error(f"Failed to store session: {str(e)}")
+            raise SessionError(f"Failed to store session: {str(e)}", 
+                             session_id=session_info.session_id)
     
     async def load_session(self, session_id: str) -> Optional[SessionInfo]:
-        """Load session from database."""
         try:
             result = await self.database.fetch_one(
-                "SELECT data, checksum FROM sessions WHERE session_id = ? AND state != 'expired'",
-                (session_id,)
+                "SELECT data FROM sessions WHERE session_id = $1",
+                session_id
             )
             
-            if not result:
-                return None
+            if result:
+                session_data = result['data']
+                
+                # Decrypt if encrypted
+                if self.encryption and isinstance(session_data, bytes):
+                    session_data = await self.encryption.decrypt(session_data)
+                
+                return self._deserialize_session(session_data)
             
-            session_data, checksum = result
-            
-            # Decrypt if enabled
-            if self.encryption:
-                session_data = await self.encryption.decrypt(session_data)
-            
-            # Deserialize session
-            session_info = self._deserialize_session(session_data)
-            session_info.checksum = checksum
-            
-            return session_info
-            
+            return None
         except Exception as e:
-            self.logger.error(f"Failed to load session {session_id}: {str(e)}")
+            self.logger.error(f"Failed to load session: {str(e)}")
             return None
     
     async def delete_session(self, session_id: str) -> None:
-        """Delete session from database."""
         try:
             await self.database.execute(
-                "UPDATE sessions SET state = 'expired', updated_at = CURRENT_TIMESTAMP WHERE session_id = ?",
-                (session_id,)
+                "DELETE FROM sessions WHERE session_id = $1",
+                session_id
             )
-            
         except Exception as e:
-            self.logger.error(f"Failed to delete session {session_id}: {str(e)}")
-            raise SessionError(f"Failed to delete session: {str(e)}", session_id)
+            self.logger.error(f"Failed to delete session: {str(e)}")
     
     async def list_sessions(self, user_id: Optional[str] = None) -> List[str]:
-        """List sessions from database."""
         try:
             if user_id:
                 results = await self.database.fetch_all(
-                    "SELECT session_id FROM sessions WHERE user_id = ? AND state != 'expired'",
-                    (user_id,)
+                    "SELECT session_id FROM sessions WHERE user_id = $1",
+                    user_id
                 )
             else:
                 results = await self.database.fetch_all(
-                    "SELECT session_id FROM sessions WHERE state != 'expired'"
+                    "SELECT session_id FROM sessions"
                 )
             
-            return [row[0] for row in results]
-            
+            return [row['session_id'] for row in results]
         except Exception as e:
             self.logger.error(f"Failed to list sessions: {str(e)}")
             return []
     
     async def cleanup_expired_sessions(self) -> int:
-        """Clean up expired sessions from database."""
         try:
             result = await self.database.execute(
                 """
-                UPDATE sessions 
-                SET state = 'expired', updated_at = CURRENT_TIMESTAMP 
-                WHERE expires_at < CURRENT_TIMESTAMP AND state != 'expired'
-                """
-            )
-            
-            # Delete old expired sessions
-            await self.database.execute(
-                """
                 DELETE FROM sessions 
-                WHERE state = 'expired' AND updated_at < datetime('now', '-7 days')
-                """
+                WHERE expires_at IS NOT NULL AND expires_at < $1
+                RETURNING session_id
+                """,
+                datetime.now(timezone.utc)
             )
-            
-            return result.rowcount if result else 0
-            
+            return len(result) if result else 0
         except Exception as e:
-            self.logger.error(f"Failed to cleanup expired sessions: {str(e)}")
+            self.logger.error(f"Failed to cleanup sessions: {str(e)}")
             return 0
     
     def _serialize_session(self, session_info: SessionInfo) -> str:
-        """Serialize session info to string."""
-        try:
-            # Convert to dictionary
-            data = asdict(session_info)
-            
-            # Handle datetime objects
-            for key, value in data.items():
-                if isinstance(value, datetime):
-                    data[key] = value.isoformat()
-                elif isinstance(value, dict):
-                    for k, v in value.items():
-                        if isinstance(v, datetime):
-                            data[key][k] = v.isoformat()
-            
-            # Convert to JSON and encode
-            json_data = json.dumps(data, default=str)
-            return base64.b64encode(json_data.encode()).decode()
-            
-        except Exception as e:
-            raise SessionError(f"Failed to serialize session: {str(e)}")
+        """Serialize session to JSON string."""
+        return json.dumps({
+            'session_id': session_info.session_id,
+            'state': session_info.state.value,
+            'config': {
+                'session_type': session_info.config.session_type.value,
+                'priority': session_info.config.priority.value,
+                'max_idle_time': session_info.config.max_idle_time,
+                'max_session_time': session_info.config.max_session_time,
+                'enable_memory': session_info.config.enable_memory,
+                'memory_retention_policy': session_info.config.memory_retention_policy
+            },
+            'context': {
+                'user_id': session_info.context.user_id,
+                'conversation_history': session_info.context.conversation_history,
+                'current_topic': session_info.context.current_topic,
+                'memory_ids': session_info.context.memory_ids,
+                'important_facts': session_info.context.important_facts,
+                'custom_data': session_info.context.custom_data
+            },
+            'stats': {
+                'interaction_count': session_info.interaction_count,
+                'memory_item_count': session_info.memory_item_count,
+                'memory_retrieval_count': session_info.memory_retrieval_count
+            },
+            'version': session_info.version
+        })
     
     def _deserialize_session(self, session_data: str) -> SessionInfo:
-        """Deserialize session info from string."""
-        try:
-            # Decode and parse JSON
-            json_data = base64.b64decode(session_data.encode()).decode()
-            data = json.loads(json_data)
-            
-            # Convert datetime strings back
-            datetime_fields = ['created_at', 'started_at', 'last_activity', 'expires_at', 'last_backup']
-            for field in datetime_fields:
-                if data.get(field):
-                    data[field] = datetime.fromisoformat(data[field])
-            
-            # Handle context datetime fields
-            context_data = data.get('context', {})
-            context_datetime_fields = ['created_at', 'last_activity', 'last_heartbeat']
-            for field in context_datetime_fields:
-                if context_data.get(field):
-                    context_data[field] = datetime.fromisoformat(context_data[field])
-            
-            # Convert enums
-            data['state'] = SessionState(data['state'])
-            if 'config' in data:
-                config_data = data['config']
-                config_data['session_type'] = SessionType(config_data['session_type'])
-                config_data['priority'] = SessionPriority(config_data['priority'])
-                data['config'] = SessionConfiguration(**config_data)
-            
-            # Reconstruct context
-            if 'context' in data:
-                data['context'] = SessionContext(**context_data)
-            
-            return SessionInfo(**data)
-            
-        except Exception as e:
-            raise SessionError(f"Failed to deserialize session: {str(e)}")
+        """Deserialize session from JSON string."""
+        data = json.loads(session_data)
+        
+        # Create config
+        config = SessionConfiguration()
+        config.session_type = SessionType(data['config']['session_type'])
+        config.priority = SessionPriority(data['config']['priority'])
+        config.max_idle_time = data['config']['max_idle_time']
+        config.max_session_time = data['config']['max_session_time']
+        config.enable_memory = data['config'].get('enable_memory', True)
+        config.memory_retention_policy = data['config'].get('memory_retention_policy', 'adaptive')
+        
+        # Create context
+        context = SessionContext(data['session_id'])
+        context.user_id = data['context']['user_id']
+        context.conversation_history = data['context']['conversation_history']
+        context.current_topic = data['context']['current_topic']
+        context.memory_ids = data['context'].get('memory_ids', [])
+        context.important_facts = data['context'].get('important_facts', [])
+        context.custom_data = data['context']['custom_data']
+        
+        # Create session info
+        session_info = SessionInfo(data['session_id'])
+        session_info.state = SessionState(data['state'])
+        session_info.config = config
+        session_info.context = context
+        session_info.interaction_count = data['stats']['interaction_count']
+        session_info.memory_item_count = data['stats'].get('memory_item_count', 0)
+        session_info.memory_retrieval_count = data['stats'].get('memory_retrieval_count', 0)
+        session_info.version = data['version']
+        
+        return session_info
 
 
 class SessionCluster:
@@ -512,1059 +465,996 @@ class SessionCluster:
     def __init__(self, node_id: str, redis_cache: Optional[RedisCache] = None):
         self.node_id = node_id
         self.redis_cache = redis_cache
-        self.cluster_nodes: Dict[str, Dict[str, Any]] = {}
-        self.session_assignments: Dict[str, str] = {}  # session_id -> node_id
+        self.nodes: Dict[str, Dict[str, Any]] = {}
+        self.session_assignments: Dict[str, str] = {}
         self.logger = get_logger(__name__)
     
     async def register_node(self, node_id: str, node_info: Dict[str, Any]) -> None:
         """Register a cluster node."""
-        self.cluster_nodes[node_id] = {
+        self.nodes[node_id] = {
             **node_info,
-            'last_heartbeat': datetime.now(timezone.utc),
-            'status': 'active'
+            'last_heartbeat': datetime.now(timezone.utc)
         }
         
         if self.redis_cache:
             await self.redis_cache.set(
                 f"cluster:node:{node_id}",
-                json.dumps(node_info, default=str),
+                json.dumps(self.nodes[node_id]),
                 ttl=60
             )
     
     async def assign_session(self, session_id: str) -> str:
-        """Assign session to the best available node."""
-        # Simple round-robin assignment for now
-        active_nodes = [
-            node_id for node_id, info in self.cluster_nodes.items()
-            if info['status'] == 'active'
-        ]
+        """Assign a session to a node using consistent hashing."""
+        if not self.nodes:
+            return self.node_id
         
-        if not active_nodes:
-            return self.node_id  # Fallback to current node
+        # Simple consistent hashing
+        hash_value = int(hashlib.md5(session_id.encode()).hexdigest(), 16)
+        nodes = sorted(self.nodes.keys())
+        node_index = hash_value % len(nodes)
+        assigned_node = nodes[node_index]
         
-        # Select node with least load
-        best_node = min(active_nodes, key=lambda n: self.cluster_nodes[n].get('load', 0))
-        self.session_assignments[session_id] = best_node
+        self.session_assignments[session_id] = assigned_node
         
         if self.redis_cache:
-            await self.redis_cache.set(f"session:assignment:{session_id}", best_node)
+            await self.redis_cache.set(
+                f"cluster:session:{session_id}",
+                assigned_node,
+                ttl=3600
+            )
         
-        return best_node
+        return assigned_node
     
     async def migrate_session(self, session_id: str, target_node: str) -> bool:
-        """Migrate session to target node."""
+        """Migrate a session to another node."""
         try:
-            # Implementation would depend on inter-node communication
-            # For now, just update assignment
+            current_node = self.session_assignments.get(session_id)
+            if current_node == target_node:
+                return True
+            
+            # TODO: Implement actual session migration logic
+            # This would involve:
+            # 1. Serializing session data
+            # 2. Transferring to target node
+            # 3. Updating assignment
+            # 4. Cleaning up on source node
+            
             self.session_assignments[session_id] = target_node
             
             if self.redis_cache:
-                await self.redis_cache.set(f"session:assignment:{session_id}", target_node)
+                await self.redis_cache.set(
+                    f"cluster:session:{session_id}",
+                    target_node,
+                    ttl=3600
+                )
             
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to migrate session {session_id}: {str(e)}")
+            self.logger.error(f"Failed to migrate session: {str(e)}")
             return False
     
     async def handle_node_failure(self, failed_node: str) -> None:
         """Handle node failure by reassigning sessions."""
-        if failed_node in self.cluster_nodes:
-            self.cluster_nodes[failed_node]['status'] = 'failed'
+        if failed_node not in self.nodes:
+            return
+        
+        # Remove failed node
+        del self.nodes[failed_node]
         
         # Reassign sessions from failed node
-        failed_sessions = [
-            session_id for session_id, node_id in self.session_assignments.items()
-            if node_id == failed_node
+        sessions_to_reassign = [
+            sid for sid, node in self.session_assignments.items()
+            if node == failed_node
         ]
         
-        for session_id in failed_sessions:
-            new_node = await self.assign_session(session_id)
-            self.logger.info(f"Reassigned session {session_id} from {failed_node} to {new_node}")
+        for session_id in sessions_to_reassign:
+            await self.assign_session(session_id)
+        
+        self.logger.info(f"Reassigned {len(sessions_to_reassign)} sessions from failed node {failed_node}")
 
 
 class EnhancedSessionManager:
     """
-    Advanced Session Management System for the AI Assistant.
-    
-    This manager provides comprehensive session handling including:
-    - Multi-user session support with isolation
-    - Session state persistence and recovery
-    - Context-aware session management
-    - Integration with all core system components
-    - Session clustering for scalability
-    - Real-time monitoring and analytics
-    - Security and authentication integration
-    - Automatic cleanup and optimization
-    - Event-driven session lifecycle
-    - Memory and resource management
+    Enhanced session manager with memory integration, clustering support,
+    and comprehensive session lifecycle management.
     """
     
     def __init__(self, container: Container):
-        """
-        Initialize the enhanced session manager.
-        
-        Args:
-            container: Dependency injection container
-        """
+        """Initialize the enhanced session manager."""
         self.container = container
         self.logger = get_logger(__name__)
         
-        # Core services
-        self.config = container.get(ConfigLoader)
+        # Core dependencies
+        self.config_loader = container.get(ConfigLoader)
         self.event_bus = container.get(EventBus)
-        self.error_handler = container.get(ErrorHandler)
-        self.health_check = container.get(HealthCheck)
         
-        # Memory and storage
-        self.memory_manager = container.get(MemoryManager)
-        self.context_manager = container.get(ContextManager)
-        self.working_memory = container.get(WorkingMemory)
-        self.episodic_memory = container.get(EpisodicMemory)
+        # Configuration
+        self.config = self.config_loader.get('session_manager', {})
+        self.enable_clustering = self.config.get('enable_clustering', False)
+        self.enable_memory = self.config.get('enable_memory', True)
+        self.node_id = self.config.get('node_id', str(uuid.uuid4()))
         
-        # Security components
-        try:
-            self.auth_manager = container.get(AuthenticationManager)
-            self.authz_manager = container.get(AuthorizationManager)
-            self.encryption_manager = container.get(EncryptionManager)
-        except Exception:
-            self.auth_manager = None
-            self.authz_manager = None
-            self.encryption_manager = None
-        
-        # Storage and caching
-        try:
-            self.database = container.get(DatabaseManager)
-            self.redis_cache = container.get(RedisCache)
-            self.backup_manager = container.get(BackupManager)
-        except Exception:
-            self.database = None
-            self.redis_cache = None
-            self.backup_manager = None
-        
-        # Learning systems
-        try:
-            self.continual_learner = container.get(ContinualLearner)
-            self.preference_learner = container.get(PreferenceLearner)
-            self.feedback_processor = container.get(FeedbackProcessor)
-        except Exception:
-            self.continual_learner = None
-            self.preference_learner = None
-            self.feedback_processor = None
-        
-        # Observability
-        self.metrics = container.get(MetricsCollector)
-        self.tracer = container.get(TraceManager)
-        
-        # Session management
-        self.active_sessions: Dict[str, SessionInfo] = {}
-        self.session_locks: Dict[str, asyncio.Lock] = {}
-        self.user_sessions: Dict[str, Set[str]] = defaultdict(set)
-        
-        # Storage backend
+        # Session storage
         self._setup_session_store()
         
+        # Memory integration
+        if self.enable_memory:
+            try:
+                self.memory_integrator = container.get(SessionMemoryIntegrator)
+                self.logger.info("Memory integration enabled for sessions")
+            except Exception as e:
+                self.logger.warning(f"Memory integration not available: {str(e)}")
+                self.memory_integrator = None
+        else:
+            self.memory_integrator = None
+        
+        # Active sessions cache
+        self._sessions: Dict[str, SessionInfo] = {}
+        self._session_locks: Dict[str, asyncio.Lock] = {}
+        self._global_lock = asyncio.Lock()
+        
+        # Optional components
+        try:
+            self.database = container.get(DatabaseManager)
+        except Exception:
+            self.database = None
+            
+        try:
+            self.redis_cache = container.get(RedisCache)
+        except Exception:
+            self.redis_cache = None
+            
+        try:
+            self.encryption = container.get(EncryptionManager)
+        except Exception:
+            self.encryption = None
+        
         # Clustering support
-        self.node_id = self.config.get("sessions.node_id", f"node_{uuid.uuid4().hex[:8]}")
-        self.enable_clustering = self.config.get("sessions.enable_clustering", False)
-        if self.enable_clustering:
+        if self.enable_clustering and self.redis_cache:
             self.cluster = SessionCluster(self.node_id, self.redis_cache)
         else:
             self.cluster = None
         
-        # Configuration
-        self.default_config = SessionConfiguration(
-            max_idle_time=self.config.get("sessions.max_idle_time", 1800.0),
-            max_session_time=self.config.get("sessions.max_session_time", 86400.0),
-            cleanup_on_expire=self.config.get("sessions.cleanup_on_expire", True),
-            persist_context=self.config.get("sessions.persist_context", True),
-            enable_clustering=self.enable_clustering,
-            auto_save_interval=self.config.get("sessions.auto_save_interval", 300.0),
-            encryption_enabled=self.config.get("sessions.encryption_enabled", True),
-            audit_logging=self.config.get("sessions.audit_logging", True)
+        # Health component
+        self.health_component = HealthComponent(
+            name="session_manager",
+            check_callback=self._health_check_callback
         )
         
-        # Performance tracking
-        self.session_stats: Dict[str, Dict[str, Any]] = defaultdict(dict)
-        self.cleanup_stats: Dict[str, int] = defaultdict(int)
+        # Monitoring
+        self._setup_monitoring()
         
         # Background tasks
-        self.cleanup_task: Optional[asyncio.Task] = None
-        self.heartbeat_task: Optional[asyncio.Task] = None
-        self.backup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._backup_task: Optional[asyncio.Task] = None
         
-        # Setup monitoring and health checks
-        self._setup_monitoring()
-        self.health_check.register_component("session_manager", self._health_check_callback)
-        
-        self.logger.info("EnhancedSessionManager initialized successfully")
-
+        self.logger.info(f"Session manager initialized with node ID: {self.node_id}")
+    
     def _setup_session_store(self) -> None:
-        """Setup appropriate session storage backend."""
-        storage_type = self.config.get("sessions.storage_type", "memory")
+        """Set up session storage backend."""
+        storage_type = self.config.get('storage_type', 'memory')
         
-        if storage_type == "database" and self.database:
-            self.session_store = DatabaseSessionStore(self.database, self.encryption_manager)
+        if storage_type == 'database' and self.container.has(DatabaseManager):
+            self.session_store = DatabaseSessionStore(
+                self.container.get(DatabaseManager),
+                self.container.get(EncryptionManager) if self.container.has(EncryptionManager) else None
+            )
+            self.logger.info("Using database session store")
         else:
             self.session_store = MemorySessionStore()
-        
-        self.logger.info(f"Using {type(self.session_store).__name__} for session storage")
-
+            self.logger.info("Using memory session store")
+    
     def _setup_monitoring(self) -> None:
-        """Setup monitoring and metrics."""
+        """Set up monitoring and metrics."""
         try:
-            # Register session metrics
-            self.metrics.register_counter("sessions_created_total")
-            self.metrics.register_counter("sessions_ended_total")
-            self.metrics.register_counter("sessions_expired_total")
-            self.metrics.register_gauge("active_sessions")
-            self.metrics.register_gauge("sessions_by_state")
-            self.metrics.register_histogram("session_duration_seconds")
-            self.metrics.register_histogram("session_memory_usage_mb")
-            self.metrics.register_counter("session_errors_total")
-            self.metrics.register_counter("session_migrations_total")
+            self.metrics = self.container.get(MetricsCollector)
             
-        except Exception as e:
-            self.logger.warning(f"Failed to setup monitoring: {str(e)}")
-
+            # Register metrics
+            self.metrics.register_counter("session_created_total", 
+                                        "Total sessions created")
+            self.metrics.register_counter("session_ended_total", 
+                                        "Total sessions ended")
+            self.metrics.register_gauge("session_active_count", 
+                                      "Number of active sessions")
+            self.metrics.register_histogram("session_duration_seconds", 
+                                          "Session duration in seconds")
+            self.metrics.register_counter("session_memory_operations_total",
+                                        "Total memory operations in sessions")
+            
+        except Exception:
+            self.logger.warning("Metrics collector not available")
+            self.metrics = None
+            
+        try:
+            self.tracer = self.container.get(TraceManager)
+        except Exception:
+            self.tracer = None
+    
     async def initialize(self) -> None:
         """Initialize the session manager."""
-        try:
-            # Initialize session store
-            if hasattr(self.session_store, 'initialize'):
-                await self.session_store.initialize()
-            
-            # Initialize cluster if enabled
-            if self.cluster:
-                await self.cluster.register_node(self.node_id, {
-                    'hostname': self.config.get("hostname", "localhost"),
-                    'capacity': self.config.get("sessions.max_sessions_per_node", 1000),
-                    'load': 0
-                })
-            
-            # Start background tasks
-            self.cleanup_task = asyncio.create_task(self._cleanup_loop())
-            self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-            
-            if self.backup_manager:
-                self.backup_task = asyncio.create_task(self._backup_loop())
-            
-            # Register event handlers
-            await self._register_event_handlers()
-            
-            # Load existing sessions if recovering
-            await self._recover_sessions()
-            
-            self.logger.info("SessionManager initialization completed")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize SessionManager: {str(e)}")
-            raise SessionError(f"Initialization failed: {str(e)}")
-
+        self.logger.info("Initializing session manager...")
+        
+        # Register event handlers
+        await self._register_event_handlers()
+        
+        # Recover persisted sessions
+        await self._recover_sessions()
+        
+        # Start background tasks
+        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        
+        if self.config.get('enable_backup', True):
+            self._backup_task = asyncio.create_task(self._backup_loop())
+        
+        # Register with cluster if enabled
+        if self.cluster:
+            await self.cluster.register_node(self.node_id, {
+                'type': 'session_manager',
+                'capacity': self.config.get('max_sessions', 10000),
+                'current_load': len(self._sessions)
+            })
+        
+        # Register health component
+        await self.event_bus.emit(ComponentHealthChanged(
+            component_name="session_manager",
+            health_status="healthy",
+            details={"active_sessions": len(self._sessions)}
+        ))
+        
+        self.logger.info("Session manager initialized successfully")
+    
     async def _register_event_handlers(self) -> None:
-        """Register event handlers for system events."""
-        # Component health events
-        self.event_bus.subscribe("component_health_changed", self._handle_component_health_change)
-        
-        # System shutdown events
-        self.event_bus.subscribe("system_shutdown_started", self._handle_system_shutdown)
-        
-        # User events
-        self.event_bus.subscribe("user_authenticated", self._handle_user_authentication)
-        self.event_bus.subscribe("user_logged_out", self._handle_user_logout)
-
+        """Register event handlers."""
+        self.event_bus.subscribe(ComponentHealthChanged, self._handle_component_health_change)
+        self.event_bus.subscribe(SystemShutdown, self._handle_system_shutdown)
+        self.event_bus.subscribe(UserAuthentication, self._handle_user_authentication)
+        self.event_bus.subscribe(UserLogout, self._handle_user_logout)
+        self.event_bus.subscribe(MessageReceived, self._handle_message_received)
+    
     async def _recover_sessions(self) -> None:
-        """Recover sessions after restart."""
+        """Recover sessions from persistent storage."""
         try:
             session_ids = await self.session_store.list_sessions()
-            recovered_count = 0
+            recovered = 0
             
             for session_id in session_ids:
-                try:
-                    session_info = await self.session_store.load_session(session_id)
-                    if session_info and session_info.state in [SessionState.ACTIVE, SessionState.IDLE]:
-                        # Check if session should be expired
-                        if session_info.expires_at and datetime.now(timezone.utc) > session_info.expires_at:
-                            await self._expire_session(session_id)
-                        else:
-                            # Restore session
-                            self.active_sessions[session_id] = session_info
-                            self.session_locks[session_id] = asyncio.Lock()
-                            
-                            if session_info.context.user_id:
-                                self.user_sessions[session_info.context.user_id].add(session_id)
-                            
-                            recovered_count += 1
-                            
-                except Exception as e:
-                    self.logger.warning(f"Failed to recover session {session_id}: {str(e)}")
+                session_info = await self.session_store.load_session(session_id)
+                if session_info and session_info.state == SessionState.ACTIVE:
+                    self._sessions[session_id] = session_info
+                    recovered += 1
             
-            self.logger.info(f"Recovered {recovered_count} active sessions")
-            
+            if recovered > 0:
+                self.logger.info(f"Recovered {recovered} active sessions")
+                
         except Exception as e:
             self.logger.error(f"Failed to recover sessions: {str(e)}")
-
-    @handle_exceptions
+    
     async def create_session(
         self,
         user_id: Optional[str] = None,
-        session_config: Optional[SessionConfiguration] = None,
-        context_data: Optional[Dict[str, Any]] = None
+        session_type: SessionType = SessionType.INTERACTIVE,
+        config: Optional[SessionConfiguration] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> str:
-        """
-        Create a new session.
-        
-        Args:
-            user_id: Optional user identifier
-            session_config: Session configuration
-            context_data: Initial context data
-            
-        Returns:
-            Session ID
-        """
+        """Create a new session with optional memory support."""
+        # Generate session ID
         session_id = str(uuid.uuid4())
-        config = session_config or self.default_config
         
-        # Create session context
-        context = SessionContext(
-            session_id=session_id,
-            user_id=user_id
-        )
+        # Use provided config or create default
+        if not config:
+            config = SessionConfiguration(session_type=session_type)
         
-        if context_data:
-            context.custom_data.update(context_data)
+        # Create context
+        context = SessionContext(session_id=session_id, user_id=user_id)
         
-        # Load user profile and preferences
+        # Add metadata
+        if metadata:
+            context.metadata.update(metadata)
+        
+        # Load user profile and preferences if available
         if user_id:
             await self._load_user_context(context)
-        
-        # Calculate expiration time
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=config.max_session_time)
         
         # Create session info
         session_info = SessionInfo(
             session_id=session_id,
-            state=SessionState.INITIALIZING,
+            state=SessionState.ACTIVE,
             config=config,
-            context=context,
-            expires_at=expires_at
+            context=context
         )
         
-        # Assign to cluster node if clustering enabled
-        if self.cluster:
-            target_node = await self.cluster.assign_session(session_id)
-            session_info.cluster_node = target_node
-            
-            if target_node != self.node_id:
-                # Session assigned to different node
-                await self.cluster.migrate_session(session_id, target_node)
-                return session_id
+        # Set expiration
+        if config.max_session_time > 0:
+            session_info.expires_at = datetime.now(timezone.utc) + timedelta(
+                seconds=config.max_session_time
+            )
         
         # Store session
-        async with self._get_session_lock(session_id):
+        async with self._global_lock:
+            self._sessions[session_id] = session_info
+            self._session_locks[session_id] = asyncio.Lock()
+        
+        # Persist to storage
+        await self.session_store.store_session(session_info)
+        
+        # Initialize memory if enabled
+        if self.memory_integrator and config.enable_memory:
             try:
-                # Initialize session state
-                session_info.state = SessionState.ACTIVE
-                session_info.started_at = datetime.now(timezone.utc)
+                # Initialize memory context for session
+                await self.memory_integrator._handle_session_started(
+                    SessionStarted(session_id=session_id, user_id=user_id)
+                )
                 
-                # Store in memory and persistence
-                self.active_sessions[session_id] = session_info
-                await self.session_store.store_session(session_info)
-                
-                # Track user sessions
+                # Retrieve relevant past memories if user is authenticated
                 if user_id:
-                    self.user_sessions[user_id].add(session_id)
-                
-                # Initialize working memory for session
-                await self.working_memory.initialize_session(session_id)
-                
-                # Emit session started event
-                await self.event_bus.emit(SessionStarted(
-                    session_id=session_id,
-                    user_id=user_id,
-                    session_type=config.session_type.value,
-                    created_at=session_info.created_at
-                ))
-                
-                # Update metrics
-                self.metrics.increment("sessions_created_total")
-                self.metrics.set("active_sessions", len(self.active_sessions))
-                
-                self.logger.info(f"Created session: {session_id} for user: {user_id}")
-                return session_id
-                
+                    memories = await self.memory_integrator.retrieve_session_memories(
+                        session_id=session_id,
+                        limit=5
+                    )
+                    
+                    # Store memory references in context
+                    for memory in memories:
+                        context.memory_ids.append(memory['memory_id'])
+                        
             except Exception as e:
-                # Cleanup on failure
-                self.active_sessions.pop(session_id, None)
-                if user_id:
-                    self.user_sessions[user_id].discard(session_id)
-                
-                raise SessionError(f"Failed to create session: {str(e)}", session_id)
-
+                self.logger.error(f"Failed to initialize memory for session: {str(e)}")
+        
+        # Emit event
+        await self.event_bus.emit(SessionStarted(
+            session_id=session_id,
+            user_id=user_id,
+            session_type=session_type.value,
+            metadata=metadata
+        ))
+        
+        # Update metrics
+        if self.metrics:
+            self.metrics.increment("session_created_total")
+            self.metrics.gauge("session_active_count", len(self._sessions))
+        
+        self.logger.info(f"Created session {session_id} for user {user_id}")
+        
+        return session_id
+    
     async def _load_user_context(self, context: SessionContext) -> None:
-        """Load user profile and preferences into session context."""
+        """Load user context and preferences."""
         try:
-            user_id = context.user_id
-            if not user_id:
-                return
-            
-            # Load user preferences
-            if self.preference_learner:
-                user_prefs = await self.preference_learner.get_user_preferences(user_id)
-                context.user_preferences.update(user_prefs or {})
-            
-            # Load authentication data
-            if self.auth_manager:
-                auth_data = await self.auth_manager.get_user_info(user_id)
-                context.authentication_data.update(auth_data or {})
-            
-            # Load user profile from memory
-            user_memories = await self.episodic_memory.get_user_memories(user_id, limit=10)
-            context.episodic_memories.extend([m.get('id') for m in user_memories if m.get('id')])
-            
+            # TODO: Load from user service or database
+            # This is a placeholder implementation
+            context.user_preferences = {
+                'language': 'en',
+                'theme': 'light',
+                'notifications': True
+            }
         except Exception as e:
-            self.logger.warning(f"Failed to load user context for {context.user_id}: {str(e)}")
-
+            self.logger.error(f"Failed to load user context: {str(e)}")
+    
     def _get_session_lock(self, session_id: str) -> asyncio.Lock:
-        """Get or create a lock for session operations."""
-        if session_id not in self.session_locks:
-            self.session_locks[session_id] = asyncio.Lock()
-        return self.session_locks[session_id]
-
-    @handle_exceptions
+        """Get or create a lock for a session."""
+        if session_id not in self._session_locks:
+            self._session_locks[session_id] = asyncio.Lock()
+        return self._session_locks[session_id]
+    
     async def get_session(self, session_id: str) -> Optional[SessionInfo]:
-        """
-        Get session information.
+        """Get session by ID with memory context."""
+        # Check cache first
+        if session_id in self._sessions:
+            session = self._sessions[session_id]
+            await self._update_last_activity(session)
+            
+            # Enhance with memory context if available
+            if self.memory_integrator and session.config.enable_memory:
+                try:
+                    memory_context = await self.memory_integrator.get_session_context(session_id)
+                    session.context.working_memory_data = memory_context.get('context', {})
+                except Exception as e:
+                    self.logger.error(f"Failed to get memory context: {str(e)}")
+            
+            return session
         
-        Args:
-            session_id: Session identifier
+        # Try loading from storage
+        session = await self.session_store.load_session(session_id)
+        if session:
+            # Cache it
+            async with self._global_lock:
+                self._sessions[session_id] = session
+                if session_id not in self._session_locks:
+                    self._session_locks[session_id] = asyncio.Lock()
             
-        Returns:
-            Session information or None if not found
-        """
-        # Check active sessions first
-        if session_id in self.active_sessions:
-            session_info = self.active_sessions[session_id]
-            await self._update_last_activity(session_info)
-            return session_info
-        
-        # Try to load from storage
-        session_info = await self.session_store.load_session(session_id)
-        if session_info:
-            # Check if session is still valid
-            if session_info.expires_at and datetime.now(timezone.utc) > session_info.expires_at:
-                await self._expire_session(session_id)
-                return None
-            
-            # Restore to active sessions
-            self.active_sessions[session_id] = session_info
-            self.session_locks[session_id] = asyncio.Lock()
-            
-            if session_info.context.user_id:
-                self.user_sessions[session_info.context.user_id].add(session_id)
-            
-            await self._update_last_activity(session_info)
-            return session_info
+            await self._update_last_activity(session)
+            return session
         
         return None
-
+    
     async def _update_last_activity(self, session_info: SessionInfo) -> None:
-        """Update session last activity timestamp."""
-        current_time = datetime.now(timezone.utc)
-        session_info.last_activity = current_time
-        session_info.context.last_activity = current_time
-        session_info.context.last_heartbeat = current_time
-        
-        # Save periodically to avoid too frequent writes
-        if hasattr(session_info, '_last_save'):
-            time_since_save = (current_time - session_info._last_save).total_seconds()
-            if time_since_save < 30:  # Don't save more than once per 30 seconds
-                return
-        
-        session_info._last_save = current_time
-        await self.session_store.store_session(session_info)
-
-    @handle_exceptions
+        """Update session last activity time."""
+        session_info.last_activity = datetime.now(timezone.utc)
+        session_info.version += 1
+    
     async def update_session_context(
         self,
         session_id: str,
-        context_updates: Dict[str, Any]
-    ) -> None:
-        """
-        Update session context.
+        updates: Dict[str, Any],
+        merge: bool = True
+    ) -> bool:
+        """Update session context with optional memory storage."""
+        session = await self.get_session(session_id)
+        if not session:
+            return False
         
-        Args:
-            session_id: Session identifier
-            context_updates: Context data to update
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            try:
-                # Update context
-                for key, value in context_updates.items():
-                    if hasattr(session_info.context, key):
-                        setattr(session_info.context, key, value)
+        lock = self._get_session_lock(session_id)
+        async with lock:
+            if merge:
+                # Merge updates into existing context
+                for key, value in updates.items():
+                    if hasattr(session.context, key):
+                        if isinstance(getattr(session.context, key), dict):
+                            getattr(session.context, key).update(value)
+                        elif isinstance(getattr(session.context, key), list):
+                            getattr(session.context, key).extend(value)
+                        else:
+                            setattr(session.context, key, value)
                     else:
-                        session_info.context.custom_data[key] = value
-                
-                # Update version and checksum
-                session_info.version += 1
-                session_info.checksum = self._calculate_checksum(session_info)
-                
-                # Save updated session
-                await self.session_store.store_session(session_info)
-                
-                # Emit context updated event
-                await self.event_bus.emit(SessionContextUpdated(
-                    session_id=session_id,
-                    user_id=session_info.context.user_id,
-                    updates=list(context_updates.keys())
-                ))
-                
-                self.logger.debug(f"Updated context for session: {session_id}")
-                
-            except Exception as e:
-                raise SessionError(f"Failed to update session context: {str(e)}", session_id)
-
+                        session.context.custom_data[key] = value
+            else:
+                # Replace context values
+                for key, value in updates.items():
+                    if hasattr(session.context, key):
+                        setattr(session.context, key, value)
+                    else:
+                        session.context.custom_data[key] = value
+            
+            # Store important facts in memory if identified
+            if self.memory_integrator and session.config.enable_memory:
+                important_facts = updates.get('important_facts', [])
+                for fact in important_facts:
+                    if isinstance(fact, dict):
+                        memory_id = await self.memory_integrator.store_session_fact(
+                            session_id=session_id,
+                            user_id=session.context.user_id,
+                            fact=fact.get('content', ''),
+                            importance=fact.get('importance', 0.7),
+                            tags=set(fact.get('tags', []))
+                        )
+                        if memory_id:
+                            session.context.memory_ids.append(memory_id)
+                            session.context.important_facts.append(fact)
+            
+            # Update version and checksum
+            session.version += 1
+            session.checksum = self._calculate_checksum(session)
+            
+            # Persist changes
+            await self.session_store.store_session(session)
+            
+            return True
+    
     def _calculate_checksum(self, session_info: SessionInfo) -> str:
-        """Calculate checksum for session data integrity."""
-        try:
-            # Create a simplified representation for checksum
-            data = {
-                'session_id': session_info.session_id,
-                'version': session_info.version,
-                'state': session_info.state.value,
-                'context_size': len(str(session_info.context.custom_data))
-            }
-            return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
-        except Exception:
-            return "unknown"
-
-    @handle_exceptions
+        """Calculate session checksum for integrity verification."""
+        data = f"{session_info.session_id}{session_info.version}{session_info.state.value}"
+        return hashlib.sha256(data.encode()).hexdigest()[:16]
+    
     async def add_interaction(
         self,
         session_id: str,
-        interaction_data: Dict[str, Any]
-    ) -> None:
-        """
-        Add interaction data to session.
+        interaction_type: str,
+        data: Dict[str, Any]
+    ) -> bool:
+        """Add an interaction to session history with memory storage."""
+        session = await self.get_session(session_id)
+        if not session:
+            return False
         
-        Args:
-            session_id: Session identifier
-            interaction_data: Interaction data
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            # Add to interaction history
-            interaction_entry = {
+        lock = self._get_session_lock(session_id)
+        async with lock:
+            interaction = {
                 'timestamp': datetime.now(timezone.utc).isoformat(),
-                'data': interaction_data
+                'type': interaction_type,
+                'data': data
             }
             
-            session_info.context.interaction_history.append(interaction_entry)
-            session_info.interaction_count += 1
+            session.context.interaction_history.append(interaction)
+            session.touch()
             
-            # Limit history size
-            max_history = session_info.config.context_window_size
-            if len(session_info.context.interaction_history) > max_history:
-                session_info.context.interaction_history = session_info.context.interaction_history[-max_history:]
-            
-            # Update performance metrics
-            if 'processing_time' in interaction_data:
-                session_info.total_processing_time += interaction_data['processing_time']
-                
-                # Update average response time
-                session_info.response_time_avg = (
-                    session_info.total_processing_time / session_info.interaction_count
+            # Store in memory if it's a message interaction
+            if self.memory_integrator and interaction_type in ['user_message', 'assistant_response']:
+                await self.memory_integrator._handle_message_processed(
+                    MessageProcessed(
+                        session_id=session_id,
+                        user_id=session.context.user_id,
+                        message=data.get('message', ''),
+                        response=data.get('response', ''),
+                        metadata=data
+                    )
                 )
+                session.memory_item_count += 1
             
-            await self._update_last_activity(session_info)
-
-    @handle_exceptions
+            # Keep interaction history size manageable
+            max_history = session.config.context_window_size // 10
+            if len(session.context.interaction_history) > max_history:
+                session.context.interaction_history = session.context.interaction_history[-max_history:]
+            
+            await self.session_store.store_session(session)
+            
+            return True
+    
     async def add_workflow(
         self,
         session_id: str,
         workflow_id: str,
         workflow_data: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """
-        Add workflow to session.
+    ) -> bool:
+        """Add a workflow to session tracking."""
+        session = await self.get_session(session_id)
+        if not session:
+            return False
         
-        Args:
-            session_id: Session identifier
-            workflow_id: Workflow identifier
-            workflow_data: Optional workflow data
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            session_info.context.active_workflows.add(workflow_id)
-            session_info.workflow_count += 1
+        lock = self._get_session_lock(session_id)
+        async with lock:
+            session.context.active_workflows.add(workflow_id)
+            session.workflow_count += 1
             
             if workflow_data:
-                session_info.context.custom_data[f"workflow_{workflow_id}"] = workflow_data
+                session.context.custom_data[f"workflow_{workflow_id}"] = workflow_data
             
-            await self._update_last_activity(session_info)
-
-    @handle_exceptions
+            await self.session_store.store_session(session)
+            
+            return True
+    
     async def remove_workflow(
         self,
         session_id: str,
         workflow_id: str
-    ) -> None:
-        """
-        Remove workflow from session.
+    ) -> bool:
+        """Remove a workflow from session tracking."""
+        session = await self.get_session(session_id)
+        if not session:
+            return False
         
-        Args:
-            session_id: Session identifier
-            workflow_id: Workflow identifier
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            return
-        
-        async with self._get_session_lock(session_id):
-            session_info.context.active_workflows.discard(workflow_id)
-            session_info.context.custom_data.pop(f"workflow_{workflow_id}", None)
+        lock = self._get_session_lock(session_id)
+        async with lock:
+            session.context.active_workflows.discard(workflow_id)
+            session.context.custom_data.pop(f"workflow_{workflow_id}", None)
             
-            await self._update_last_activity(session_info)
-
-    @handle_exceptions
+            await self.session_store.store_session(session)
+            
+            return True
+    
+    async def process_message(
+        self,
+        session_id: str,
+        message: str,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Process a message with memory-enhanced context."""
+        # Ensure session exists
+        session = await self.get_session(session_id)
+        if not session:
+            session_id = await self.create_session(user_id=user_id)
+            session = await self.get_session(session_id)
+        
+        session.touch()
+        session.message_count += 1
+        
+        # Get memory context if available
+        memory_context = {}
+        if self.memory_integrator and session.config.enable_memory:
+            try:
+                memory_context = await self.memory_integrator.get_session_context(session_id)
+                session.memory_retrieval_count += 1
+            except Exception as e:
+                self.logger.error(f"Failed to get memory context: {str(e)}")
+        
+        # TODO: Process message with core engine
+        # This is a placeholder response
+        response = {
+            "text": f"Processed message with memory context: {message}",
+            "session_id": session_id,
+            "context_used": bool(memory_context),
+            "memory_context_size": len(json.dumps(memory_context)),
+            "session_stats": {
+                "interaction_count": session.interaction_count,
+                "memory_item_count": session.memory_item_count
+            }
+        }
+        
+        # Store interaction
+        await self.add_interaction(
+            session_id=session_id,
+            interaction_type='conversation',
+            data={
+                'message': message,
+                'response': response['text'],
+                'memory_context_used': bool(memory_context)
+            }
+        )
+        
+        return response
+    
+    async def store_session_fact(
+        self,
+        session_id: str,
+        fact: str,
+        importance: float = 0.7,
+        tags: Optional[Set[str]] = None
+    ) -> str:
+        """Store an important fact learned in the session."""
+        session = await self.get_session(session_id)
+        if not session or not self.memory_integrator:
+            return ""
+        
+        memory_id = await self.memory_integrator.store_session_fact(
+            session_id=session_id,
+            user_id=session.context.user_id,
+            fact=fact,
+            importance=importance,
+            tags=tags
+        )
+        
+        if memory_id:
+            # Update session context
+            lock = self._get_session_lock(session_id)
+            async with lock:
+                session.context.memory_ids.append(memory_id)
+                session.context.important_facts.append({
+                    "memory_id": memory_id,
+                    "fact": fact,
+                    "importance": importance,
+                    "tags": list(tags or set()),
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
+                session.memory_item_count += 1
+                
+                await self.session_store.store_session(session)
+        
+        return memory_id
+    
+    async def get_session_memories(
+        self,
+        session_id: str,
+        query: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Get memories for a specific session."""
+        if not self.memory_integrator:
+            return []
+        
+        session = await self.get_session(session_id)
+        if session:
+            session.memory_retrieval_count += 1
+        
+        return await self.memory_integrator.retrieve_session_memories(
+            session_id=session_id,
+            query=query,
+            limit=limit
+        )
+    
     async def end_session(
         self,
         session_id: str,
-        reason: str = "user_ended"
-    ) -> None:
-        """
-        End a session.
+        reason: str = "user_request"
+    ) -> bool:
+        """End a session and consolidate memories."""
+        session = await self.get_session(session_id)
+        if not session:
+            return False
         
-        Args:
-            session_id: Session identifier
-            reason: Reason for ending the session
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            return
-        
-        async with self._get_session_lock(session_id):
-            try:
-                # Calculate session duration
-                duration = (
-                    datetime.now(timezone.utc) - session_info.created_at
-                ).total_seconds()
-                
-                # Update session state
-                session_info.state = SessionState.TERMINATED
-                
-                # Store final session state
-                await self.session_store.store_session(session_info)
-                
-                # Cleanup working memory
-                await self.working_memory.cleanup_session(session_id)
-                
-                # Store session in episodic memory for learning
-                if self.episodic_memory and session_info.context.user_id:
-                    session_memory = {
-                        'session_id': session_id,
-                        'user_id': session_info.context.user_id,
-                        'duration': duration,
-                        'interaction_count': session_info.interaction_count,
-                        'workflow_count': session_info.workflow_count,
-                        'total_processing_time': session_info.total_processing_time,
-                        'reason': reason,
-                        'context_summary': self._summarize_session_context(session_info.context)
-                    }
-                    
-                    await self.episodic_memory.store(session_memory)
-                
-                # Remove from active sessions
-                self.active_sessions.pop(session_id, None)
-                self.session_locks.pop(session_id, None)
-                
-                if session_info.context.user_id:
-                    self.user_sessions[session_info.context.user_id].discard(session_id)
-                
-                # Emit session ended event
-                await self.event_bus.emit(SessionEnded(
-                    session_id=session_id,
-                    user_id=session_info.context.user_id,
-                    duration=duration,
-                    interaction_count=session_info.interaction_count,
-                    reason=reason
-                ))
-                
-                # Update metrics
-                self.metrics.increment("sessions_ended_total")
-                self.metrics.record("session_duration_seconds", duration)
-                self.metrics.set("active_sessions", len(self.active_sessions))
-                
-                self.logger.info(f"Ended session: {session_id} (reason: {reason}, duration: {duration:.2f}s)")
-                
-            except Exception as e:
-                self.logger.error(f"Error ending session {session_id}: {str(e)}")
-                raise SessionError(f"Failed to end session: {str(e)}", session_id)
-
-    def _summarize_session_context(self, context: SessionContext) -> Dict[str, Any]:
-        """Create a summary of session context for memory storage."""
-        return {
-            'user_id': context.user_id,
-            'duration': (context.last_activity - context.created_at).total_seconds(),
-            'topics_discussed': list(set([
-                interaction.get('data', {}).get('topic', 'unknown')
-                for interaction in context.interaction_history
-                if isinstance(interaction, dict)
-            ])),
-            'interaction_count': len(context.interaction_history),
-            'active_workflows': len(context.active_workflows),
-            'device_type': context.device_info.get('type', 'unknown'),
-            'primary_language': context.user_preferences.get('language', 'en'),
-            'session_quality': 'high' if len(context.interaction_history) > 5 else 'low'
-        }
-
-    async def _expire_session(self, session_id: str) -> None:
-        """Expire a session due to timeout."""
-        try:
-            session_info = self.active_sessions.get(session_id)
-            if session_info:
-                session_info.state = SessionState.EXPIRED
-                
-                # Store expired state
-                await self.session_store.store_session(session_info)
-                
-                # Emit expiration event
-                await self.event_bus.emit(SessionExpired(
-                    session_id=session_id,
-                    user_id=session_info.context.user_id,
-                    duration=(datetime.now(timezone.utc) - session_info.created_at).total_seconds()
-                ))
-                
-                # Update metrics
-                self.metrics.increment("sessions_expired_total")
+        lock = self._get_session_lock(session_id)
+        async with lock:
+            # Update session state
+            session.state = SessionState.TERMINATED
+            
+            # Calculate session duration
+            duration = (datetime.now(timezone.utc) - session.created_at).total_seconds()
+            
+            # Create session summary
+            summary = self._summarize_session_context(session.context)
+            
+            # Consolidate memories if enabled
+            if self.memory_integrator and session.config.enable_memory:
+                try:
+                    await self.memory_integrator._handle_session_ended(
+                        SessionEnded(
+                            session_id=session_id,
+                            user_id=session.context.user_id,
+                            duration=duration,
+                            reason=reason,
+                            summary=summary
+                        )
+                    )
+                    session.memory_consolidation_count += 1
+                except Exception as e:
+                    self.logger.error(f"Failed to consolidate session memories: {str(e)}")
+            
+            # Remove from active sessions
+            del self._sessions[session_id]
+            del self._session_locks[session_id]
+            
+            # Persist final state
+            await self.session_store.store_session(session)
             
             # Clean up if configured
-            if session_info and session_info.config.cleanup_on_expire:
-                await self.end_session(session_id, "expired")
+            if session.config.cleanup_on_expire:
+                await self.session_store.delete_session(session_id)
             
-        except Exception as e:
-            self.logger.error(f"Error expiring session {session_id}: {str(e)}")
-
-    @handle_exceptions
+            # Emit event
+            await self.event_bus.emit(SessionEnded(
+                session_id=session_id,
+                user_id=session.context.user_id,
+                duration=duration,
+                reason=reason,
+                summary=summary
+            ))
+            
+            # Update metrics
+            if self.metrics:
+                self.metrics.increment("session_ended_total")
+                self.metrics.gauge("session_active_count", len(self._sessions))
+                self.metrics.record("session_duration_seconds", duration)
+                if session.memory_item_count > 0:
+                    self.metrics.increment(
+                        "session_memory_operations_total",
+                        value=session.memory_item_count
+                    )
+            
+            self.logger.info(f"Ended session {session_id} after {duration:.1f} seconds")
+            
+            return True
+    
+    def _summarize_session_context(self, context: SessionContext) -> Dict[str, Any]:
+        """Create a summary of session context."""
+        return {
+            'user_id': context.user_id,
+            'topics_discussed': list(set(context.conversation_flow)),
+            'interaction_count': len(context.interaction_history),
+            'workflows_executed': len(context.active_workflows),
+            'memory_items_created': len(context.memory_ids),
+            'important_facts': len(context.important_facts),
+            'custom_data_keys': list(context.custom_data.keys())
+        }
+    
+    async def _expire_session(self, session_id: str) -> None:
+        """Expire a session due to timeout."""
+        await self.end_session(session_id, reason="timeout")
+    
     async def pause_session(self, session_id: str) -> None:
-        """
-        Pause a session.
-        
-        Args:
-            session_id: Session identifier
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            if session_info.state == SessionState.ACTIVE:
-                session_info.state = SessionState.PAUSED
-                await self.session_store.store_session(session_info)
-                
-                await self.event_bus.emit(SessionStateChanged(
-                    session_id=session_id,
-                    old_state=SessionState.ACTIVE.value,
-                    new_state=SessionState.PAUSED.value
-                ))
-
-    @handle_exceptions
+        """Pause a session."""
+        session = await self.get_session(session_id)
+        if session and session.state == SessionState.ACTIVE:
+            lock = self._get_session_lock(session_id)
+            async with lock:
+                session.state = SessionState.PAUSED
+                await self.session_store.store_session(session)
+    
     async def resume_session(self, session_id: str) -> None:
-        """
-        Resume a paused session.
-        
-        Args:
-            session_id: Session identifier
-        """
-        session_info = await self.get_session(session_id)
-        if not session_info:
-            raise SessionError(f"Session {session_id} not found")
-        
-        async with self._get_session_lock(session_id):
-            if session_info.state == SessionState.PAUSED:
-                session_info.state = SessionState.ACTIVE
-                await self.session_store.store_session(session_info)
-                
-                await self.event_bus.emit(SessionStateChanged(
-                    session_id=session_id,
-                    old_state=SessionState.PAUSED.value,
-                    new_state=SessionState.ACTIVE.value
-                ))
-
+        """Resume a paused session."""
+        session = await self.get_session(session_id)
+        if session and session.state == SessionState.PAUSED:
+            lock = self._get_session_lock(session_id)
+            async with lock:
+                session.state = SessionState.ACTIVE
+                session.last_activity = datetime.now(timezone.utc)
+                await self.session_store.store_session(session)
+    
     def list_user_sessions(self, user_id: str) -> List[str]:
-        """
-        List all sessions for a user.
-        
-        Args:
-            user_id: User identifier
-            
-        Returns:
-            List of session IDs
-        """
-        return list(self.user_sessions.get(user_id, set()))
-
+        """List all active sessions for a user."""
+        return [
+            sid for sid, session in self._sessions.items()
+            if session.context.user_id == user_id and session.state == SessionState.ACTIVE
+        ]
+    
     def get_active_sessions(self) -> List[Dict[str, Any]]:
         """Get information about all active sessions."""
         sessions = []
-        
-        for session_id, session_info in self.active_sessions.items():
-            sessions.append({
-                'session_id': session_id,
-                'user_id': session_info.context.user_id,
-                'state': session_info.state.value,
-                'created_at': session_info.created_at.isoformat(),
-                'last_activity': session_info.last_activity.isoformat(),
-                'interaction_count': session_info.interaction_count,
-                'workflow_count': session_info.workflow_count,
-                'memory_usage_mb': session_info.memory_usage_mb,
-                'response_time_avg': session_info.response_time_avg,
-                'cluster_node': session_info.cluster_node
-            })
-        
+        for session in self._sessions.values():
+            if session.state == SessionState.ACTIVE:
+                sessions.append({
+                    'session_id': session.session_id,
+                    'user_id': session.context.user_id,
+                    'type': session.config.session_type.value,
+                    'duration': (datetime.now(timezone.utc) - session.created_at).total_seconds(),
+                    'interaction_count': session.interaction_count,
+                    'memory_item_count': session.memory_item_count,
+                    'last_activity': session.last_activity.isoformat()
+                })
         return sessions
-
+    
     def get_session_statistics(self) -> Dict[str, Any]:
         """Get comprehensive session statistics."""
-        total_sessions = len(self.active_sessions)
+        now = datetime.now(timezone.utc)
+        active_sessions = [s for s in self._sessions.values() if s.state == SessionState.ACTIVE]
         
-        states_count = defaultdict(int)
-        total_interactions = 0
-        total_workflows = 0
-        total_memory = 0.0
-        
-        for session_info in self.active_sessions.values():
-            states_count[session_info.state.value] += 1
-            total_interactions += session_info.interaction_count
-            total_workflows += session_info.workflow_count
-            total_memory += session_info.memory_usage_mb
+        total_memory_items = sum(s.memory_item_count for s in self._sessions.values())
+        total_memory_retrievals = sum(s.memory_retrieval_count for s in self._sessions.values())
         
         return {
-            'total_active_sessions': total_sessions,
-            'sessions_by_state': dict(states_count),
-            'total_interactions': total_interactions,
-            'total_workflows': total_workflows,
-            'total_memory_usage_mb': total_memory,
-            'average_memory_per_session_mb': total_memory / max(total_sessions, 1),
-            'cleanup_stats': dict(self.cleanup_stats),
+            'total_active': len(active_sessions),
+            'by_type': {
+                session_type.value: len([s for s in active_sessions if s.config.session_type == session_type])
+                for session_type in SessionType
+            },
+            'average_duration': sum(
+                (now - s.created_at).total_seconds() for s in active_sessions
+            ) / len(active_sessions) if active_sessions else 0,
+            'total_interactions': sum(s.interaction_count for s in active_sessions),
+            'memory_stats': {
+                'total_items': total_memory_items,
+                'total_retrievals': total_memory_retrievals,
+                'sessions_with_memory': len([s for s in active_sessions if s.memory_item_count > 0])
+            },
             'node_id': self.node_id,
-            'clustering_enabled': self.enable_clustering
+            'clustering_enabled': self.enable_clustering,
+            'memory_enabled': self.enable_memory
         }
-
+    
     async def _cleanup_loop(self) -> None:
-        """Background task for session cleanup."""
+        """Background task to clean up expired sessions."""
         while True:
             try:
-                current_time = datetime.now(timezone.utc)
-                expired_sessions = []
-                idle_sessions = []
+                # Wait for cleanup interval
+                await asyncio.sleep(self.config.get('cleanup_interval', 300))
                 
-                # Check for expired and idle sessions
-                for session_id, session_info in list(self.active_sessions.items()):
-                    # Check expiration
-                    if session_info.expires_at and current_time > session_info.expires_at:
-                        expired_sessions.append(session_id)
-                        continue
-                    
-                    # Check idle timeout
-                    idle_time = (current_time - session_info.last_activity).total_seconds()
-                    if idle_time > session_info.config.max_idle_time:
-                        if session_info.state == SessionState.ACTIVE:
-                            session_info.state = SessionState.IDLE
-                        elif session_info.state == SessionState.IDLE and idle_time > session_info.config.max_idle_time * 2:
-                            idle_sessions.append(session_id)
+                # Find expired sessions
+                now = datetime.now(timezone.utc)
+                expired = []
                 
-                # Clean up expired sessions
-                for session_id in expired_sessions:
-                    try:
-                        await self._expire_session(session_id)
-                        self.cleanup_stats['expired'] += 1
-                    except Exception as e:
-                        self.logger.error(f"Failed to expire session {session_id}: {str(e)}")
+                for session_id, session in list(self._sessions.items()):
+                    # Check for timeout
+                    idle_time = (now - session.last_activity).total_seconds()
+                    if idle_time > session.config.max_idle_time:
+                        expired.append((session_id, 'idle_timeout'))
+                    # Check for max session time
+                    elif session.expires_at and session.expires_at < now:
+                        expired.append((session_id, 'max_time_exceeded'))
                 
-                # Clean up idle sessions
-                for session_id in idle_sessions:
-                    try:
-                        await self.end_session(session_id, "idle_timeout")
-                        self.cleanup_stats['idle_timeout'] += 1
-                    except Exception as e:
-                        self.logger.error(f"Failed to clean up idle session {session_id}: {str(e)}")
+                # End expired sessions
+                for session_id, reason in expired:
+                    await self._expire_session(session_id)
                 
-                # Clean up storage
-                storage_cleaned = await self.session_store.cleanup_expired_sessions()
-                self.cleanup_stats['storage_cleaned'] += storage_cleaned
+                # Clean up from storage
+                cleaned = await self.session_store.cleanup_expired_sessions()
                 
-                # Update metrics
-                self.metrics.set("active_sessions", len(self.active_sessions))
+                if expired or cleaned > 0:
+                    self.logger.info(f"Cleaned up {len(expired)} active and {cleaned} stored sessions")
                 
-                if expired_sessions or idle_sessions or storage_cleaned:
-                    self.logger.info(
-                        f"Session cleanup: {len(expired_sessions)} expired, "
-                        f"{len(idle_sessions)} idle, {storage_cleaned} from storage"
-                    )
-                
-                await asyncio.sleep(60)  # Run cleanup every minute
-                
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 self.logger.error(f"Error in cleanup loop: {str(e)}")
-                await asyncio.sleep(60)
-
+    
     async def _heartbeat_loop(self) -> None:
-        """Background task for session heartbeat and health monitoring."""
-        while True:
-            try:
-                current_time = datetime.now(timezone.utc)
-                
-                # Update session health scores
-                for session_id, session_info in self.active_sessions.items():
-                    try:
-                        # Calculate health score based on various factors
-                        health_factors = {
-                            'activity': min(1.0, 300.0 / max(1.0, (current_time - session_info.last_activity).total_seconds())),
-                            'memory': max(0.0, 1.0 - (session_info.memory_usage_mb / session_info.config.memory_limit_mb)),
-                            'errors': max(0.0, 1.0 - (session_info.error_count / 10.0)),
-                            'performance': min(1.0, 5.0 / max(0.1, session_info.response_time_avg))
-                        }
-                        
-                        session_info.health_score = sum(health_factors.values()) / len(health_factors)
-                        
-                        # Update cluster if enabled
-                        if self.cluster and session_info.cluster_node == self.node_id:
-                            await self.cluster.register_node(self.node_id, {
-                                'load': len(self.active_sessions),
-                                'memory_usage': sum(s.memory_usage_mb for s in self.active_sessions.values()),
-                                'health_score': session_info.health_score
-                            })
-                    
-                    except Exception as e:
-                        self.logger.warning(f"Error updating health for session {session_id}: {str(e)}")
-                
-                await asyncio.sleep(30)  # Run heartbeat every 30 seconds
-                
-            except Exception as e:
-                self.logger.error(f"Error in heartbeat loop: {str(e)}")
-                await asyncio.sleep(30)
-
-    async def _backup_loop(self) -> None:
-        """Background task for session backup."""
-        if not self.backup_manager:
+        """Background task for cluster heartbeat."""
+        if not self.cluster:
             return
         
         while True:
             try:
-                backup_interval = self.default_config.auto_save_interval
+                await asyncio.sleep(30)  # Heartbeat every 30 seconds
+                
+                # Update cluster with current state
+                await self.cluster.register_node(self.node_id, {
+                    'type': 'session_manager',
+                    'capacity': self.config.get('max_sessions', 10000),
+                    'current_load': len(self._sessions),
+                    'memory_enabled': self.enable_memory
+                })
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Error in heartbeat loop: {str(e)}")
+    
+    async def _backup_loop(self) -> None:
+        """Background task for session backup."""
+        while True:
+            try:
+                # Wait for backup interval
+                await asyncio.sleep(self.config.get('backup_interval', 3600))
                 
                 # Backup active sessions
-                for session_id, session_info in list(self.active_sessions.items()):
-                    try:
-                        if session_info.config.enable_backup:
-                            last_backup = session_info.last_backup
-                            current_time = datetime.now(timezone.utc)
-                            
-                            if not last_backup or (current_time - last_backup).total_seconds() > backup_interval:
-                                # Create backup
-                                backup_data = {
-                                    'session_info': asdict(session_info),
-                                    'timestamp': current_time.isoformat(),
-                                    'checksum': self._calculate_checksum(session_info)
-                                }
-                                
-                                await self.backup_manager.backup_data(
-                                    f"session_{session_id}",
-                                    backup_data,
-                                    metadata={'type': 'session', 'user_id': session_info.context.user_id}
-                                )
-                                
-                                session_info.last_backup = current_time
-                    
-                    except Exception as e:
-                        self.logger.warning(f"Failed to backup session {session_id}: {str(e)}")
+                backup_count = 0
+                for session in self._sessions.values():
+                    if session.config.enable_backup:
+                        await self.session_store.store_session(session)
+                        session.last_backup = datetime.now(timezone.utc)
+                        backup_count += 1
                 
-                await asyncio.sleep(backup_interval)
+                if backup_count > 0:
+                    self.logger.info(f"Backed up {backup_count} sessions")
                 
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 self.logger.error(f"Error in backup loop: {str(e)}")
-                await asyncio.sleep(backup_interval)
-
+    
     async def _handle_component_health_change(self, event) -> None:
-        """Handle component health change events."""
-        if not event.healthy:
-            # Component is unhealthy, might need to adapt session handling
-            self.logger.warning(f"Component {event.component} is unhealthy, monitoring sessions")
-
+        """Handle component health changes."""
+        # If memory integrator fails, disable memory features
+        if event.component_name == "memory_integrator" and event.health_status != "healthy":
+            self.logger.warning("Memory integrator unhealthy, disabling memory features")
+            self.memory_integrator = None
+    
     async def _handle_system_shutdown(self, event) -> None:
-        """Handle system shutdown by cleaning up sessions."""
-        try:
-            # Save all active sessions
-            save_tasks = []
-            for session_info in self.active_sessions.values():
-                save_tasks.append(self.session_store.store_session(session_info))
-            
-            if save_tasks:
-                await asyncio.gather(*save_tasks, return_exceptions=True)
-            
-            self.logger.info(f"Saved {len(save_tasks)} sessions before shutdown")
-            
-        except Exception as e:
-            self.logger.error(f"Error saving sessions during shutdown: {str(e)}")
-
+        """Handle system shutdown."""
+        self.logger.info("System shutdown initiated, ending all sessions...")
+        
+        # End all active sessions
+        for session_id in list(self._sessions.keys()):
+            await self.end_session(session_id, reason="system_shutdown")
+    
     async def _handle_user_authentication(self, event) -> None:
-        """Handle user authentication events."""
-        # Update any guest sessions for this user
-        user_id = event.user_id
-        for session_id, session_info in list(self.active_sessions.items()):
-            if (session_info.context.user_id is None and 
-                session_info.config.session_type == SessionType.GUEST):
-                # Convert guest session to authenticated
-                session_info.context.user_id = user_id
-                session_info.config.session_type = SessionType.AUTHENTICATED
-                
-                # Load user context
-                await self._load_user_context(session_info.context)
-                
-                # Update storage
-                await self.session_store.store_session(session_info)
-                
-                # Update tracking
-                self.user_sessions[user_id].add(session_id)
-
-    async def _handle_user_logout(self, event) -> None:
-        """Handle user logout events."""
+        """Handle user authentication by creating or updating session."""
         user_id = event.user_id
         
-        # End all sessions for this user
-        user_session_ids = list(self.user_sessions.get(user_id, set()))
-        for session_id in user_session_ids:
-            try:
-                await self.end_session(session_id, "user_logout")
-            except Exception as e:
-                self.logger.error(f"Error ending session {session_id} on logout: {str(e)}")
-
+        # Check if user already has an active session
+        existing_sessions = self.list_user_sessions(user_id)
+        
+        if not existing_sessions:
+            # Create new authenticated session
+            await self.create_session(
+                user_id=user_id,
+                session_type=SessionType.AUTHENTICATED,
+                metadata={'auth_method': event.auth_method}
+            )
+    
+    async def _handle_user_logout(self, event) -> None:
+        """Handle user logout by ending their sessions."""
+        user_id = event.user_id
+        
+        # End all user sessions
+        for session_id in self.list_user_sessions(user_id):
+            await self.end_session(session_id, reason="user_logout")
+    
+    async def _handle_message_received(self, event: MessageReceived) -> None:
+        """Handle incoming message by ensuring session exists."""
+        session_id = event.session_id
+        user_id = event.user_id
+        
+        # Create or get session
+        if session_id not in self._sessions:
+            await self.create_session(
+                session_id=session_id,
+                user_id=user_id
+            )
+        else:
+            # Update last activity
+            session = self._sessions.get(session_id)
+            if session:
+                session.touch()
+    
     async def _health_check_callback(self) -> Dict[str, Any]:
-        """Health check callback for the session manager."""
-        try:
-            active_count = len(self.active_sessions)
-            error_count = sum(1 for s in self.active_sessions.values() if s.state == SessionState.ERROR)
-            
-            return {
-                "status": "healthy" if error_count == 0 else "degraded",
-                "active_sessions": active_count,
-                "error_sessions": error_count,
-                "recent_cleanup": dict(self.cleanup_stats),
-                "clustering_enabled": self.enable_clustering
-            }
-        except Exception as e:
-            return {
-                "status": "unhealthy",
-                "error": str(e)
-            }
+        """Health check callback."""
+        return {
+            'status': 'healthy',
+            'active_sessions': len(self._sessions),
+            'session_store_type': type(self.session_store).__name__,
+            'memory_enabled': self.enable_memory and self.memory_integrator is not None,
+            'clustering_enabled': self.enable_clustering,
+            'node_id': self.node_id
+        }
+    
+    async def shutdown(self) -> None:
+        """Shutdown the session manager."""
+        self.logger.info("Shutting down session manager...")
+        
+        # Cancel background tasks
+        for task in [self._cleanup_task, self._heartbeat_task, self._backup_task]:
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        
+        # Save all active sessions
+        for session in self._sessions.values():
+            try:
+                await self.session_store.store_session(session)
+            except Exception as e:
+                self.logger.error(f"Failed to save session {session.session_id}: {str(e)}")
+        
+        self.logger.info("Session manager shutdown complete")
