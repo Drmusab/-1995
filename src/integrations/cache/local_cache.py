@@ -1662,4 +1662,25 @@ class LocalCacheManager:
             return 0
 
     @handle_exceptions
-    def invalidate_workflow_cache(self, workflow
+    def invalidate_workflow_cache(self, workflow_id: str) -> int:
+        """Invalidate cache entries for a specific workflow."""
+        try:
+            invalidated = 0
+            keys_to_remove = []
+            
+            # Find workflow-related cache entries
+            for key in self.cache:
+                if isinstance(key, str) and workflow_id in key:
+                    keys_to_remove.append(key)
+            
+            # Remove found entries
+            for key in keys_to_remove:
+                del self.cache[key]
+                invalidated += 1
+            
+            self.logger.debug(f"Invalidated {invalidated} cache entries for workflow {workflow_id}")
+            return invalidated
+            
+        except Exception as e:
+            self.logger.error(f"Failed to invalidate workflow cache: {str(e)}")
+            return 0

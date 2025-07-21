@@ -1536,3 +1536,10 @@ class EnhancedTextToSpeech:
                 request = stream_info['request']
                 config = stream_info['config']
                 callback = stream_info['callback']
+                
+                # Process streaming synthesis
+                await self._process_streaming_synthesis(stream_id, request, config, callback)
+                
+        except Exception as e:
+            self.logger.error(f"Error in streaming loop: {str(e)}")
+            await asyncio.sleep(1)

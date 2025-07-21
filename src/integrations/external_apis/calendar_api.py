@@ -1583,4 +1583,29 @@ class EnhancedCalendarAPI:
     async def update_event(
         self,
         user_id: str,
-        calendar
+        calendar_id: str,
+        event_id: str,
+        event_data: Dict[str, Any],
+        provider: CalendarProvider = CalendarProvider.GOOGLE
+    ) -> CalendarEvent:
+        """Update an existing calendar event."""
+        try:
+            # Get provider instance
+            provider_instance = self.providers.get(provider)
+            if not provider_instance:
+                raise CalendarAPIError(f"Provider {provider} not available")
+            
+            # Update event through provider
+            event = await provider_instance.update_event(
+                user_id, calendar_id, event_id, event_data
+            )
+            
+            # Cache updated event
+            cache_key = f"event:{provider.value}:{user_id}:{calendar_id}:{event_id}"
+            await self._cache_event(cache_key, event)
+            
+            return event
+            
+        except Exception as e:
+            self.logger.error(f"Failed to update event {event_id}: {str(e)}")
+            raise CalendarAPIError(f"Update event failed: {str(e)}")

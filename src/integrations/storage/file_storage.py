@@ -1540,3 +1540,24 @@ class FileStorageManager:
                 current_time = datetime.now(timezone.utc)
                 
                 # Clean up expired files
+                expired_files = []
+                for file_id, metadata in self.metadata_cache.items():
+                    expiry = metadata.get('expires_at')
+                    if expiry and current_time > expiry:
+                        expired_files.append(file_id)
+                
+                # Remove expired files
+                for file_id in expired_files:
+                    try:
+                        await self.delete_file(file_id)
+                    except Exception as e:
+                        self.logger.error(f"Failed to delete expired file {file_id}: {str(e)}")
+                
+                if expired_files:
+                    self.logger.info(f"Cleaned up {len(expired_files)} expired files")
+                
+                await asyncio.sleep(3600)  # Run every hour
+                
+            except Exception as e:
+                self.logger.error(f"Error in cleanup task: {str(e)}")
+                await asyncio.sleep(3600)

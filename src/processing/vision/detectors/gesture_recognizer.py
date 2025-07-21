@@ -1544,3 +1544,21 @@ class EnhancedGestureRecognizer:
         
         try:
             # Cancel all active recognitions
+            for recognition_id in list(self.active_recognitions.keys()):
+                await self.stop_recognition(recognition_id)
+            
+            # Clear gesture history
+            self.gesture_history.clear()
+            
+            # Release mediapipe resources
+            if hasattr(self, 'hands'):
+                self.hands.close()
+            if hasattr(self, 'pose'):
+                self.pose.close()
+            if hasattr(self, 'face_mesh'):
+                self.face_mesh.close()
+                
+            self.logger.info("Gesture recognizer cleanup completed")
+            
+        except Exception as e:
+            self.logger.error(f"Error during cleanup: {str(e)}")

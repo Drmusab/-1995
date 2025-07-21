@@ -1566,3 +1566,13 @@ class EnhancedSpeakerRecognition:
                 characteristics['f0_mean'] = float(np.mean(f0_voiced))
                 characteristics['f0_std'] = float(np.std(f0_voiced))
                 characteristics['f0_min'] = float(np.min(f0_voiced))
+                characteristics['f0_max'] = float(np.max(f0_voiced))
+            else:
+                characteristics['f0_mean'] = 0.0
+                characteristics['f0_std'] = 0.0
+                characteristics['f0_min'] = 0.0
+                characteristics['f0_max'] = 0.0
+                
+        except Exception as e:
+            self.logger.error(f"Error extracting voice characteristics: {str(e)}")
+            return {"error": str(e)}

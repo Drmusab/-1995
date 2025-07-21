@@ -1635,4 +1635,18 @@ class DatabaseManager:
             )
             
             # Store metrics
-            self.query_metrics
+            self.query_metrics.append({
+                'query': query,
+                'params': params,
+                'execution_time': execution_time,
+                'timestamp': datetime.now(timezone.utc),
+                'rows_affected': result.rowcount if hasattr(result, 'rowcount') else None
+            })
+            
+            # Keep only recent metrics
+            if len(self.query_metrics) > 1000:
+                self.query_metrics = self.query_metrics[-500:]
+                
+        except Exception as e:
+            self.logger.error(f"Database execute failed: {str(e)}")
+            raise
