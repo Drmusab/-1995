@@ -849,6 +849,47 @@ class MemoryConsolidationCompleted(BaseEvent):
 
 
 @dataclass
+class MemoryRetrievalRequested(BaseEvent):
+    """Memory retrieval requested event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    query: str = ""
+    context_id: Optional[str] = None
+
+
+@dataclass
+class MemoryItemStored(BaseEvent):
+    """Memory item stored event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    memory_id: str = ""
+    memory_type: str = ""
+    content_preview: str = ""
+
+
+@dataclass
+class MemoryItemRetrieved(BaseEvent):
+    """Memory item retrieved event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    memory_id: str = ""
+    relevance_score: float = 0.0
+
+
+@dataclass
+class MemoryItemUpdated(BaseEvent):
+    """Memory item updated event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    memory_id: str = ""
+    update_type: str = ""
+
+
+@dataclass
+class MemoryItemDeleted(BaseEvent):
+    """Memory item deleted event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    memory_id: str = ""
+    reason: str = ""
+
+
+@dataclass
 class ContextAdapted(BaseEvent):
     """Context adaptation event."""
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
@@ -1195,6 +1236,60 @@ class EncryptionEvent(BaseEvent):
     success: bool = True
 
 
+@dataclass
+class EncryptionKeyGenerated(BaseEvent):
+    """Encryption key generated event."""
+    category: EventCategory = field(default=EventCategory.SECURITY, init=False)
+    key_id: str = ""
+    key_type: str = ""
+    algorithm: str = ""
+
+
+@dataclass
+class EncryptionKeyRotated(BaseEvent):
+    """Encryption key rotated event."""
+    category: EventCategory = field(default=EventCategory.SECURITY, init=False)
+    old_key_id: str = ""
+    new_key_id: str = ""
+    rotation_reason: str = ""
+
+
+@dataclass
+class EncryptionOperationCompleted(BaseEvent):
+    """Encryption operation completed event."""
+    category: EventCategory = field(default=EventCategory.SECURITY, init=False)
+    operation_type: str = ""
+    operation_time: float = 0.0
+    data_size: int = 0
+
+
+@dataclass
+class DependencyHealthChanged(BaseEvent):
+    """Dependency health changed event."""
+    category: EventCategory = field(default=EventCategory.HEALTH, init=False)
+    dependency_name: str = ""
+    health_status: str = ""
+    details: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SystemHealthChanged(BaseEvent):
+    """System health changed event."""
+    category: EventCategory = field(default=EventCategory.HEALTH, init=False)
+    health_status: str = ""
+    components_affected: List[str] = field(default_factory=list)
+    health_score: float = 0.0
+
+
+@dataclass
+class EncryptionOperationFailed(BaseEvent):
+    """Encryption operation failed event."""
+    category: EventCategory = field(default=EventCategory.SECURITY, init=False)
+    operation_type: str = ""
+    error_message: str = ""
+    data_type: str = ""
+
+
 # =============================================================================
 # PERFORMANCE EVENTS
 # =============================================================================
@@ -1470,6 +1565,11 @@ EVENT_TYPES = {
     "MemoryRetrievalCompleted": MemoryRetrievalCompleted,
     "MemoryConsolidationStarted": MemoryConsolidationStarted,
     "MemoryConsolidationCompleted": MemoryConsolidationCompleted,
+    "MemoryRetrievalRequested": MemoryRetrievalRequested,
+    "MemoryItemStored": MemoryItemStored,
+    "MemoryItemRetrieved": MemoryItemRetrieved,
+    "MemoryItemUpdated": MemoryItemUpdated,
+    "MemoryItemDeleted": MemoryItemDeleted,
     "ContextAdapted": ContextAdapted,
     
     # Skill Events
@@ -1514,6 +1614,12 @@ EVENT_TYPES = {
     "AuthorizationFailed": AuthorizationFailed,
     "SuspiciousActivityDetected": SuspiciousActivityDetected,
     "EncryptionEvent": EncryptionEvent,
+    "EncryptionKeyGenerated": EncryptionKeyGenerated,
+    "EncryptionKeyRotated": EncryptionKeyRotated,
+    "EncryptionOperationCompleted": EncryptionOperationCompleted,
+    "EncryptionOperationFailed": EncryptionOperationFailed,
+    "DependencyHealthChanged": DependencyHealthChanged,
+    "SystemHealthChanged": SystemHealthChanged,
     
     # Performance Events
     "PerformanceMetricUpdated": PerformanceMetricUpdated,

@@ -35,17 +35,17 @@ import asyncpg
 import redis.exceptions
 from pydantic import BaseModel, ValidationError
 
-# Core imports
-from src.core.config.loader import ConfigLoader
-from src.core.events.event_bus import EventBus
+# Core imports - delayed to avoid circular imports
+# from src.core.config.loader import ConfigLoader
+from src.core.events.event_bus import EnhancedEventBus
 from src.core.events.event_types import (
-    ErrorOccurred, ErrorRecovered, SystemHealthChanged, ComponentHealthChanged,
-    CircuitBreakerOpened, CircuitBreakerClosed, RetryAttempted, ErrorPatternDetected,
-    SecurityViolation, CriticalSystemError, ErrorThresholdExceeded
+    ErrorOccurred, ErrorRecoveryStarted, ErrorRecoveryCompleted, SystemStateChanged, ComponentHealthChanged,
+    ProcessingError, IntegrationError, HealthCheckStarted, HealthCheckCompleted, HealthCheckFailed
 )
 from src.core.dependency_injection import Container
-from src.observability.monitoring.metrics import MetricsCollector
-from src.observability.monitoring.tracing import TraceManager
+# Observability - delayed imports to avoid circular dependencies
+# from src.observability.monitoring.metrics import MetricsCollector
+# from src.observability.monitoring.tracing import TraceManager
 from src.observability.logging.config import get_logger
 
 # Type definitions
@@ -414,8 +414,8 @@ class CircuitBreaker:
         self,
         name: str,
         config: CircuitBreakerConfig,
-        event_bus: Optional[EventBus] = None,
-        metrics: Optional[MetricsCollector] = None
+        event_bus: Optional[Any] = None,  # EnhancedEventBus
+        metrics: Optional[Any] = None  # MetricsCollector
     ):
         self.name = name
         self.config = config
@@ -549,8 +549,8 @@ class RetryHandler:
     def __init__(
         self,
         config: RetryConfig,
-        metrics: Optional[MetricsCollector] = None,
-        event_bus: Optional[EventBus] = None
+        metrics: Optional[Any] = None,  # MetricsCollector
+        event_bus: Optional[Any] = None  # EnhancedEventBus
     ):
         self.config = config
         self.metrics = metrics
@@ -669,8 +669,8 @@ class ErrorAggregator:
         self,
         window_size: int = 100,
         time_window_seconds: float = 300.0,
-        event_bus: Optional[EventBus] = None,
-        metrics: Optional[MetricsCollector] = None
+        event_bus: Optional[Any] = None,  # EnhancedEventBus
+        metrics: Optional[Any] = None  # MetricsCollector
     ):
         self.window_size = window_size
         self.time_window_seconds = time_window_seconds
@@ -810,10 +810,19 @@ class ErrorHandler:
         self.container = container
         self.logger = get_logger(__name__)
         
-        # Core services
-        self.config = container.get(ConfigLoader)
-        self.event_bus = container.get(EventBus)
+        # Core services - use dynamic imports to avoid circular dependencies
         try:
+            # Import ConfigLoader dynamically
+            from src.core.config.loader import ConfigLoader
+            self.config = container.get(ConfigLoader)
+        except Exception:
+            self.config = None
+            
+        self.event_bus = container.get(EnhancedEventBus)
+        try:
+            # Import metrics and tracing dynamically
+            from src.observability.monitoring.metrics import MetricsCollector
+            from src.observability.monitoring.tracing import TraceManager
             self.metrics = container.get(MetricsCollector)
             self.tracer = container.get(TraceManager)
         except Exception:
