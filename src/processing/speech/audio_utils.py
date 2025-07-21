@@ -472,4 +472,4 @@ class EnhancedAudioProcessor:
             elif method == "spectral_subtraction":
                 return self._spectral_subtraction_nr(audio, sample_rate, noise_profile)
             elif method == "wiener_filter":
-                return self._wiener_filter_nr(audio, sample_rate
+                return self._wiener_filter_nr(audio, sample_rate)

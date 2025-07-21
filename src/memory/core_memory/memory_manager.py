@@ -1569,4 +1569,4 @@ class MemoryManager(AbstractMemoryManager):
                     memory = await self.retrieve_memory(memory_id)
                     if memory:
                         memory.metadata.importance = importance
-                        await self.update_memory(memory_
+                        await self.update_memory(memory)

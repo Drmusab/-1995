@@ -55,6 +55,15 @@ class EventSeverity(Enum):
 
 
 @dataclass
+class EventMetadata:
+    """Metadata for events."""
+    priority: EventPriority = EventPriority.NORMAL
+    tags: List[str] = field(default_factory=list)
+    emitted_at: Optional[datetime] = None
+    correlation_id: Optional[str] = None
+
+
+@dataclass
 class BaseEvent:
     """Base class for all system events."""
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -68,6 +77,7 @@ class BaseEvent:
     user_id: Optional[str] = None
     correlation_id: Optional[str] = None
     tags: List[str] = field(default_factory=list)
+    metadata: Optional[EventMetadata] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):

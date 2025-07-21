@@ -972,7 +972,7 @@ class PoetryGenerator(CreativeSkill):
             
             # Check if first line looks like a title (no ending punctuation, relatively short)
             if (len(first_line) < 60 and 
-                not first_line.endswith((".", "!", "?", ",", ";", ":"")) and
+                not first_line.endswith((".", "!", "?", ",", ";", ":")) and
                 not first_line.startswith(("#", "*", "-"))):
                 
                 title = first_line

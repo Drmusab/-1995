@@ -29,21 +29,20 @@ import pickle
 import base64
 
 # Core imports
-from src.core.config.loader import ConfigLoader
-from src.core.error_handling import ErrorHandler, handle_exceptions
-from src.core.dependency_injection import Container
-from src.core.health_check import HealthCheck
+# Remove circular dependency imports - these will be injected later if needed
+# from src.core.config.loader import ConfigLoader
+# from src.core.error_handling import ErrorHandler, handle_exceptions  
+# from src.core.dependency_injection import Container
+# from src.core.health_check import HealthCheck
 
 # Event types
 from src.core.events.event_types import (
-    BaseEvent, EventMetadata, EventPriority, EventCategory,
-    SystemEvent, ComponentEvent, UserEvent, WorkflowEvent,
-    MemoryEvent, LearningEvent, SecurityEvent, PerformanceEvent
+    BaseEvent, EventMetadata, EventPriority, EventCategory
 )
 
-# Observability
-from src.observability.monitoring.metrics import MetricsCollector
-from src.observability.monitoring.tracing import TraceManager
+# Observability - remove circular dependencies
+# from src.observability.monitoring.metrics import MetricsCollector
+# from src.observability.monitoring.tracing import TraceManager
 from src.observability.logging.config import get_logger
 
 # Type definitions
@@ -472,39 +471,29 @@ class EnhancedEventBus:
     - Event filtering and routing
     """
     
-    def __init__(self, container: Container):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize the enhanced event bus.
         
         Args:
-            container: Dependency injection container
+            config: Optional configuration dictionary
         """
-        self.container = container
         self.logger = get_logger(__name__)
         
-        # Core services
-        try:
-            self.config = container.get(ConfigLoader)
-            self.error_handler = container.get(ErrorHandler)
-            self.health_check = container.get(HealthCheck)
-        except Exception:
-            self.config = None
-            self.error_handler = None
-            self.health_check = None
-        
-        # Observability
-        try:
-            self.metrics = container.get(MetricsCollector)
-            self.tracer = container.get(TraceManager)
-        except Exception:
-            self.metrics = None
-            self.tracer = None
+        # Core services - will be set later to avoid circular dependencies
+        self.config = config or {}
+        self.error_handler = None
+        self.health_check = None
+        self.metrics = None
+        self.tracer = None
         
         # Configuration
         self._load_configuration()
         
         # Core components
         self._setup_core_components()
+        
+        # Setup monitoring (will be minimal without metrics)
         self._setup_monitoring()
         
         # State management
@@ -552,43 +541,38 @@ class EnhancedEventBus:
         self.pending_replies: Dict[str, asyncio.Future] = {}
         self.reply_timeout = 30.0
         
-        # Register health check
-        if self.health_check:
-            self.health_check.register_component("event_bus", self._health_check_callback)
-        
         self.logger.info("EnhancedEventBus initialized successfully")
+
+    def set_dependencies(self, error_handler=None, health_check=None, metrics=None, tracer=None):
+        """Set dependencies after initialization to avoid circular imports."""
+        if error_handler:
+            self.error_handler = error_handler
+        if health_check:
+            self.health_check = health_check
+            # Register health check
+            self.health_check.register_component("event_bus", self._health_check_callback)
+        if metrics:
+            self.metrics = metrics
+            # Re-setup monitoring now that metrics are available
+            self._setup_monitoring()
+        if tracer:
+            self.tracer = tracer
 
     def _load_configuration(self) -> None:
         """Load configuration settings."""
-        config_prefix = "event_bus."
-        
-        if self.config:
-            self.max_queue_size = self.config.get(f"{config_prefix}max_queue_size", 10000)
-            self.max_dead_letter_size = self.config.get(f"{config_prefix}max_dead_letter_size", 1000)
-            self.max_workers = self.config.get(f"{config_prefix}max_workers", 10)
-            self.max_sync_workers = self.config.get(f"{config_prefix}max_sync_workers", 5)
-            self.enable_persistence = self.config.get(f"{config_prefix}enable_persistence", True)
-            self.storage_path = self.config.get(f"{config_prefix}storage_path", "data/events")
-            self.max_stored_events = self.config.get(f"{config_prefix}max_stored_events", 100000)
-            self.enable_rate_limiting = self.config.get(f"{config_prefix}enable_rate_limiting", True)
-            self.default_rate_limit = self.config.get(f"{config_prefix}default_rate_limit", 1000)
-            self.rate_limit_window = self.config.get(f"{config_prefix}rate_limit_window", 60)
-            self.enable_circuit_breaker = self.config.get(f"{config_prefix}enable_circuit_breaker", True)
-            self.circuit_breaker_threshold = self.config.get(f"{config_prefix}circuit_breaker_threshold", 5)
-        else:
-            # Default values
-            self.max_queue_size = 10000
-            self.max_dead_letter_size = 1000
-            self.max_workers = 10
-            self.max_sync_workers = 5
-            self.enable_persistence = True
-            self.storage_path = "data/events"
-            self.max_stored_events = 100000
-            self.enable_rate_limiting = True
-            self.default_rate_limit = 1000
-            self.rate_limit_window = 60
-            self.enable_circuit_breaker = True
-            self.circuit_breaker_threshold = 5
+        # Since config is now a dict, access values directly
+        self.max_queue_size = self.config.get("max_queue_size", 10000)
+        self.max_dead_letter_size = self.config.get("max_dead_letter_size", 1000)
+        self.max_workers = self.config.get("max_workers", 10)
+        self.max_sync_workers = self.config.get("max_sync_workers", 5)
+        self.enable_persistence = self.config.get("enable_persistence", True)
+        self.storage_path = self.config.get("storage_path", "data/events")
+        self.max_stored_events = self.config.get("max_stored_events", 100000)
+        self.enable_rate_limiting = self.config.get("enable_rate_limiting", True)
+        self.default_rate_limit = self.config.get("default_rate_limit", 1000)
+        self.rate_limit_window = self.config.get("rate_limit_window", 60)
+        self.enable_circuit_breaker = self.config.get("enable_circuit_breaker", True)
+        self.circuit_breaker_threshold = self.config.get("circuit_breaker_threshold", 5)
 
     def _setup_core_components(self) -> None:
         """Setup core event bus components."""
@@ -676,7 +660,6 @@ class EnhancedEventBus:
         self.worker_tasks.clear()
         self.logger.info("Stopped all event processing workers")
 
-    @handle_exceptions
     async def emit(
         self,
         event: BaseEvent,
@@ -853,7 +836,6 @@ class EnhancedEventBus:
         finally:
             self.pending_replies.pop(correlation_id, None)
 
-    @handle_exceptions
     def subscribe(
         self,
         event_types: Union[str, List[str], Set[str]],
@@ -929,7 +911,6 @@ class EnhancedEventBus:
         
         return subscription_id
 
-    @handle_exceptions
     def unsubscribe(self, subscription_id: str) -> bool:
         """
         Unsubscribe from events.
@@ -1501,3 +1482,7 @@ class EnhancedEventBus:
                 self.thread_pool.shutdown(wait=False)
         except Exception:
             pass  # Ignore cleanup errors in destructor
+
+
+# Backward compatibility alias
+EventBus = EnhancedEventBus

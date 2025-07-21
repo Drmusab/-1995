@@ -168,4 +168,4 @@ class PoseEstimationRequest:
     min_confidence: float = 0.5
     
     # Context
-    timestamp: datetime = field(default_factory=lambda: datetime.now(
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
