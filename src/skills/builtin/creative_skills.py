@@ -1558,4 +1558,4 @@ class CharacterCreator(CreativeSkill):
         
         arc_prompt = (
             f"Based on this character profile, generate 3 potential character arcs that would be compelling "
-            f"for this character in a
+            f"for this character in a story:"
