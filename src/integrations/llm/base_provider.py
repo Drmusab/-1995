@@ -1505,4 +1505,19 @@ class BaseLLMProvider(ABC):
 
     async def cleanup(self) -> None:
         """Cleanup provider resources."""
-        try
+        try:
+            # Close any active connections
+            if hasattr(self, '_client'):
+                await self._client.close()
+            
+            # Clear caches
+            self.response_cache.clear()
+            
+            # Reset metrics
+            self.request_count = 0
+            self.error_count = 0
+            
+            self.logger.info(f"Provider {self.provider_type} cleanup completed")
+            
+        except Exception as e:
+            self.logger.error(f"Error during provider cleanup: {str(e)}")

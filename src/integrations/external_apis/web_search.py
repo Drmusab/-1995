@@ -1584,8 +1584,12 @@ class EnhancedWebSearchManager(ComponentInterface):
         query_data['timestamp'] = datetime.fromisoformat(query_data['timestamp'])
         query = SearchQuery(**query_data)
         
-        # Reconstruct results
         results = []
         for result_data in data['results']:
             result_data['result_type'] = ResultType(result_data['result_type'])
-            if result_data.get('provider
+            if result_data.get('provider'):
+                result_data['provider'] = SearchProvider(result_data['provider'])
+            
+            results.append(SearchResult(**result_data))
+        
+        return SearchResponse(query=query, results=results)

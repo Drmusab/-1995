@@ -1649,4 +1649,10 @@ class EnhancedDashboardManager:
     async def _handle_workflow_completed(self, event) -> None:
         """Handle workflow completion events."""
         try:
-            #
+            # Update workflow metrics
+            workflow_id = getattr(event, 'workflow_id', None)
+            if workflow_id:
+                # Refresh dashboards that track workflow metrics
+                await self._refresh_workflow_dashboards(workflow_id)
+        except Exception as e:
+            self.logger.error(f"Error handling workflow completion: {str(e)}")

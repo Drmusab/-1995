@@ -1464,3 +1464,22 @@ class MultimodalAlignmentSystem:
             try:
                 # Remove old cache entries
                 current_time = datetime.now(timezone.utc)
+                cutoff_time = current_time - timedelta(seconds=self.cache_ttl)
+                
+                # Clean alignment cache
+                expired_keys = []
+                for key, entry in self.alignment_cache.items():
+                    if entry.get('timestamp', current_time) < cutoff_time:
+                        expired_keys.append(key)
+                
+                for key in expired_keys:
+                    del self.alignment_cache[key]
+                
+                if expired_keys:
+                    self.logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
+                
+                await asyncio.sleep(300)  # Run every 5 minutes
+                
+            except Exception as e:
+                self.logger.error(f"Error in cache cleanup: {str(e)}")
+                await asyncio.sleep(300)

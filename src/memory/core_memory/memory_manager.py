@@ -1570,3 +1570,6 @@ class MemoryManager(AbstractMemoryManager):
                     if memory:
                         memory.metadata.importance = importance
                         await self.update_memory(memory)
+                        
+        except Exception as e:
+            self.logger.error(f"Error handling importance event: {str(e)}")

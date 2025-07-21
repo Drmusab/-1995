@@ -1521,3 +1521,20 @@ class DataAnalyzer(AnalyticalSkill):
                 analysis_results = await asyncio.gather(*analysis_tasks)
                 
                 # Merge results
+                analysis_data = results["analysis"]
+                for result in analysis_results:
+                    if result:
+                        analysis_data.update(result)
+                
+                # Generate visualizations if requested
+                if visualizations:
+                    visualization_results = await self._generate_visualizations(
+                        df, analysis_data, visualizations, depth
+                    )
+                    results["visualizations"] = visualization_results
+                
+                return results
+                
+        except Exception as e:
+            self.logger.error(f"Error in data analysis: {str(e)}")
+            return {"error": str(e), "success": False}

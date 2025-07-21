@@ -1551,3 +1551,15 @@ class EnhancedCrossModalAttention:
         elif isinstance(data, dict):
             # Look for features in dictionary
             for key in ['features', 'embeddings', 'data']:
+                if key in data:
+                    return self._normalize_tensor(data[key])
+            
+            # If no known keys found, try to convert the whole dict
+            try:
+                tensor_data = list(data.values())
+                return torch.tensor(tensor_data, dtype=torch.float32, device=self.device)
+            except Exception:
+                raise ValueError(f"Cannot convert dictionary to tensor: {data}")
+                
+        else:
+            raise TypeError(f"Unsupported data type for tensor conversion: {type(data)}")

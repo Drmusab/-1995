@@ -1745,3 +1745,12 @@ class SemanticMemory(BaseMemory):
         return items
 
     async def validate_fact(self, memory_id: str, validation_result: bool) -> None:
+        """Validate a fact in semantic memory."""
+        try:
+            memory_item = await self.retrieve(memory_id)
+            if memory_item:
+                memory_item.metadata['validated'] = validation_result
+                memory_item.metadata['validation_timestamp'] = datetime.now(timezone.utc)
+                await self.store(memory_item)
+        except Exception as e:
+            self.logger.error(f"Error validating fact {memory_id}: {str(e)}")

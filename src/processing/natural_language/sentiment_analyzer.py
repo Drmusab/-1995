@@ -1522,3 +1522,7 @@ class EnhancedSentimentAnalyzer:
                     "end": history[-1].get("timestamp")
                 } if history else {}
             }
+            
+        except Exception as e:
+            self.logger.error(f"Error analyzing sentiment trends: {str(e)}")
+            return {"error": str(e), "success": False}

@@ -11,6 +11,7 @@ seamless integration with all core system components.
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Set, Callable, Type, Union, AsyncGenerator, TypeVar
 import asyncio
+import functools
 import threading
 import time
 import os
@@ -60,10 +61,38 @@ from src.core.events.event_types import (
     ConfigurationSourceRemoved, ConfigurationEncrypted, ConfigurationDecrypted,
     ErrorOccurred, SystemStateChanged
 )
-from src.core.error_handling import ErrorHandler, handle_exceptions
+# Observability - delayed imports to avoid circular dependencies
+# from src.core.error_handling import ErrorHandler, handle_exceptions
+
+# Simple decorator to replace handle_exceptions for now
+def _handle_exceptions(func):
+    """Simple exception handler to avoid circular imports."""
+    @functools.wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            # Simple logging, no complex error handling to avoid circular imports
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in {func.__name__}: {str(e)}")
+            raise
+    
+    @functools.wraps(func)
+    def sync_wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in {func.__name__}: {str(e)}")
+            raise
+    
+    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
 from src.core.dependency_injection import Container
-from src.core.health_check import HealthCheck
-from src.core.security.encryption import EncryptionManager
+# Delayed imports to avoid circular dependencies
+# from src.core.health_check import HealthCheck
+# from src.core.security.encryption import EncryptionManager
 from src.observability.logging.config import get_logger
 
 # Type definitions
@@ -582,10 +611,10 @@ class ConfigLoader:
         self.logger = get_logger(__name__)
         
         # Core components
-        self.event_bus: Optional[EventBus] = None
-        self.error_handler: Optional[ErrorHandler] = None
-        self.health_check: Optional[HealthCheck] = None
-        self.encryption_manager: Optional[EncryptionManager] = None
+        self.event_bus: Optional[Any] = None  # Will be EnhancedEventBus
+        self.error_handler: Optional[Any] = None  # Will be ErrorHandler
+        self.health_check: Optional[Any] = None  # Will be HealthCheck
+        self.encryption_manager: Optional[Any] = None  # Will be EncryptionManager
         
         # Configuration management
         self._sources: Dict[str, ConfigSourceInfo] = {}
@@ -621,13 +650,32 @@ class ConfigLoader:
         # Try to get dependencies from container
         if container:
             try:
-                self.event_bus = container.get(EventBus)
-                self.error_handler = container.get(ErrorHandler)
-                self.health_check = container.get(HealthCheck)
-                self.encryption_manager = container.get(EncryptionManager)
-                
-                # Register health check
-                self.health_check.register_component("config_loader", self._health_check_callback)
+                # Use dynamic imports to avoid circular dependencies
+                try:
+                    from src.core.events.event_bus import EnhancedEventBus
+                    self.event_bus = container.get(EnhancedEventBus)
+                except Exception:
+                    pass
+                    
+                try:
+                    from src.core.error_handling import ErrorHandler
+                    self.error_handler = container.get(ErrorHandler)
+                except Exception:
+                    pass
+                    
+                try:
+                    from src.core.health_check import HealthCheck
+                    self.health_check = container.get(HealthCheck)
+                    # Register health check
+                    self.health_check.register_component("config_loader", self._health_check_callback)
+                except Exception:
+                    pass
+                    
+                try:
+                    from src.core.security.encryption import EncryptionManager
+                    self.encryption_manager = container.get(EncryptionManager)
+                except Exception:
+                    pass
                 
             except Exception as e:
                 self.logger.warning(f"Could not get dependencies from container: {str(e)}")
@@ -753,7 +801,7 @@ class ConfigLoader:
                 else:
                     self.logger.warning(f"Failed to load default config {source_id}: {str(e)}")
 
-    @handle_exceptions
+    @_handle_exceptions
     async def add_source(
         self,
         source_id: str,

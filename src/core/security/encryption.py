@@ -39,9 +39,17 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet, MultiFernet
-from cryptography.hazmat.primitives.kdf.argon2 import Argon2
 from cryptography.x509 import load_pem_x509_certificate
-import argon2
+
+# Try to import Argon2, fallback to PBKDF2 if not available
+try:
+    from cryptography.hazmat.primitives.kdf.argon2 import Argon2
+    import argon2
+    ARGON2_AVAILABLE = True
+except ImportError:
+    ARGON2_AVAILABLE = False
+    Argon2 = None
+    argon2 = None
 
 # Core imports
 from src.core.config.loader import ConfigLoader
@@ -406,9 +414,21 @@ class KeyManager:
                 derived_key_data = kdf_instance.derive(parent_key.key_data)
                 
             elif kdf == KeyDerivationFunction.ARGON2:
-                # Use argon2-cffi for Argon2
-                hasher = argon2.PasswordHasher()
-                derived_key_data = hasher.hash(parent_key.key_data, salt=salt)[:length]
+                if ARGON2_AVAILABLE:
+                    # Use argon2-cffi for Argon2
+                    hasher = argon2.PasswordHasher()
+                    derived_key_data = hasher.hash(parent_key.key_data, salt=salt)[:length]
+                else:
+                    # Fallback to PBKDF2
+                    self.logger.warning("Argon2 not available, falling back to PBKDF2")
+                    kdf_instance = PBKDF2HMAC(
+                        algorithm=hashes.SHA256(),
+                        length=length,
+                        salt=salt,
+                        iterations=120000,  # Higher iterations for security
+                        backend=default_backend()
+                    )
+                    derived_key_data = kdf_instance.derive(parent_key.key_data)
                 
             else:
                 raise EncryptionError(f"Unsupported KDF: {kdf}")

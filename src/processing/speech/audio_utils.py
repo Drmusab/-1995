@@ -473,3 +473,10 @@ class EnhancedAudioProcessor:
                 return self._spectral_subtraction_nr(audio, sample_rate, noise_profile)
             elif method == "wiener_filter":
                 return self._wiener_filter_nr(audio, sample_rate)
+            else:
+                self.logger.warning(f"Unknown noise reduction method: {method}")
+                return audio
+                
+        except Exception as e:
+            self.logger.error(f"Noise reduction failed: {str(e)}")
+            return audio

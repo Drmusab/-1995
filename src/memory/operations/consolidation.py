@@ -1615,7 +1615,7 @@ class MemoryConsolidator:
                 memory_content = "\n".join(memory_descriptions)
                 
                 # Create prompt for relationship extraction
-                prompt = (
+                relationship_prompt = (
                     "Identify relationships between the following memories. "
                     "Return a JSON array of relationship objects, where each object has: "
                     "source_id, target_id, relationship_type (one of: is_a, has_a, part_of, before, after, during, "
@@ -1624,3 +1624,44 @@ class MemoryConsolidator:
                     f"Memories:\n{memory_content}\n\n"
                     "Relationships (JSON array):"
                 )
+                
+                # Process with LLM
+                relationships_response = await self.llm_provider.generate_text(
+                    prompt=relationship_prompt,
+                    max_tokens=2048,
+                    temperature=0.1
+                )
+                
+                if relationships_response and 'text' in relationships_response:
+                    try:
+                        relationships = json.loads(relationships_response['text'].strip())
+                        # Process relationships into graph edges
+                        for rel in relationships:
+                            source_id = rel.get('source_id')
+                            target_id = rel.get('target_id')
+                            relationship_type = rel.get('relationship_type', 'related_to')
+                            weight = rel.get('weight', 0.5)
+                            
+                            if source_id in memory_nodes and target_id in memory_nodes:
+                                source_node = memory_nodes[source_id]
+                                target_node = memory_nodes[target_id]
+                                
+                                await self.graph_store.add_relationship(
+                                    source_node=source_node,
+                                    target_node=target_node,
+                                    relationship_type=relationship_type,
+                                    weight=weight,
+                                    properties={"description": rel.get('description', '')}
+                                )
+                                relationship_count += 1
+                                
+                    except json.JSONDecodeError as e:
+                        self.logger.error(f"Failed to parse relationships JSON: {str(e)}")
+                    except Exception as e:
+                        self.logger.error(f"Error processing relationships: {str(e)}")
+            
+            return relationship_count
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting relationships: {str(e)}")
+            return 0

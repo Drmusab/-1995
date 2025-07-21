@@ -1705,3 +1705,14 @@ class VectorMemoryStore(BaseMemoryStore):
             await self._vector_index.save(index_path)
             
             # Emit backup complete
+            await self.event_bus.emit(VectorStoreBackupCompleted(
+                backup_path=str(backup_path),
+                vector_count=len(self._vectors),
+                backup_size=backup_path.stat().st_size
+            ))
+            
+            self.logger.info(f"Vector store backup completed: {backup_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Vector store backup failed: {str(e)}")
+            raise

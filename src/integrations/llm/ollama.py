@@ -1532,4 +1532,16 @@ class EnhancedOllamaProvider(BaseLLMProvider):
                 "status": "healthy" if healthy_instances > 0 else "unhealthy",
                 "healthy_instances": healthy_instances,
                 "total_instances": total_instances,
-                "active_requests": len(self.active_requests)
+                "active_requests": len(self.active_requests),
+                "models_loaded": len(self.loaded_models),
+                "total_capacity": sum(instance.config.get('max_requests', 10) for instance in self.instances.values())
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Health check failed: {str(e)}")
+            return {
+                "status": "unhealthy",
+                "error": str(e),
+                "healthy_instances": 0,
+                "total_instances": len(self.instances) if hasattr(self, 'instances') else 0
+            }
