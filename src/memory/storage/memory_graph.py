@@ -1724,4 +1724,4 @@ class MemoryGraphStore(BaseMemoryStore):
             return [node for node in results if node.node_id != node_id]
             
         except Exception as e:
-            self.logger.error(f"Failed to find related memories: {str(
+            self.logger.error(f"Failed to find related memories: {str(e)}")

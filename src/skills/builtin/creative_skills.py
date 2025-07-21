@@ -972,7 +972,7 @@ class PoetryGenerator(CreativeSkill):
             
             # Check if first line looks like a title (no ending punctuation, relatively short)
             if (len(first_line) < 60 and 
-                not first_line.endswith((".", "!", "?", ",", ";", ":"")) and
+                not first_line.endswith((".", "!", "?", ",", ";", ":")) and
                 not first_line.startswith(("#", "*", "-"))):
                 
                 title = first_line
@@ -1558,4 +1558,4 @@ class CharacterCreator(CreativeSkill):
         
         arc_prompt = (
             f"Based on this character profile, generate 3 potential character arcs that would be compelling "
-            f"for this character in a
+            f"for this character in a story:"

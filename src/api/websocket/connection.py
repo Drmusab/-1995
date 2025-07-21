@@ -1515,3 +1515,5 @@ class ConnectionManager:
     # Background Tasks
     
     async def _heartbeat_monitor(self) -> None:
+        """Monitor connection heartbeat."""
+        pass  # TODO: Implement heartbeat monitoring

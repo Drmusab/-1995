@@ -1744,4 +1744,4 @@ class SemanticMemory(BaseMemory):
         
         return items
 
-    async def validate_fact(self, memory_id: str, validation_result:
+    async def validate_fact(self, memory_id: str, validation_result: bool) -> None:

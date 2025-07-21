@@ -55,6 +55,15 @@ class EventSeverity(Enum):
 
 
 @dataclass
+class EventMetadata:
+    """Metadata for events."""
+    priority: EventPriority = EventPriority.NORMAL
+    tags: List[str] = field(default_factory=list)
+    emitted_at: Optional[datetime] = None
+    correlation_id: Optional[str] = None
+
+
+@dataclass
 class BaseEvent:
     """Base class for all system events."""
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -68,6 +77,7 @@ class BaseEvent:
     user_id: Optional[str] = None
     correlation_id: Optional[str] = None
     tags: List[str] = field(default_factory=list)
+    metadata: Optional[EventMetadata] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
@@ -108,6 +118,75 @@ class BaseEvent:
             return EventCategory.SKILL
         else:
             return EventCategory.SYSTEM
+
+
+# =============================================================================
+# CONFIGURATION EVENTS
+# =============================================================================
+
+@dataclass
+class ConfigurationLoaded(BaseEvent):
+    """Configuration loaded event."""
+    category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
+    config_file: str = ""
+    load_time: float = 0.0
+
+
+@dataclass
+class ConfigurationReloaded(BaseEvent):
+    """Configuration reloaded event."""
+    category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
+    config_file: str = ""
+    changes: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ConfigurationChanged(BaseEvent):
+    """Configuration changed event."""
+    category: EventCategory = field(default=EventCategory.AUDIT, init=False)
+    config_section: str = ""
+    changes: Dict[str, Any] = field(default_factory=dict)
+    changed_by: Optional[str] = None
+
+
+@dataclass
+class ConfigurationValidationFailed(BaseEvent):
+    """Configuration validation failed event."""
+    category: EventCategory = field(default=EventCategory.ERROR, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.ERROR
+    config_file: str = ""
+    errors: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ConfigurationSourceAdded(BaseEvent):
+    """Configuration source added event."""
+    category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
+    source_type: str = ""
+    source_path: str = ""
+
+
+@dataclass
+class ConfigurationSourceRemoved(BaseEvent):
+    """Configuration source removed event."""
+    category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
+    source_type: str = ""
+    source_path: str = ""
+
+
+@dataclass
+class ConfigurationEncrypted(BaseEvent):
+    """Configuration encrypted event."""
+    category: EventCategory = field(default=EventCategory.SECURITY, init=False)
+    config_section: str = ""
+
+
+@dataclass
+class ConfigurationDecrypted(BaseEvent):
+    """Configuration decrypted event."""
+    category: EventCategory = field(default=EventCategory.SECURITY, init=False)
+    config_section: str = ""
 
 
 # =============================================================================
@@ -1295,6 +1374,16 @@ class ConfigurationChanged(BaseEvent):
 # =============================================================================
 
 EVENT_TYPES = {
+    # Configuration Events
+    "ConfigurationLoaded": ConfigurationLoaded,
+    "ConfigurationReloaded": ConfigurationReloaded,
+    "ConfigurationChanged": ConfigurationChanged,
+    "ConfigurationValidationFailed": ConfigurationValidationFailed,
+    "ConfigurationSourceAdded": ConfigurationSourceAdded,
+    "ConfigurationSourceRemoved": ConfigurationSourceRemoved,
+    "ConfigurationEncrypted": ConfigurationEncrypted,
+    "ConfigurationDecrypted": ConfigurationDecrypted,
+    
     # System Events
     "SystemStarted": SystemStarted,
     "SystemShutdownStarted": SystemShutdownStarted,
