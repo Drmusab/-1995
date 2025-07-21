@@ -342,11 +342,12 @@ class EventStore:
             with open(temp_file, 'w') as f:
                 with self._lock:
                     for envelope in self._events:
-                        # Serialize envelope
+                        # Serialize envelope with custom handling for enums
+                        event_data = self._serialize_event(envelope.event)
                         data = {
                             'event_id': envelope.event_id,
                             'event_type': envelope.event.event_type,
-                            'event_data': asdict(envelope.event),
+                            'event_data': event_data,
                             'subscription_id': envelope.subscription_id,
                             'state': envelope.state.value,
                             'created_at': envelope.created_at.isoformat(),
@@ -359,6 +360,37 @@ class EventStore:
             
         except Exception as e:
             logging.error(f"Failed to persist events to disk: {str(e)}")
+    
+    def _serialize_event(self, event: BaseEvent) -> Dict[str, Any]:
+        """Serialize event with proper enum handling."""
+        try:
+            event_dict = asdict(event)
+            # Recursively convert enums and datetime objects
+            self._convert_types(event_dict)
+            return event_dict
+        except Exception as e:
+            logging.warning(f"Failed to serialize event properly: {str(e)}")
+            # Fallback to basic serialization
+            return {
+                'event_type': getattr(event, 'event_type', 'Unknown'),
+                'timestamp': getattr(event, 'timestamp', datetime.now(timezone.utc)).isoformat(),
+                'source_component': getattr(event, 'source_component', None),
+                'session_id': getattr(event, 'session_id', None),
+                'error': 'Serialization failed'
+            }
+    
+    def _convert_types(self, obj):
+        """Recursively convert enums and datetime objects to serializable types."""
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                obj[key] = self._convert_types(value)
+        elif isinstance(obj, list):
+            obj = [self._convert_types(item) for item in obj]
+        elif hasattr(obj, 'value'):  # Enum
+            obj = obj.value
+        elif hasattr(obj, 'isoformat'):  # Datetime
+            obj = obj.isoformat()
+        return obj
     
     async def load_from_disk(self) -> None:
         """Load events from disk."""
