@@ -30,7 +30,7 @@ import re
 
 # Core imports
 from src.core.config.loader import ConfigLoader
-from src.core.events.event_bus import EventBus
+from src.core.events.event_bus import EnhancedEventBus
 from src.core.events.event_types import (
     UserAuthenticated, UserAuthorized, UserAuthorizationFailed, PermissionGranted,
     PermissionRevoked, RoleAssigned, RoleRevoked, PolicyCreated, PolicyUpdated,
@@ -654,7 +654,7 @@ class AuthorizationManager:
         
         # Core services
         self.config = container.get(ConfigLoader)
-        self.event_bus = container.get(EventBus)
+        self.event_bus = container.get(EnhancedEventBus)
         self.error_handler = container.get(ErrorHandler)
         self.health_check = container.get(HealthCheck)
         

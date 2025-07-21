@@ -37,7 +37,7 @@ import aiohttp
 
 # Core imports
 from src.core.config.loader import ConfigLoader
-from src.core.events.event_bus import EventBus
+from src.core.events.event_bus import EnhancedEventBus
 from src.core.events.event_types import (
     UserAuthenticated, UserLoggedOut, UserRegistered, UserLoginFailed,
     AuthenticationTokenGenerated, AuthenticationTokenRevoked, UserSessionStarted,
@@ -570,7 +570,7 @@ class AuthenticationManager:
         
         # Core services
         self.config = container.get(ConfigLoader)
-        self.event_bus = container.get(EventBus)
+        self.event_bus = container.get(EnhancedEventBus)
         self.error_handler = container.get(ErrorHandler)
         self.health_check = container.get(HealthCheck)
         
@@ -1683,4 +1683,13 @@ class AuthenticationManager:
 
     def _verify_password(self, password: str, hash_value: str, salt: str) -> bool:
         """Verify password against hash."""
-        return self._hash
+        return self._hash_password(password, salt) == hash_value
+
+    async def _health_check_callback(self) -> Dict[str, Any]:
+        """Health check callback for the authentication manager."""
+        return {
+            "status": "healthy",
+            "active_tokens": len(self.active_tokens),
+            "cache_size": len(self.user_cache),
+            "component": "authentication_manager"
+        }

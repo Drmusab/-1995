@@ -1600,3 +1600,4 @@ class RedisCache:
                 "status": "unhealthy",
                 "error": str(e),
                 "connected": False
+            }
