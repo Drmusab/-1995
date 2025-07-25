@@ -1,0 +1,1 @@
+"""Web UI templates for the AI Assistant interface."""

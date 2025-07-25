@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-assistant-api
+  namespace: ai-assistant
+  labels:
+    app: ai-assistant-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ai-assistant-api
+  template:
+    metadata:
+      labels:
+        app: ai-assistant-api
+    spec:
+      containers:
+      - name: ai-assistant
+        image: ai-assistant:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: ENVIRONMENT
+          value: "production"
