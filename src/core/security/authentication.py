@@ -56,8 +56,8 @@ from src.core.security.sanitization import SecuritySanitizer
 from src.integrations.storage.database import DatabaseManager
 from src.integrations.cache.redis_cache import RedisCache
 
-# Assistant components
-from src.assistant.session_manager import SessionManager
+# Security interfaces
+from src.core.security.interfaces import ISessionProvider, IUserProvider
 
 # Observability
 from src.observability.monitoring.metrics import MetricsCollector
@@ -583,7 +583,7 @@ class AuthenticationManager:
         self.redis_cache = container.get(RedisCache)
         
         # Session management
-        self.session_manager = container.get(SessionManager)
+        self.session_provider = container.get(ISessionProvider)
         
         # External integrations
         try:
@@ -1004,14 +1004,16 @@ class AuthenticationManager:
                     
                     # Create session if needed
                     if result.user_id and not result.mfa_required:
-                        session_id = await self.session_manager.create_session(
-                            result.user_id,
-                            session_config={
-                                'device_info': {'user_agent': user_agent},
-                                'network_info': {'ip_address': ip_address}
-                            }
-                        )
-                        result.session_id = session_id
+                        # TODO: Implement session creation through ISessionProvider interface
+                        # session_id = await self.session_provider.create_session(
+                        #     result.user_id,
+                        #     session_config={
+                        #         'device_info': {'user_agent': user_agent},
+                        #         'network_info': {'ip_address': ip_address}
+                        #     }
+                        # )
+                        # result.session_id = session_id
+                        pass
                     
                     # Log successful authentication
                     await self._log_auth_event(
@@ -1484,9 +1486,10 @@ class AuthenticationManager:
                     self.active_tokens.pop(token_key, None)
             
             # End user sessions
-            user_sessions = self.session_manager.list_user_sessions(user_id)
-            for session_id in user_sessions:
-                await self.session_manager.end_session(session_id, "user_logout")
+            # TODO: Implement through ISessionProvider interface
+            # user_sessions = self.session_provider.list_user_sessions(user_id)
+            # for session_id in user_sessions:
+            #     await self.session_provider.invalidate_session(session_id)
             
             # Log logout
             await self._log_auth_event(

@@ -25,7 +25,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 # Core imports
-from src.core.dependency_injection import Container, Singleton, Transient, Scoped
+from src.core.dependency_injection import Container, LifecycleScope
 from src.core.config.loader import ConfigLoader
 from src.core.events.event_bus import EventBus, EnhancedEventBus
 from src.core.error_handling import ErrorHandler
@@ -42,13 +42,14 @@ from src.core.security.authorization import AuthorizationManager
 from src.core.security.encryption import EncryptionManager
 from src.core.security.sanitization import SecuritySanitizer
 
-# Assistant core components
-from src.assistant.core_engine import EnhancedCoreEngine, EngineConfiguration
-from src.assistant.component_manager import EnhancedComponentManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.plugin_manager import EnhancedPluginManager
+# Assistant core components - Commented out to fix circular dependencies
+# TODO: Move assistant component configuration to application layer
+# from src.assistant.core_engine import EnhancedCoreEngine, EngineConfiguration
+# from src.assistant.component_manager import EnhancedComponentManager
+# from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+# from src.assistant.session_manager import EnhancedSessionManager
+# from src.assistant.interaction_handler import InteractionHandler
+# from src.assistant.plugin_manager import EnhancedPluginManager
 
 # Processing components
 from src.processing.natural_language.intent_manager import EnhancedIntentManager
