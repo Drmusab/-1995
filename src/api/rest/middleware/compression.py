@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from ..core.events.event_bus import EventBus
 from ..core.events.event_types import CompressionEvent, APIEvent
-from ..core.config.settings.base import get_settings
+from src.config_settings import get_settings
 from ..observability.metrics import MetricsCollector
 from ..observability.logging.config import get_logger
 

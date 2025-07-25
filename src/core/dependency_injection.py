@@ -1406,10 +1406,12 @@ def nullcontext():
 
 async def register_plugin_manager_update(container: Container):
     """Register the enhanced plugin manager."""
-    from src.assistant.plugin_manager_enhanced import EnhancedPluginManager
+    # TODO: Move this registration to application layer to avoid circular dependency
+    # from src.assistant.plugin_manager_enhanced import EnhancedPluginManager
     
-    # Register as singleton
-    container.register_singleton(EnhancedPluginManager)
+    # # Register as singleton
+    # container.register_singleton(EnhancedPluginManager)
     
-    # Also register with the original PluginManager interface for compatibility
-    container.register_alias('PluginManager', EnhancedPluginManager)
+    # # Also register with the original PluginManager interface for compatibility
+    # container.register_alias('PluginManager', EnhancedPluginManager)
+    pass
