@@ -356,12 +356,41 @@ class BroadcastManager:
                         if data.get('source_node') == 'current_node':
                             continue
                         
-                        # TODO: Implement distributed broadcast handling
-                        # This would involve:
-                        # 1. Parsing the distributed message
-                        # 2. Finding local connections that match the criteria
-                        # 3. Broadcasting to those local connections
-                        # 4. Avoiding duplicate broadcasts
+                        # Implement distributed broadcast handling
+                        message_type = data.get('type', 'unknown')
+                        broadcast_data = data.get('data', {})
+                        target_criteria = data.get('target_criteria', {})
+                        
+                        # 1. Parse the distributed message
+                        if message_type == 'user_broadcast':
+                            # Broadcast to specific user
+                            user_id = target_criteria.get('user_id')
+                            if user_id:
+                                await self._broadcast_to_local_user(user_id, broadcast_data)
+                                
+                        elif message_type == 'session_broadcast':
+                            # Broadcast to specific session
+                            session_id = target_criteria.get('session_id')
+                            if session_id:
+                                await self._broadcast_to_local_session(session_id, broadcast_data)
+                                
+                        elif message_type == 'channel_broadcast':
+                            # Broadcast to channel subscribers
+                            channel = target_criteria.get('channel')
+                            if channel:
+                                await self._broadcast_to_local_channel(channel, broadcast_data)
+                                
+                        elif message_type == 'role_broadcast':
+                            # Broadcast to users with specific role
+                            role = target_criteria.get('role')
+                            if role:
+                                await self._broadcast_to_local_role(role, broadcast_data)
+                                
+                        else:
+                            self.logger.warning(f"Unknown distributed broadcast type: {message_type}")
+                        
+                        # Update metrics
+                        self.metrics.distributed_received += 1
                         
                         self.logger.debug(f"Received distributed broadcast: {data}")
                         
@@ -369,6 +398,46 @@ class BroadcastManager:
                         self.logger.error(f"Failed to handle Redis broadcast: {str(e)}")
         except Exception as e:
             self.logger.error(f"Redis message handler error: {str(e)}")
+    
+    async def _broadcast_to_local_user(self, user_id: str, data: Dict[str, Any]) -> None:
+        """Broadcast to local connections for a specific user."""
+        try:
+            connections = self.connection_manager.get_user_connections(user_id)
+            for connection_id in connections:
+                await self.connection_manager.send_message(connection_id, data)
+                self.metrics.distributed_delivered += 1
+        except Exception as e:
+            self.logger.warning(f"Failed to broadcast to local user {user_id}: {e}")
+    
+    async def _broadcast_to_local_session(self, session_id: str, data: Dict[str, Any]) -> None:
+        """Broadcast to local connections for a specific session."""
+        try:
+            connections = self.connection_manager.get_session_connections(session_id)
+            for connection_id in connections:
+                await self.connection_manager.send_message(connection_id, data)
+                self.metrics.distributed_delivered += 1
+        except Exception as e:
+            self.logger.warning(f"Failed to broadcast to local session {session_id}: {e}")
+    
+    async def _broadcast_to_local_channel(self, channel: str, data: Dict[str, Any]) -> None:
+        """Broadcast to local connections subscribed to a channel."""
+        try:
+            connections = self.connection_manager.get_channel_connections(channel)
+            for connection_id in connections:
+                await self.connection_manager.send_message(connection_id, data)
+                self.metrics.distributed_delivered += 1
+        except Exception as e:
+            self.logger.warning(f"Failed to broadcast to local channel {channel}: {e}")
+    
+    async def _broadcast_to_local_role(self, role: str, data: Dict[str, Any]) -> None:
+        """Broadcast to local connections for users with a specific role."""
+        try:
+            connections = self.connection_manager.get_role_connections(role)
+            for connection_id in connections:
+                await self.connection_manager.send_message(connection_id, data)
+                self.metrics.distributed_delivered += 1
+        except Exception as e:
+            self.logger.warning(f"Failed to broadcast to local role {role}: {e}")
     
     def get_metrics(self) -> BroadcastMetrics:
         """Get current broadcast metrics."""
