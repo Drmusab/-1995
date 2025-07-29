@@ -1004,16 +1004,18 @@ class AuthenticationManager:
                     
                     # Create session if needed
                     if result.user_id and not result.mfa_required:
-                        # TODO: Implement session creation through ISessionProvider interface
-                        # session_id = await self.session_provider.create_session(
-                        #     result.user_id,
-                        #     session_config={
-                        #         'device_info': {'user_agent': user_agent},
-                        #         'network_info': {'ip_address': ip_address}
-                        #     }
-                        # )
-                        # result.session_id = session_id
-                        pass
+                        try:
+                            session_id = await self.session_provider.create_session(
+                                result.user_id,
+                                session_config={
+                                    'device_info': {'user_agent': user_agent},
+                                    'network_info': {'ip_address': ip_address}
+                                }
+                            )
+                            result.session_id = session_id
+                        except Exception as e:
+                            self.logger.warning(f"Failed to create session for user {result.user_id}: {e}")
+                            # Continue without session - not critical for authentication
                     
                     # Log successful authentication
                     await self._log_auth_event(
@@ -1486,10 +1488,13 @@ class AuthenticationManager:
                     self.active_tokens.pop(token_key, None)
             
             # End user sessions
-            # TODO: Implement through ISessionProvider interface
-            # user_sessions = self.session_provider.list_user_sessions(user_id)
-            # for session_id in user_sessions:
-            #     await self.session_provider.invalidate_session(session_id)
+            try:
+                user_sessions = await self.session_provider.list_user_sessions(user_id)
+                for session_id in user_sessions:
+                    await self.session_provider.invalidate_session(session_id)
+            except Exception as e:
+                self.logger.warning(f"Failed to invalidate sessions for user {user_id}: {e}")
+                # Continue - session cleanup is not critical for logout
             
             # Log logout
             await self._log_auth_event(

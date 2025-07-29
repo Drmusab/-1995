@@ -1516,4 +1516,60 @@ class ConnectionManager:
     
     async def _heartbeat_monitor(self) -> None:
         """Monitor connection heartbeat."""
-        pass  # TODO: Implement heartbeat monitoring
+        heartbeat_interval = 30.0  # Send ping every 30 seconds
+        timeout_threshold = 60.0   # Consider connection dead after 60 seconds without pong
+        
+        while True:
+            try:
+                await asyncio.sleep(heartbeat_interval)
+                
+                current_time = time.time()
+                connections_to_remove = []
+                
+                # Check all active connections
+                for connection_id, connection in list(self.active_connections.items()):
+                    try:
+                        # Check if connection is still alive
+                        time_since_last_pong = current_time - connection.last_pong_time
+                        
+                        if time_since_last_pong > timeout_threshold:
+                            # Connection is considered dead
+                            self.logger.warning(f"Connection {connection_id} timed out (no pong for {time_since_last_pong:.1f}s)")
+                            connections_to_remove.append(connection_id)
+                            continue
+                        
+                        # Send ping to check if connection is alive
+                        if connection.websocket and not connection.websocket.client_state.CLOSED:
+                            await connection.websocket.ping()
+                            connection.last_ping_time = current_time
+                            
+                            # Update metrics
+                            if self.metrics:
+                                self.metrics.increment("websocket_pings_sent")
+                                
+                        else:
+                            # WebSocket is closed
+                            connections_to_remove.append(connection_id)
+                            
+                    except Exception as e:
+                        self.logger.warning(f"Error pinging connection {connection_id}: {e}")
+                        connections_to_remove.append(connection_id)
+                
+                # Remove dead connections
+                for connection_id in connections_to_remove:
+                    try:
+                        await self.disconnect_client(connection_id, reason="heartbeat_timeout")
+                    except Exception as e:
+                        self.logger.error(f"Error removing dead connection {connection_id}: {e}")
+                
+                # Log heartbeat stats if there are active connections
+                if self.active_connections:
+                    self.logger.debug(f"Heartbeat check completed: {len(self.active_connections)} active connections, {len(connections_to_remove)} removed")
+                    
+            except asyncio.CancelledError:
+                self.logger.info("Heartbeat monitor cancelled")
+                break
+            except Exception as e:
+                self.logger.error(f"Error in heartbeat monitor: {e}")
+                # Continue monitoring despite errors
+                await asyncio.sleep(5.0)

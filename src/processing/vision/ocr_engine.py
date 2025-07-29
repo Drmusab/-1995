@@ -10,6 +10,7 @@ document understanding with full integration into the core system architecture.
 
 import asyncio
 import hashlib
+import json
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Set, Tuple, Union, AsyncGenerator
@@ -1202,12 +1203,81 @@ class EnhancedOCREngine:
             if self.cache:
                 cached_data = await self.cache.get(cache_key)
                 if cached_data:
-                    # Would deserialize OCRResult from cached data
-                    # This is a placeholder for actual deserialization
-                    return None  # TODO: Implement deserialization
+                    try:
+                        # Deserialize OCRResult from cached JSON data
+                        data = json.loads(cached_data) if isinstance(cached_data, str) else cached_data
+                        
+                        # Reconstruct OCRResult object
+                        result = OCRResult(
+                            success=data.get('success', False),
+                            request_id=data.get('request_id', ''),
+                            processing_time=data.get('processing_time', 0.0),
+                            extracted_text=data.get('extracted_text', ''),
+                            document_layouts=[
+                                self._deserialize_document_layout(layout_data)
+                                for layout_data in data.get('document_layouts', [])
+                            ],
+                            total_pages=data.get('total_pages', 0),
+                            method_used=OCRMethod(data.get('method_used', 'tesseract')),
+                            quality_level=QualityLevel(data.get('quality_level', 'medium')),
+                            detected_languages=data.get('detected_languages', []),
+                            document_type=DocumentType(data.get('document_type', 'document')),
+                            image_dimensions=tuple(data.get('image_dimensions', [0, 0])),
+                            image_dpi=data.get('image_dpi'),
+                            color_mode=data.get('color_mode', 'unknown'),
+                            processing_metadata=data.get('processing_metadata', {}),
+                            quality_metrics=data.get('quality_metrics', {}),
+                            confidence_scores=data.get('confidence_scores', {}),
+                            errors=data.get('errors', []),
+                            warnings=data.get('warnings', [])
+                        )
+                        
+                        return result
+                        
+                    except (json.JSONDecodeError, KeyError, ValueError) as e:
+                        self.logger.warning(f"Failed to deserialize cached OCR result: {e}")
+                        return None
         except Exception as e:
             self.logger.warning(f"Cache retrieval failed: {str(e)}")
         return None
+    
+    def _deserialize_document_layout(self, layout_data: Dict[str, Any]) -> 'DocumentLayout':
+        """Deserialize a document layout from cached data."""
+        # Import here to avoid circular imports
+        from src.processing.vision.layout_analyzer import DocumentLayout, TextBlock, BoundingBox
+        
+        text_blocks = []
+        for block_data in layout_data.get('text_blocks', []):
+            bbox_data = block_data.get('bounding_box', {})
+            bounding_box = BoundingBox(
+                x=bbox_data.get('x', 0),
+                y=bbox_data.get('y', 0),
+                width=bbox_data.get('width', 0),
+                height=bbox_data.get('height', 0),
+                confidence=bbox_data.get('confidence', 0.0)
+            )
+            
+            text_block = TextBlock(
+                text=block_data.get('text', ''),
+                bounding_box=bounding_box,
+                confidence=block_data.get('confidence', 0.0),
+                font_size=block_data.get('font_size'),
+                font_family=block_data.get('font_family'),
+                text_direction=block_data.get('text_direction', 'ltr'),
+                language=block_data.get('language', 'en'),
+                block_type=block_data.get('block_type', 'paragraph')
+            )
+            text_blocks.append(text_block)
+        
+        return DocumentLayout(
+            page_number=layout_data.get('page_number', 1),
+            page_dimensions=tuple(layout_data.get('page_dimensions', [0, 0])),
+            text_blocks=text_blocks,
+            detected_tables=layout_data.get('detected_tables', []),
+            detected_images=layout_data.get('detected_images', []),
+            reading_order=layout_data.get('reading_order', []),
+            layout_confidence=layout_data.get('layout_confidence', 0.0)
+        )
     
     async def _cache_result(self, cache_key: str, result: OCRResult, ttl: int) -> None:
         """Cache OCR result."""
