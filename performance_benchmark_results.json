@@ -1,0 +1,61 @@
+{
+  "timestamp": "2025-08-01T20:00:41.560964",
+  "total_time": 1.655010461807251,
+  "passed": 1,
+  "total": 5,
+  "results": [
+    {
+      "name": "Import Performance",
+      "duration_ms": 110.35895347595215,
+      "operations_per_second": 36.24536001849295,
+      "success": true,
+      "details": {
+        "Core Events": "0.110s",
+        "Context Events": "0.000s",
+        "Health Events": "0.000s",
+        "Cache Events": "0.000s"
+      }
+    },
+    {
+      "name": "Context Operations",
+      "duration_ms": 0,
+      "operations_per_second": 0,
+      "success": false,
+      "details": {
+        "error": "cannot import name 'MemoryBackupStarted' from 'src.core.events.event_types' (/home/runner/work/-1995/-1995/src/core/events/event_types.py)"
+      }
+    },
+    {
+      "name": "Cache Performance",
+      "duration_ms": 0,
+      "operations_per_second": 0,
+      "success": false,
+      "details": {
+        "error": "cannot import name 'MetricRecorded' from 'src.core.events.event_types' (/home/runner/work/-1995/-1995/src/core/events/event_types.py)"
+      }
+    },
+    {
+      "name": "Async Timing Precision",
+      "duration_ms": 1050.7018566131592,
+      "operations_per_second": 18.083150686765467,
+      "success": false,
+      "details": {
+        "target_interval": "0.100s",
+        "average_interval": "0.055s",
+        "timing_error": "0.045s",
+        "max_error": "0.094s",
+        "min_error": "0.000s",
+        "jitter": "0.047s"
+      }
+    },
+    {
+      "name": "Lazy Import Mechanism",
+      "duration_ms": 0,
+      "operations_per_second": 0,
+      "success": false,
+      "details": {
+        "error": "No module named 'sklearn'"
+      }
+    }
+  ]
+}

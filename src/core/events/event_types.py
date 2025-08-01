@@ -1538,6 +1538,99 @@ class AlertResolved(BaseEvent):
 
 
 # =============================================================================
+# CACHE EVENTS  
+# =============================================================================
+
+@dataclass
+class CacheHit(BaseEvent):
+    """Cache hit event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    cache_name: str = ""
+    key: str = ""
+    namespace: str = ""
+    access_time_ms: float = 0.0
+
+
+@dataclass
+class CacheMiss(BaseEvent):
+    """Cache miss event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    cache_name: str = ""
+    key: str = ""
+    namespace: str = ""
+
+
+@dataclass
+class CacheEviction(BaseEvent):
+    """Cache eviction event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    cache_name: str = ""
+    key: str = ""
+    namespace: str = ""
+    eviction_reason: str = ""
+
+
+@dataclass
+class CacheExpired(BaseEvent):
+    """Cache entry expired event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    cache_name: str = ""
+    key: str = ""
+    namespace: str = ""
+    age_seconds: float = 0.0
+
+
+@dataclass
+class CacheCleared(BaseEvent):
+    """Cache cleared event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    cache_name: str = ""
+    namespace: Optional[str] = None
+    entries_cleared: int = 0
+
+
+@dataclass
+class CacheWarmed(BaseEvent):
+    """Cache warmed event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    cache_name: str = ""
+    entries_loaded: int = 0
+    warm_time_ms: float = 0.0
+
+
+@dataclass
+class CacheInvalidated(BaseEvent):
+    """Cache invalidated event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    cache_name: str = ""
+    key: str = ""
+    namespace: str = ""
+    invalidation_reason: str = ""
+
+
+@dataclass
+class CacheError(BaseEvent):
+    """Cache error event."""
+    category: EventCategory = field(default=EventCategory.ERROR, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.ERROR
+    cache_name: str = ""
+    operation: str = ""
+    error_message: str = ""
+
+
+@dataclass
+class CacheHealthChanged(BaseEvent):
+    """Cache health changed event."""
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    cache_name: str = ""
+    old_status: str = ""
+    new_status: str = ""
+    hit_ratio: float = 0.0
+    memory_usage_mb: float = 0.0
+
+
+# =============================================================================
 # AUDIT EVENTS
 # =============================================================================
 
@@ -1755,6 +1848,17 @@ EVENT_TYPES = {
     "CircuitBreakerStateChanged": CircuitBreakerStateChanged,
     "AlertTriggered": AlertTriggered,
     "AlertResolved": AlertResolved,
+    
+    # Cache Events
+    "CacheHit": CacheHit,
+    "CacheMiss": CacheMiss,
+    "CacheEviction": CacheEviction,
+    "CacheExpired": CacheExpired,
+    "CacheCleared": CacheCleared,
+    "CacheWarmed": CacheWarmed,
+    "CacheInvalidated": CacheInvalidated,
+    "CacheError": CacheError,
+    "CacheHealthChanged": CacheHealthChanged,
     
     # Audit Events
     "AuditLogEntry": AuditLogEntry,
