@@ -1,0 +1,205 @@
+```mermaid
+graph TB
+    %% External Users and Load Balancer
+    subgraph "External Access"
+        Users[👥 Users<br/>Web, Mobile, API Clients]
+        CDN[🌐 CDN<br/>Global Content Delivery]
+        WAF[🛡️ Web Application Firewall<br/>Security Protection]
+        LoadBalancer[⚖️ Load Balancer<br/>Traffic Distribution]
+    end
+    
+    %% Kubernetes Cluster
+    subgraph "Kubernetes Cluster"
+        subgraph "Ingress Layer"
+            IngressController[🚪 Ingress Controller<br/>NGINX/Istio]
+            CertManager[🔐 Cert Manager<br/>SSL/TLS Automation]
+        end
+        
+        subgraph "Application Namespace"
+            subgraph "API Services"
+                RestPods[🔴 REST API Pods<br/>3 replicas<br/>Auto-scaling]
+                WebSocketPods[🟢 WebSocket Pods<br/>2 replicas<br/>Sticky sessions]
+                GraphQLPods[🔵 GraphQL Pods<br/>2 replicas<br/>Auto-scaling]
+            end
+            
+            subgraph "Core Services"
+                CoreEnginePods[🧠 Core Engine Pods<br/>5 replicas<br/>CPU-intensive]
+                MemoryServicePods[💾 Memory Service Pods<br/>3 replicas<br/>Memory-intensive]
+                SkillExecutorPods[⚙️ Skill Executor Pods<br/>4 replicas<br/>Task-based scaling]
+            end
+            
+            subgraph "Background Services"
+                WorkflowPods[🔄 Workflow Pods<br/>2 replicas<br/>Queue-based]
+                LearningPods[📈 Learning Engine Pods<br/>1 replica<br/>Resource-intensive]
+                ObservabilityPods[📊 Observability Pods<br/>1 replica<br/>Monitoring]
+            end
+        end
+        
+        subgraph "Data Namespace"
+            subgraph "Databases"
+                PostgresCluster[🗄️ PostgreSQL Cluster<br/>Primary + 2 Replicas<br/>StatefulSet]
+                RedisCluster[⚡ Redis Cluster<br/>3 Masters + 3 Replicas<br/>High Availability]
+                VectorDB[🔍 Vector Database<br/>Pinecone/Weaviate<br/>External or Self-hosted]
+            end
+            
+            subgraph "Storage"
+                PersistentVolumes[💿 Persistent Volumes<br/>SSD Storage<br/>Backup & Snapshots]
+                ObjectStorage[📦 Object Storage<br/>S3/MinIO<br/>File & Media Storage]
+            end
+        end
+        
+        subgraph "System Namespace"
+            subgraph "Service Mesh"
+                IstioProxy[🕸️ Istio Proxy<br/>Sidecar Pattern<br/>Traffic Management]
+                ServiceDiscovery[🗺️ Service Discovery<br/>Consul/Kubernetes DNS<br/>Service Registry]
+            end
+            
+            subgraph "Monitoring Stack"
+                Prometheus[📊 Prometheus<br/>Metrics Collection<br/>Time Series DB]
+                Grafana[📈 Grafana<br/>Visualization<br/>Dashboards]
+                Jaeger[🔍 Jaeger<br/>Distributed Tracing<br/>Performance Monitoring]
+                AlertManager[🚨 Alert Manager<br/>Notification System<br/>Incident Response]
+            end
+            
+            subgraph "Logging Stack"
+                Fluentd[📝 Fluentd<br/>Log Collection<br/>Aggregation]
+                Elasticsearch[🔍 Elasticsearch<br/>Log Storage<br/>Full-text Search]
+                Kibana[📊 Kibana<br/>Log Visualization<br/>Analytics]
+            end
+        end
+    end
+    
+    %% External Services
+    subgraph "External Services"
+        subgraph "AI/ML Services"
+            OpenAI[🤖 OpenAI API<br/>GPT Models<br/>External Provider]
+            OllamaService[🏠 Ollama Service<br/>Local LLM<br/>Self-hosted]
+            VectorDBExternal[🔍 Vector DB<br/>Pinecone/Weaviate<br/>Managed Service]
+        end
+        
+        subgraph "Third-party APIs"
+            ExternalAPIs[🌐 External APIs<br/>Third-party Services<br/>Integration Points]
+            PaymentGateway[💳 Payment Gateway<br/>Billing & Subscriptions<br/>Stripe/PayPal]
+            EmailService[📧 Email Service<br/>Notifications<br/>SendGrid/SES]
+        end
+    end
+    
+    %% Development and CI/CD
+    subgraph "DevOps Pipeline"
+        subgraph "Source Control"
+            GitRepo[📚 Git Repository<br/>Source Code<br/>Version Control]
+            DockerRegistry[📦 Docker Registry<br/>Container Images<br/>Private Registry]
+        end
+        
+        subgraph "CI/CD Pipeline"
+            CI[🔧 Continuous Integration<br/>GitHub Actions/Jenkins<br/>Build & Test]
+            CD[🚀 Continuous Deployment<br/>ArgoCD/Flux<br/>GitOps]
+            SecurityScan[🔒 Security Scanning<br/>SAST/DAST<br/>Vulnerability Assessment]
+        end
+        
+        subgraph "Infrastructure as Code"
+            Terraform[🏗️ Terraform<br/>Infrastructure Provisioning<br/>Cloud Resources]
+            Helm[⚓ Helm Charts<br/>Kubernetes Deployment<br/>Package Management]
+            Ansible[⚙️ Ansible<br/>Configuration Management<br/>Automation]
+        end
+    end
+    
+    %% Cloud Infrastructure
+    subgraph "Cloud Infrastructure"
+        subgraph "Compute"
+            K8sNodes[🖥️ Kubernetes Nodes<br/>Auto-scaling Groups<br/>Multi-AZ Deployment]
+            GPUNodes[🚀 GPU Nodes<br/>ML Workloads<br/>Specialized Instances]
+        end
+        
+        subgraph "Network"
+            VPC[🌐 Virtual Private Cloud<br/>Network Isolation<br/>Security Groups]
+            Subnets[📡 Subnets<br/>Public/Private<br/>Multi-AZ]
+            NATGateway[🔄 NAT Gateway<br/>Outbound Internet<br/>Private Subnets]
+        end
+        
+        subgraph "Security"
+            IAMRoles[🔐 IAM Roles<br/>Access Control<br/>Least Privilege]
+            Secrets[🔑 Secrets Management<br/>AWS Secrets Manager<br/>Kubernetes Secrets]
+            NetworkPolicies[🛡️ Network Policies<br/>Traffic Control<br/>Microsegmentation]
+        end
+    end
+    
+    %% Backup and Disaster Recovery
+    subgraph "Backup & DR"
+        BackupStorage[💾 Backup Storage<br/>Cross-region Backup<br/>Point-in-time Recovery]
+        DRCluster[🔄 DR Cluster<br/>Disaster Recovery<br/>Standby Environment]
+        MonitoringDR[📊 DR Monitoring<br/>Health Checks<br/>Failover Automation]
+    end
+    
+    %% Flow Connections
+    Users --> CDN
+    CDN --> WAF
+    WAF --> LoadBalancer
+    LoadBalancer --> IngressController
+    
+    IngressController --> RestPods
+    IngressController --> WebSocketPods
+    IngressController --> GraphQLPods
+    
+    RestPods --> CoreEnginePods
+    WebSocketPods --> CoreEnginePods
+    GraphQLPods --> CoreEnginePods
+    
+    CoreEnginePods --> MemoryServicePods
+    CoreEnginePods --> SkillExecutorPods
+    CoreEnginePods --> WorkflowPods
+    
+    MemoryServicePods --> PostgresCluster
+    MemoryServicePods --> RedisCluster
+    MemoryServicePods --> VectorDB
+    
+    CoreEnginePods --> OpenAI
+    CoreEnginePods --> OllamaService
+    CoreEnginePods --> ExternalAPIs
+    
+    %% Monitoring Connections
+    RestPods -.-> Prometheus
+    CoreEnginePods -.-> Prometheus
+    MemoryServicePods -.-> Prometheus
+    
+    Prometheus --> Grafana
+    Prometheus --> AlertManager
+    
+    RestPods -.-> Fluentd
+    CoreEnginePods -.-> Fluentd
+    Fluentd --> Elasticsearch
+    Elasticsearch --> Kibana
+    
+    %% CI/CD Connections
+    GitRepo --> CI
+    CI --> DockerRegistry
+    DockerRegistry --> CD
+    CD --> IngressController
+    
+    Terraform --> K8sNodes
+    Helm --> IngressController
+    
+    %% Backup Connections
+    PostgresCluster -.-> BackupStorage
+    RedisCluster -.-> BackupStorage
+    PersistentVolumes -.-> BackupStorage
+    
+    %% Styling
+    classDef external fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef api fill:#f1f8e9,stroke:#2e7d32,stroke-width:2px
+    classDef core fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef data fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef system fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef devops fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef cloud fill:#fff8e1,stroke:#f9a825,stroke-width:2px
+    classDef backup fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    
+    class Users,CDN,WAF,LoadBalancer external
+    class RestPods,WebSocketPods,GraphQLPods api
+    class CoreEnginePods,MemoryServicePods,SkillExecutorPods core
+    class PostgresCluster,RedisCluster,VectorDB data
+    class Prometheus,Grafana,Jaeger,AlertManager system
+    class GitRepo,CI,CD,Terraform devops
+    class K8sNodes,VPC,IAMRoles cloud
+    class BackupStorage,DRCluster,MonitoringDR backup
+```

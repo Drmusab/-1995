@@ -1,0 +1,167 @@
+```mermaid
+flowchart TD
+    %% Input Sources
+    TextInput[📝 Text Input<br/>Natural Language]
+    AudioInput[🎤 Audio Input<br/>Speech/Voice]
+    ImageInput[🖼️ Image Input<br/>Visual Content]
+    FileInput[📁 File Input<br/>Documents/Data]
+    
+    %% Input Processing & Validation
+    subgraph "Input Processing Layer"
+        InputValidator[Input Validator<br/>🔍 Security & Format Check]
+        InputRouter[Input Router<br/>🚦 Modality Detection]
+        InputNormalizer[Input Normalizer<br/>⚡ Format Standardization]
+    end
+    
+    %% Pre-processing Pipeline
+    subgraph "Pre-processing Pipeline"
+        TextPreprocess[Text Preprocessing<br/>🔤 Tokenization, Cleaning]
+        AudioPreprocess[Audio Preprocessing<br/>🎵 Feature Extraction, STT]
+        ImagePreprocess[Image Preprocessing<br/>🖼️ Feature Extraction, OCR]
+        FilePreprocess[File Preprocessing<br/>📄 Content Extraction]
+    end
+    
+    %% Context & Memory Integration
+    subgraph "Context Integration"
+        ContextRetriever[Context Retriever<br/>🧠 Memory Query Engine]
+        ContextMerger[Context Merger<br/>🔗 Information Fusion]
+        UserProfiler[User Profiler<br/>👤 Personalization Engine]
+    end
+    
+    %% Core Processing Engine
+    subgraph "Core Processing Engine"
+        IntentRecognition[Intent Recognition<br/>🎯 Goal Understanding]
+        EntityExtraction[Entity Extraction<br/>🏷️ Key Information ID]
+        ReasoningEngine[Reasoning Engine<br/>🧮 Logic & Planning]
+        SkillRouter[Skill Router<br/>⚙️ Task Decomposition]
+    end
+    
+    %% Skill Execution Layer
+    subgraph "Skill Execution Layer"
+        SkillOrchestrator[Skill Orchestrator<br/>🎭 Workflow Management]
+        
+        subgraph "Skill Types"
+            GenerativeSkills[Generative Skills<br/>✍️ Content Creation]
+            AnalyticalSkills[Analytical Skills<br/>📊 Data Analysis]
+            ActionSkills[Action Skills<br/>⚡ External Operations]
+            SearchSkills[Search Skills<br/>🔍 Information Retrieval]
+        end
+        
+        SkillAggregator[Skill Aggregator<br/>📋 Result Compilation]
+    end
+    
+    %% External Integrations
+    subgraph "External Integrations"
+        LLMIntegration[LLM Integration<br/>🤖 AI Model Calls]
+        APIIntegration[API Integration<br/>🌐 External Services]
+        DatabaseQuery[Database Query<br/>🗃️ Data Retrieval]
+        FileSystemOps[File System Ops<br/>💾 File Operations]
+    end
+    
+    %% Response Generation
+    subgraph "Response Generation"
+        ResponseFormatter[Response Formatter<br/>📝 Output Structuring]
+        MultimodalGenerator[Multimodal Generator<br/>🎨 Rich Content Creation]
+        PersonalizationEngine[Personalization Engine<br/>🎯 User-specific Adaptation]
+    end
+    
+    %% Post-processing & Output
+    subgraph "Post-processing Layer"
+        OutputValidator[Output Validator<br/>✅ Quality Assurance]
+        OutputOptimizer[Output Optimizer<br/>⚡ Performance Tuning]
+        SecurityFilter[Security Filter<br/>🛡️ Content Safety]
+    end
+    
+    %% Memory & Learning Updates
+    subgraph "Memory & Learning"
+        MemoryUpdater[Memory Updater<br/>💾 Knowledge Storage]
+        LearningEngine[Learning Engine<br/>📈 Pattern Recognition]
+        FeedbackProcessor[Feedback Processor<br/>🔄 Continuous Improvement]
+    end
+    
+    %% Output Delivery
+    TextOutput[📝 Text Response<br/>Natural Language]
+    AudioOutput[🔊 Audio Response<br/>Speech/TTS]
+    ImageOutput[🖼️ Visual Response<br/>Generated Images]
+    ActionOutput[⚡ Action Response<br/>External Operations]
+    
+    %% Data Flow Connections
+    TextInput --> InputValidator
+    AudioInput --> InputValidator
+    ImageInput --> InputValidator
+    FileInput --> InputValidator
+    
+    InputValidator --> InputRouter
+    InputRouter --> InputNormalizer
+    
+    InputNormalizer --> TextPreprocess
+    InputNormalizer --> AudioPreprocess
+    InputNormalizer --> ImagePreprocess
+    InputNormalizer --> FilePreprocess
+    
+    TextPreprocess --> ContextRetriever
+    AudioPreprocess --> ContextRetriever
+    ImagePreprocess --> ContextRetriever
+    FilePreprocess --> ContextRetriever
+    
+    ContextRetriever --> ContextMerger
+    ContextMerger --> UserProfiler
+    UserProfiler --> IntentRecognition
+    
+    IntentRecognition --> EntityExtraction
+    EntityExtraction --> ReasoningEngine
+    ReasoningEngine --> SkillRouter
+    
+    SkillRouter --> SkillOrchestrator
+    SkillOrchestrator --> GenerativeSkills
+    SkillOrchestrator --> AnalyticalSkills
+    SkillOrchestrator --> ActionSkills
+    SkillOrchestrator --> SearchSkills
+    
+    GenerativeSkills --> LLMIntegration
+    AnalyticalSkills --> APIIntegration
+    ActionSkills --> APIIntegration
+    SearchSkills --> DatabaseQuery
+    SearchSkills --> FileSystemOps
+    
+    GenerativeSkills --> SkillAggregator
+    AnalyticalSkills --> SkillAggregator
+    ActionSkills --> SkillAggregator
+    SearchSkills --> SkillAggregator
+    
+    SkillAggregator --> ResponseFormatter
+    ResponseFormatter --> MultimodalGenerator
+    MultimodalGenerator --> PersonalizationEngine
+    
+    PersonalizationEngine --> OutputValidator
+    OutputValidator --> OutputOptimizer
+    OutputOptimizer --> SecurityFilter
+    
+    SecurityFilter --> TextOutput
+    SecurityFilter --> AudioOutput
+    SecurityFilter --> ImageOutput
+    SecurityFilter --> ActionOutput
+    
+    %% Memory & Learning Flow
+    SkillAggregator --> MemoryUpdater
+    ResponseFormatter --> LearningEngine
+    OutputValidator --> FeedbackProcessor
+    
+    %% Feedback Loops
+    FeedbackProcessor -.-> UserProfiler
+    LearningEngine -.-> ReasoningEngine
+    MemoryUpdater -.-> ContextRetriever
+    
+    %% Data Types & Transformations
+    classDef inputData fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef processing fill:#f1f8e9,stroke:#2e7d32,stroke-width:2px
+    classDef integration fill:#fff8e1,stroke:#f57c00,stroke-width:2px
+    classDef output fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef memory fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    
+    class TextInput,AudioInput,ImageInput,FileInput inputData
+    class IntentRecognition,EntityExtraction,ReasoningEngine,SkillRouter processing
+    class LLMIntegration,APIIntegration,DatabaseQuery,FileSystemOps integration
+    class TextOutput,AudioOutput,ImageOutput,ActionOutput output
+    class MemoryUpdater,LearningEngine,FeedbackProcessor memory
+```

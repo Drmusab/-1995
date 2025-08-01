@@ -1,0 +1,184 @@
+```mermaid
+graph TB
+    %% User Request Flow
+    UserRequest[🧑 User Request<br/>Natural Language Query]
+    
+    %% Context and Memory
+    subgraph "Context & Memory Layer"
+        ContextRetrieval[🧠 Context Retrieval<br/>Memory + Session State]
+        UserProfile[👤 User Profile<br/>Preferences & History]
+        ConversationMemory[💬 Conversation Memory<br/>Recent Interactions]
+    end
+    
+    %% Prompt Engineering Pipeline
+    subgraph "Prompt Engineering"
+        PromptTemplate[📝 Prompt Template<br/>Task-specific Templates]
+        ContextInjection[🔗 Context Injection<br/>Memory Integration]
+        PromptOptimizer[⚡ Prompt Optimizer<br/>Token Management]
+        PromptValidator[✅ Prompt Validator<br/>Safety & Compliance]
+    end
+    
+    %% Model Router and Selection
+    subgraph "Model Selection & Routing"
+        TaskAnalyzer[🎯 Task Analyzer<br/>Intent & Complexity Analysis]
+        ModelRouter[🚦 Model Router<br/>Intelligent Model Selection]
+        CostOptimizer[💰 Cost Optimizer<br/>Budget & Performance Balance]
+        
+        subgraph "Model Selection Criteria"
+            TaskComplexity[📊 Task Complexity]
+            ResponseTime[⏱️ Response Time Requirements]
+            CostConstraints[💵 Cost Constraints]
+            ModelCapabilities[🧠 Model Capabilities]
+        end
+    end
+    
+    %% LLM Provider Integrations
+    subgraph "LLM Provider Layer"
+        OpenAIProvider[🤖 OpenAI Provider<br/>GPT-4, GPT-3.5, etc.]
+        OllamaProvider[🏠 Ollama Provider<br/>Local Models]
+        DeepSeekProvider[🔬 DeepSeek Provider<br/>Specialized Models]
+        CustomProvider[⚙️ Custom Provider<br/>Fine-tuned Models]
+    end
+    
+    %% Model Management
+    subgraph "Model Management"
+        ModelCache[💾 Model Cache<br/>Response Caching]
+        LoadBalancer[⚖️ Load Balancer<br/>Request Distribution]
+        RateLimiter[🚦 Rate Limiter<br/>API Quota Management]
+        HealthMonitor[❤️ Health Monitor<br/>Provider Status]
+    end
+    
+    %% Response Processing
+    subgraph "Response Processing"
+        ResponseValidator[✅ Response Validator<br/>Quality Assurance]
+        ContentFilter[🛡️ Content Filter<br/>Safety & Appropriateness]
+        ResponseEnhancer[✨ Response Enhancer<br/>Formatting & Structure]
+        ResponseCache[💾 Response Cache<br/>Performance Optimization]
+    end
+    
+    %% Memory Integration
+    subgraph "Memory Integration"
+        ResponseAnalyzer[📊 Response Analyzer<br/>Quality & Relevance]
+        MemoryUpdater[💾 Memory Updater<br/>Knowledge Consolidation]
+        LearningEngine[📈 Learning Engine<br/>Pattern Recognition]
+        FeedbackProcessor[🔄 Feedback Processor<br/>Continuous Improvement]
+    end
+    
+    %% Output Delivery
+    FinalResponse[📤 Final Response<br/>Formatted Output to User]
+    
+    %% Flow Connections
+    UserRequest --> ContextRetrieval
+    UserRequest --> UserProfile
+    UserRequest --> ConversationMemory
+    
+    ContextRetrieval --> PromptTemplate
+    UserProfile --> PromptTemplate
+    ConversationMemory --> PromptTemplate
+    
+    PromptTemplate --> ContextInjection
+    ContextInjection --> PromptOptimizer
+    PromptOptimizer --> PromptValidator
+    
+    PromptValidator --> TaskAnalyzer
+    TaskAnalyzer --> ModelRouter
+    TaskAnalyzer --> TaskComplexity
+    TaskAnalyzer --> ResponseTime
+    TaskAnalyzer --> CostConstraints
+    TaskAnalyzer --> ModelCapabilities
+    
+    ModelRouter --> CostOptimizer
+    CostOptimizer --> LoadBalancer
+    
+    LoadBalancer --> OpenAIProvider
+    LoadBalancer --> OllamaProvider
+    LoadBalancer --> DeepSeekProvider
+    LoadBalancer --> CustomProvider
+    
+    OpenAIProvider --> ModelCache
+    OllamaProvider --> ModelCache
+    DeepSeekProvider --> ModelCache
+    CustomProvider --> ModelCache
+    
+    ModelCache --> RateLimiter
+    RateLimiter --> HealthMonitor
+    HealthMonitor --> ResponseValidator
+    
+    ResponseValidator --> ContentFilter
+    ContentFilter --> ResponseEnhancer
+    ResponseEnhancer --> ResponseCache
+    
+    ResponseCache --> ResponseAnalyzer
+    ResponseAnalyzer --> MemoryUpdater
+    ResponseAnalyzer --> LearningEngine
+    ResponseAnalyzer --> FeedbackProcessor
+    
+    ResponseCache --> FinalResponse
+    
+    %% Feedback Loops
+    FeedbackProcessor -.-> ModelRouter
+    LearningEngine -.-> PromptTemplate
+    MemoryUpdater -.-> ContextRetrieval
+    
+    %% Error Handling and Fallbacks
+    subgraph "Error Handling"
+        ErrorDetector[🚨 Error Detector<br/>Failure Detection]
+        FallbackStrategy[🔄 Fallback Strategy<br/>Alternative Models]
+        RetryMechanism[🔁 Retry Mechanism<br/>Smart Retry Logic]
+        ErrorLogger[📝 Error Logger<br/>Issue Tracking]
+    end
+    
+    OpenAIProvider -.-> ErrorDetector
+    OllamaProvider -.-> ErrorDetector
+    DeepSeekProvider -.-> ErrorDetector
+    CustomProvider -.-> ErrorDetector
+    
+    ErrorDetector --> FallbackStrategy
+    FallbackStrategy --> RetryMechanism
+    RetryMechanism --> ErrorLogger
+    
+    %% Model Specific Features
+    subgraph "Advanced Features"
+        StreamingResponse[🌊 Streaming Response<br/>Real-time Output]
+        FunctionCalling[⚙️ Function Calling<br/>Tool Integration]
+        VisionProcessing[👁️ Vision Processing<br/>Image Understanding]
+        CodeGeneration[💻 Code Generation<br/>Programming Assistance]
+    end
+    
+    OpenAIProvider --> StreamingResponse
+    OpenAIProvider --> FunctionCalling
+    OpenAIProvider --> VisionProcessing
+    OllamaProvider --> CodeGeneration
+    
+    %% Monitoring and Analytics
+    subgraph "Monitoring & Analytics"
+        PerformanceMetrics[📊 Performance Metrics<br/>Latency & Throughput]
+        CostTracking[💰 Cost Tracking<br/>Usage Analytics]
+        QualityMetrics[📈 Quality Metrics<br/>Response Evaluation]
+        UsagePatterns[📋 Usage Patterns<br/>Behavior Analysis]
+    end
+    
+    ModelRouter --> PerformanceMetrics
+    CostOptimizer --> CostTracking
+    ResponseValidator --> QualityMetrics
+    TaskAnalyzer --> UsagePatterns
+    
+    %% Styling
+    classDef context fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef prompt fill:#f1f8e9,stroke:#2e7d32,stroke-width:2px
+    classDef model fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef provider fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef processing fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef memory fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef error fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    classDef monitoring fill:#fff8e1,stroke:#f9a825,stroke-width:2px
+    
+    class ContextRetrieval,UserProfile,ConversationMemory context
+    class PromptTemplate,ContextInjection,PromptOptimizer,PromptValidator prompt
+    class TaskAnalyzer,ModelRouter,CostOptimizer model
+    class OpenAIProvider,OllamaProvider,DeepSeekProvider,CustomProvider provider
+    class ResponseValidator,ContentFilter,ResponseEnhancer,ResponseCache processing
+    class ResponseAnalyzer,MemoryUpdater,LearningEngine,FeedbackProcessor memory
+    class ErrorDetector,FallbackStrategy,RetryMechanism,ErrorLogger error
+    class PerformanceMetrics,CostTracking,QualityMetrics,UsagePatterns monitoring
+```
