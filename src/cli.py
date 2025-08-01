@@ -29,21 +29,58 @@ from datetime import datetime, timezone
 from enum import Enum
 import inspect
 import traceback
-import numpy as np
+# Lazy import for numpy - only import when needed
+# import numpy as np  # Moved to lazy import
 from concurrent.futures import ThreadPoolExecutor
 
-# Try to import rich for enhanced terminal output
+# Lazy import for heavy dependencies - only import when needed
+_numpy = None
+_rich_modules = None
+
+def get_numpy():
+    """Lazy import numpy only when needed."""
+    global _numpy
+    if _numpy is None:
+        import numpy as np
+        _numpy = np
+    return _numpy
+
+def get_rich_modules():
+    """Lazy import rich modules only when needed."""
+    global _rich_modules
+    if _rich_modules is None:
+        try:
+            from rich.console import Console
+            from rich.markdown import Markdown
+            from rich.syntax import Syntax
+            from rich.panel import Panel
+            from rich.progress import Progress, SpinnerColumn, TextColumn
+            from rich.table import Table
+            from rich.prompt import Prompt, Confirm
+            from rich import print as rich_print
+            _rich_modules = {
+                'Console': Console,
+                'Markdown': Markdown,
+                'Syntax': Syntax,
+                'Panel': Panel,
+                'Progress': Progress,
+                'SpinnerColumn': SpinnerColumn,
+                'TextColumn': TextColumn,
+                'Table': Table,
+                'Prompt': Prompt,
+                'Confirm': Confirm,
+                'rich_print': rich_print,
+                'available': True
+            }
+        except ImportError:
+            _rich_modules = {'available': False}
+    return _rich_modules
+
+# Check if rich is available (but don't import yet)
 try:
-    from rich.console import Console
-    from rich.markdown import Markdown
-    from rich.syntax import Syntax
-    from rich.panel import Panel
-    from rich.progress import Progress, SpinnerColumn, TextColumn
-    from rich.table import Table
-    from rich.prompt import Prompt, Confirm
-    from rich import print as rich_print
-    RICH_AVAILABLE = True
-except ImportError:
+    import importlib.util
+    RICH_AVAILABLE = importlib.util.find_spec("rich") is not None
+except:
     RICH_AVAILABLE = False
 
 # Import from main application entry point

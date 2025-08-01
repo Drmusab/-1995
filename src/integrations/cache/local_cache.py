@@ -194,12 +194,12 @@ class CacheCompressor:
             if isinstance(data, bytes):
                 serialized = data
             else:
-                serialized = pickle.dumps(data)
+                serialized = pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
             
             if self.compression_type == CompressionType.GZIP:
-                return gzip.compress(serialized)
+                return gzip.compress(serialized, compresslevel=6)  # Balance speed vs compression
             elif self.compression_type == CompressionType.LZ4:
-                return lz4.frame.compress(serialized)
+                return lz4.frame.compress(serialized, compression_level=1)  # Fast compression
             elif self.compression_type == CompressionType.PICKLE:
                 return serialized  # Already pickled
             else:

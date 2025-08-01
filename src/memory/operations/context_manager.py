@@ -111,15 +111,23 @@ class ContextEntity:
         self.mention_count += 1
         
         if attributes:
+            # Use update() instead of creating new dict for efficiency
             self.attributes.update(attributes)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
-        result = asdict(self)
-        # Convert datetime objects to ISO format strings
-        result["first_mentioned_at"] = self.first_mentioned_at.isoformat()
-        result["last_mentioned_at"] = self.last_mentioned_at.isoformat()
-        return result
+        # More efficient than asdict() for performance-critical code
+        return {
+            "entity_id": self.entity_id,
+            "name": self.name,
+            "entity_type": self.entity_type,
+            "first_mentioned_at": self.first_mentioned_at.isoformat(),
+            "last_mentioned_at": self.last_mentioned_at.isoformat(),
+            "mention_count": self.mention_count,
+            "attributes": self.attributes,
+            "linked_memory_ids": self.linked_memory_ids,
+            "confidence": self.confidence
+        }
 
 
 @dataclass

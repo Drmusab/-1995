@@ -929,14 +929,23 @@ class HealthCheck:
 
     async def _component_monitoring_loop(self, component_id: str, interval: float) -> None:
         """Monitoring loop for a specific component."""
+        next_check = time.time() + interval
+        
         while self.is_running:
             try:
                 await self._check_component_health(component_id)
-                await asyncio.sleep(interval)
+                
+                # Calculate precise sleep time to maintain consistent intervals
+                current_time = time.time()
+                sleep_time = max(0.1, next_check - current_time)
+                next_check = current_time + interval
+                
+                await asyncio.sleep(sleep_time)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 self.logger.error(f"Error in component monitoring loop for {component_id}: {str(e)}")
+                # On error, wait for the full interval before retrying
                 await asyncio.sleep(interval)
 
     async def _check_component_health(self, component_id: str) -> None:
@@ -1146,6 +1155,9 @@ class HealthCheck:
 
     async def _dependency_monitoring_loop(self) -> None:
         """Monitor all dependencies."""
+        dependency_check_interval = 60.0  # Check dependencies every minute
+        next_check = time.time() + dependency_check_interval
+        
         while self.is_running:
             try:
                 # Check all dependencies
@@ -1173,14 +1185,22 @@ class HealthCheck:
                     except Exception as e:
                         self.logger.error(f"Dependency check failed for {dependency_id}: {str(e)}")
                 
-                await asyncio.sleep(60)  # Check dependencies every minute
+                # Calculate precise sleep time
+                current_time = time.time()
+                sleep_time = max(1.0, next_check - current_time)
+                next_check = current_time + dependency_check_interval
+                
+                await asyncio.sleep(sleep_time)
                 
             except Exception as e:
                 self.logger.error(f"Error in dependency monitoring loop: {str(e)}")
-                await asyncio.sleep(60)
+                await asyncio.sleep(dependency_check_interval)
 
     async def _system_monitoring_loop(self) -> None:
         """Monitor overall system health."""
+        system_check_interval = 30.0  # Check system every 30 seconds
+        next_check = time.time() + system_check_interval
+        
         while self.is_running:
             try:
                 # Get system metrics
@@ -1190,14 +1210,22 @@ class HealthCheck:
                 self.system_health.system_metrics = system_metrics
                 self.system_health.timestamp = datetime.now(timezone.utc)
                 
-                await asyncio.sleep(30)  # Check system every 30 seconds
+                # Calculate precise sleep time
+                current_time = time.time()
+                sleep_time = max(1.0, next_check - current_time)
+                next_check = current_time + system_check_interval
+                
+                await asyncio.sleep(sleep_time)
                 
             except Exception as e:
                 self.logger.error(f"Error in system monitoring loop: {str(e)}")
-                await asyncio.sleep(30)
+                await asyncio.sleep(system_check_interval)
 
     async def _health_aggregation_loop(self) -> None:
         """Aggregate component and dependency health into overall system health."""
+        aggregation_interval = 15.0  # Aggregate every 15 seconds
+        next_check = time.time() + aggregation_interval
+        
         while self.is_running:
             try:
                 # Count component health statuses
@@ -1275,11 +1303,16 @@ class HealthCheck:
                 if self.metrics:
                     self.metrics.set("system_health_score", overall_health_score)
                 
-                await asyncio.sleep(15)  # Aggregate every 15 seconds
+                # Calculate precise sleep time
+                current_time = time.time()
+                sleep_time = max(1.0, next_check - current_time)
+                next_check = current_time + aggregation_interval
+                
+                await asyncio.sleep(sleep_time)
                 
             except Exception as e:
                 self.logger.error(f"Error in health aggregation loop: {str(e)}")
-                await asyncio.sleep(15)
+                await asyncio.sleep(aggregation_interval)
 
     def _calculate_overall_status(self, healthy_components: int, degraded_components: int,
                                 unhealthy_components: int, healthy_dependencies: int,

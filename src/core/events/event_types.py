@@ -897,6 +897,58 @@ class ContextAdapted(BaseEvent):
     context_changes: List[str] = field(default_factory=list)
 
 
+@dataclass
+class ContextUpdated(BaseEvent):
+    """Context updated event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    context_id: str = ""
+    update_type: str = ""
+    elements_updated: int = 0
+
+
+@dataclass
+class ContextWindowChanged(BaseEvent):
+    """Context window changed event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    window_id: str = ""
+    old_size: int = 0
+    new_size: int = 0
+
+
+@dataclass
+class ContextEntityDetected(BaseEvent):
+    """Context entity detected event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    entity_id: str = ""
+    entity_name: str = ""
+    entity_type: str = ""
+    confidence: float = 0.0
+
+
+@dataclass
+class ContextEntityRemoved(BaseEvent):
+    """Context entity removed event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    entity_id: str = ""
+    reason: str = ""
+
+
+@dataclass
+class ContextRestored(BaseEvent):
+    """Context restored event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    context_id: str = ""
+    restored_from: str = ""
+
+
+@dataclass
+class ContextCleared(BaseEvent):
+    """Context cleared event."""
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    context_id: str = ""
+    reason: str = ""
+
+
 # =============================================================================
 # SKILL EVENTS
 # =============================================================================
@@ -1414,6 +1466,59 @@ class HealthCheckFailed(BaseEvent):
 
 
 @dataclass
+class HealthThresholdExceeded(BaseEvent):
+    """Health threshold exceeded event."""
+    category: EventCategory = field(default=EventCategory.HEALTH, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.WARNING
+    component_id: str = ""
+    metric_name: str = ""
+    threshold_value: float = 0.0
+    current_value: float = 0.0
+
+
+@dataclass
+class AutoRecoveryStarted(BaseEvent):
+    """Auto recovery started event."""
+    category: EventCategory = field(default=EventCategory.HEALTH, init=False)
+    component_id: str = ""
+    recovery_action: str = ""
+    trigger_reason: str = ""
+
+
+@dataclass
+class AutoRecoveryCompleted(BaseEvent):
+    """Auto recovery completed event."""
+    category: EventCategory = field(default=EventCategory.HEALTH, init=False)
+    component_id: str = ""
+    recovery_action: str = ""
+    success: bool = True
+    recovery_time: float = 0.0
+
+
+@dataclass
+class HealthPredictionAlert(BaseEvent):
+    """Health prediction alert event."""
+    category: EventCategory = field(default=EventCategory.HEALTH, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    component_id: str = ""
+    prediction_type: str = ""
+    predicted_status: str = ""
+    confidence: float = 0.0
+    time_to_failure: float = 0.0
+
+
+@dataclass
+class CircuitBreakerStateChanged(BaseEvent):
+    """Circuit breaker state changed event."""
+    category: EventCategory = field(default=EventCategory.HEALTH, init=False)
+    component_id: str = ""
+    old_state: str = ""
+    new_state: str = ""
+    failure_count: int = 0
+
+
+@dataclass
 class AlertTriggered(BaseEvent):
     """Alert triggered event."""
     category: EventCategory = field(default=EventCategory.HEALTH, init=False)
@@ -1571,6 +1676,12 @@ EVENT_TYPES = {
     "MemoryItemUpdated": MemoryItemUpdated,
     "MemoryItemDeleted": MemoryItemDeleted,
     "ContextAdapted": ContextAdapted,
+    "ContextUpdated": ContextUpdated,
+    "ContextWindowChanged": ContextWindowChanged,
+    "ContextEntityDetected": ContextEntityDetected,
+    "ContextEntityRemoved": ContextEntityRemoved,
+    "ContextRestored": ContextRestored,
+    "ContextCleared": ContextCleared,
     
     # Skill Events
     "SkillExecutionStarted": SkillExecutionStarted,
@@ -1637,6 +1748,11 @@ EVENT_TYPES = {
     "HealthCheckStarted": HealthCheckStarted,
     "HealthCheckCompleted": HealthCheckCompleted,
     "HealthCheckFailed": HealthCheckFailed,
+    "HealthThresholdExceeded": HealthThresholdExceeded,
+    "AutoRecoveryStarted": AutoRecoveryStarted,
+    "AutoRecoveryCompleted": AutoRecoveryCompleted,
+    "HealthPredictionAlert": HealthPredictionAlert,
+    "CircuitBreakerStateChanged": CircuitBreakerStateChanged,
     "AlertTriggered": AlertTriggered,
     "AlertResolved": AlertResolved,
     
