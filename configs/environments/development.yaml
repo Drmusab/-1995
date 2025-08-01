@@ -334,13 +334,47 @@ skills:
 processing:
   # Natural language processing
   natural_language:
-    default_language: "en"
+    default_language: "ar"  # Changed to Arabic as primary
+    secondary_language: "en"
+    bilingual_enabled: true
     intent_threshold: 0.7
     sentiment_analysis: true
     entity_extraction: true
     language_detection: true
     tokenizer: "default"
     max_tokens: 8192
+
+# Bilingual AI Assistant Configuration
+bilingual:
+  primary_language: "ar"  # Arabic (Modern Standard Arabic)
+  secondary_language: "en"  # English
+  enable_mixing: true
+  technical_domain: "AI/ML systems"
+  codebase_language: "English"
+  
+  # Language usage rules
+  use_arabic_for:
+    - "general_conversation"
+    - "explanation" 
+    - "user_guidance"
+  
+  use_english_for:
+    - "code_snippet"
+    - "file_path"
+    - "technical_term"
+    - "api_reference"
+  
+  # Full English triggers
+  full_english_triggers:
+    - "project_structure"
+    - "debugging"
+    - "technical_discussion"
+  
+  # Key project components
+  key_components:
+    - "core_engine.py"
+    - "session_manager.py"
+    - "llm integrations"
 
   # Speech processing
   speech:
