@@ -67,6 +67,7 @@ from src.processing.natural_language.entity_extractor import EntityExtractor
 # Processing imports
 from src.processing.natural_language.intent_manager import IntentManager
 from src.processing.natural_language.sentiment_analyzer import SentimentAnalyzer
+from src.processing.natural_language.bilingual_manager import BilingualManager
 
 
 class ProcessingMode(Enum):
@@ -1026,6 +1027,16 @@ class EnhancedLanguageChain:
         self.context_manager = ContextManager(
             self.logger, self.memory_manager, self.session_manager
         )
+        
+        # Bilingual support
+        try:
+            self.bilingual_manager = BilingualManager(container)
+            self.bilingual_enabled = True
+            self.logger.info("Bilingual support enabled (Arabic/English)")
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize bilingual support: {str(e)}")
+            self.bilingual_manager = None
+            self.bilingual_enabled = False
 
         # Setup infrastructure
         self._setup_monitoring()
@@ -1112,9 +1123,21 @@ class EnhancedLanguageChain:
                 # Get relevant context
                 context = await self.context_manager.get_relevant_context(request)
 
+                # Bilingual processing
+                bilingual_context = None
+                if self.bilingual_enabled and self.bilingual_manager:
+                    bilingual_context = self.bilingual_manager.build_language_context(request.text)
+                    self.logger.debug(f"Bilingual context: {bilingual_context.content_type.value}, "
+                                    f"Language: {bilingual_context.user_query_language.value}")
+
                 # Build prompt
                 conversation_context = context.get("conversation")
-                prompt = self.prompt_manager.build_prompt(request, conversation_context, context)
+                if self.bilingual_enabled and bilingual_context:
+                    # Use bilingual prompt generation
+                    prompt = self.bilingual_manager.create_bilingual_prompt(request.text, bilingual_context)
+                else:
+                    # Use standard prompt generation
+                    prompt = self.prompt_manager.build_prompt(request, conversation_context, context)
 
                 # Route to appropriate model and process
                 response_data = await self._route_and_process(request, prompt)
@@ -1131,6 +1154,12 @@ class EnhancedLanguageChain:
                 response = await self.response_processor.process_response(
                     response_data.get("text", ""), request, processing_metadata
                 )
+
+                # Bilingual post-processing
+                if self.bilingual_enabled and bilingual_context and self.bilingual_manager:
+                    response.text = self.bilingual_manager.process_response(response.text, bilingual_context)
+                    response.language = self.bilingual_manager.determine_response_language(bilingual_context).value
+                    self.logger.debug(f"Bilingual post-processing applied, final language: {response.language}")
 
                 # Update conversation context
                 if request.conversation_id:
