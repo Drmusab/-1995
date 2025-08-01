@@ -1,0 +1,99 @@
+```mermaid
+sequenceDiagram
+    participant User
+    participant WebUI as Web UI
+    participant RestAPI as REST API
+    participant MainApp as AI Assistant Main
+    participant CoreEngine as Core Engine
+    participant SessionManager as Session Manager
+    participant MemoryManager as Memory Manager
+    participant LLMProvider as LLM Provider
+    participant SkillExecutor as Skill Executor
+    participant EventBus as Event Bus
+    participant ErrorHandler as Error Handler
+    
+    %% Authentication & Session Setup
+    User->>WebUI: Send query: "Plan a vacation to Japan"
+    WebUI->>RestAPI: POST /api/v1/chat {"message": "Plan a vacation to Japan"}
+    
+    alt No session exists
+        RestAPI->>SessionManager: create_session(user_id)
+        SessionManager->>MemoryManager: initialize_session_memory()
+        MemoryManager-->>SessionManager: session_memory_ready
+        SessionManager-->>RestAPI: session_id
+    end
+    
+    %% Security & Validation
+    RestAPI->>MainApp: process_text_input(text, session_id, user_id)
+    MainApp->>EventBus: emit(MessageReceived)
+    
+    %% Core Processing Pipeline
+    MainApp->>CoreEngine: process_multimodal_input()
+    CoreEngine->>EventBus: emit(ProcessingStarted)
+    
+    %% Memory Context Retrieval
+    CoreEngine->>MemoryManager: retrieve_relevant_context("vacation Japan")
+    MemoryManager->>MemoryManager: vector_search() + semantic_matching()
+    MemoryManager-->>CoreEngine: context_data [previous_trips, preferences]
+    
+    %% Natural Language Understanding
+    CoreEngine->>CoreEngine: natural_language_processing()
+    Note over CoreEngine: Extract intent: trip_planning<br/>Entities: destination=Japan<br/>User preferences analysis
+    
+    %% Reasoning & Planning
+    CoreEngine->>CoreEngine: reasoning_engine.plan_workflow()
+    Note over CoreEngine: Identify required skills:<br/>- travel_research<br/>- itinerary_planning<br/>- budget_estimation<br/>- booking_assistance
+    
+    %% Skill Execution Pipeline
+    loop For each required skill
+        CoreEngine->>SkillExecutor: execute_skill("travel_research", context)
+        SkillExecutor->>LLMProvider: query_model(enhanced_prompt)
+        
+        alt LLM Request Success
+            LLMProvider-->>SkillExecutor: travel_information
+            SkillExecutor->>MemoryManager: store_intermediate_result()
+            SkillExecutor-->>CoreEngine: skill_result
+        else LLM Request Failure
+            SkillExecutor->>ErrorHandler: handle_llm_error()
+            ErrorHandler->>EventBus: emit(ProcessingError)
+            ErrorHandler-->>SkillExecutor: fallback_strategy
+            SkillExecutor-->>CoreEngine: fallback_result
+        end
+    end
+    
+    %% Response Generation & Memory Storage
+    CoreEngine->>CoreEngine: multimodal_fusion()
+    Note over CoreEngine: Combine skill results:<br/>- Destinations & attractions<br/>- Sample itinerary<br/>- Budget estimates<br/>- Next steps
+    
+    CoreEngine->>LLMProvider: generate_final_response(compiled_data)
+    LLMProvider-->>CoreEngine: formatted_response
+    
+    %% Memory Management
+    CoreEngine->>MemoryManager: store_conversation_turn()
+    CoreEngine->>MemoryManager: update_user_preferences()
+    MemoryManager->>MemoryManager: consolidate_knowledge()
+    
+    %% Response Delivery
+    CoreEngine->>EventBus: emit(ProcessingCompleted)
+    CoreEngine-->>MainApp: processing_result
+    MainApp-->>RestAPI: response_data
+    RestAPI-->>WebUI: JSON response
+    WebUI-->>User: Display vacation plan
+    
+    %% Error Handling Path
+    alt Processing Error Occurs
+        CoreEngine->>ErrorHandler: handle_processing_error()
+        ErrorHandler->>EventBus: emit(ErrorOccurred)
+        ErrorHandler->>MemoryManager: log_error_context()
+        ErrorHandler-->>MainApp: error_response
+        MainApp-->>RestAPI: error_data
+        RestAPI-->>WebUI: Error message
+        WebUI-->>User: "I encountered an issue. Please try again."
+    end
+    
+    %% Background Processes
+    Note over EventBus: Async event processing
+    EventBus->>EventBus: process_analytics_events()
+    EventBus->>EventBus: update_metrics()
+    EventBus->>EventBus: trigger_learning_updates()
+```

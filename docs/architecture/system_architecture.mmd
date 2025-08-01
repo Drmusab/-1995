@@ -1,0 +1,175 @@
+```mermaid
+graph TB
+    %% External Interfaces
+    User[👤 User]
+    WebUI[🌐 Web UI]
+    CLI[💻 CLI Interface]
+    
+    %% API Layer
+    subgraph "API Layer"
+        RestAPI[REST API<br/>FastAPI]
+        WebSocketAPI[WebSocket API<br/>Real-time Communication]
+        GraphQLAPI[GraphQL API<br/>Flexible Queries]
+        gRPCAPI[gRPC API<br/>High Performance]
+    end
+    
+    %% Core Application
+    subgraph "Core Application Layer"
+        MainApp[AI Assistant Main<br/>Entry Point & Orchestration]
+        
+        subgraph "Assistant Core"
+            CoreEngine[Enhanced Core Engine<br/>Main Processing Pipeline]
+            SessionManager[Session Manager<br/>User Session Handling]
+            InteractionHandler[Interaction Handler<br/>User Interaction Management]
+            WorkflowOrchestrator[Workflow Orchestrator<br/>Complex Task Automation]
+            ComponentManager[Component Manager<br/>Lifecycle Management]
+            PluginManager[Plugin Manager<br/>Extensibility Framework]
+        end
+        
+        subgraph "Processing Pipeline"
+            NLPProcessor[Natural Language<br/>Processing]
+            SpeechProcessor[Speech Processing<br/>STT & TTS]
+            VisionProcessor[Vision Processing<br/>Image & Video Analysis]
+            MultimodalProcessor[Multimodal Fusion<br/>Cross-modal Integration]
+        end
+        
+        subgraph "Reasoning & Learning"
+            ReasoningEngine[Reasoning Engine<br/>Logic & Planning]
+            KnowledgeGraph[Knowledge Graph<br/>Structured Knowledge]
+            LearningSystem[Learning System<br/>Continuous Adaptation]
+        end
+    end
+    
+    %% Memory System
+    subgraph "Memory System"
+        MemoryManager[Memory Manager<br/>Unified Memory Interface]
+        CoreMemory[Core Memory<br/>Persistent Knowledge]
+        SessionMemory[Session Memory<br/>Conversation Context]
+        CacheManager[Cache Manager<br/>Performance Optimization]
+        MemoryStorage[Memory Storage<br/>Vector & Graph DB]
+    end
+    
+    %% Skills System
+    subgraph "Skills System"
+        SkillFactory[Skill Factory<br/>Dynamic Skill Creation]
+        SkillRegistry[Skill Registry<br/>Available Skills]
+        SkillExecutor[Skill Executor<br/>Skill Runtime]
+        CustomSkills[Custom Skills<br/>User-defined Skills]
+    end
+    
+    %% External Integrations
+    subgraph "External Integrations"
+        LLMProviders[LLM Providers<br/>OpenAI, Ollama, DeepSeek]
+        ExternalAPIs[External APIs<br/>Third-party Services]
+        StorageSystems[Storage Systems<br/>Database & Files]
+        CachingSystems[Caching Systems<br/>Redis, In-memory]
+    end
+    
+    %% Infrastructure
+    subgraph "Infrastructure Layer"
+        ConfigManager[Configuration<br/>Environment Management]
+        SecurityLayer[Security Layer<br/>Auth, Authorization, Encryption]
+        EventBus[Event Bus<br/>Async Communication]
+        HealthCheck[Health Check<br/>System Monitoring]
+        ErrorHandler[Error Handler<br/>Exception Management]
+        DependencyInjection[Dependency Injection<br/>Component Wiring]
+    end
+    
+    %% Observability
+    subgraph "Observability"
+        MetricsCollector[Metrics Collector<br/>Prometheus]
+        TraceManager[Trace Manager<br/>OpenTelemetry]
+        Logger[Structured Logging<br/>Event Tracking]
+        Monitoring[Monitoring<br/>Health & Performance]
+    end
+    
+    %% User Flow
+    User --> WebUI
+    User --> CLI
+    WebUI --> RestAPI
+    WebUI --> WebSocketAPI
+    CLI --> MainApp
+    
+    %% API Flow
+    RestAPI --> MainApp
+    WebSocketAPI --> MainApp
+    GraphQLAPI --> MainApp
+    gRPCAPI --> MainApp
+    
+    %% Core Processing Flow
+    MainApp --> CoreEngine
+    CoreEngine --> SessionManager
+    CoreEngine --> InteractionHandler
+    CoreEngine --> WorkflowOrchestrator
+    
+    %% Processing Pipeline
+    CoreEngine --> NLPProcessor
+    CoreEngine --> SpeechProcessor
+    CoreEngine --> VisionProcessor
+    CoreEngine --> MultimodalProcessor
+    
+    %% Memory Integration
+    CoreEngine --> MemoryManager
+    SessionManager --> SessionMemory
+    MemoryManager --> CoreMemory
+    MemoryManager --> CacheManager
+    MemoryManager --> MemoryStorage
+    
+    %% Skills Integration
+    CoreEngine --> SkillFactory
+    SkillFactory --> SkillRegistry
+    SkillFactory --> SkillExecutor
+    SkillExecutor --> CustomSkills
+    
+    %% External Integrations
+    CoreEngine --> LLMProviders
+    CoreEngine --> ExternalAPIs
+    MemoryStorage --> StorageSystems
+    CacheManager --> CachingSystems
+    
+    %% Infrastructure Support
+    MainApp --> ConfigManager
+    MainApp --> SecurityLayer
+    MainApp --> EventBus
+    MainApp --> HealthCheck
+    MainApp --> ErrorHandler
+    MainApp --> DependencyInjection
+    
+    %% Observability
+    CoreEngine --> MetricsCollector
+    CoreEngine --> TraceManager
+    EventBus --> Logger
+    HealthCheck --> Monitoring
+    
+    %% Component Management
+    ComponentManager --> SessionManager
+    ComponentManager --> InteractionHandler
+    ComponentManager --> WorkflowOrchestrator
+    ComponentManager --> MemoryManager
+    ComponentManager --> SkillFactory
+    
+    %% Plugin System
+    PluginManager --> CustomSkills
+    PluginManager --> ExternalAPIs
+    
+    %% Reasoning Integration
+    CoreEngine --> ReasoningEngine
+    ReasoningEngine --> KnowledgeGraph
+    ReasoningEngine --> LearningSystem
+    LearningSystem --> MemoryManager
+    
+    %% Technology Stack Labels
+    classDef apiTech fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef coreTech fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef processingTech fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef memoryTech fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef infraTech fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef externalTech fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    
+    class RestAPI,WebSocketAPI,GraphQLAPI,gRPCAPI apiTech
+    class CoreEngine,SessionManager,InteractionHandler,WorkflowOrchestrator coreTech
+    class NLPProcessor,SpeechProcessor,VisionProcessor,MultimodalProcessor processingTech
+    class MemoryManager,CoreMemory,SessionMemory,CacheManager memoryTech
+    class ConfigManager,SecurityLayer,EventBus,HealthCheck infraTech
+    class LLMProviders,ExternalAPIs,StorageSystems,CachingSystems externalTech
+```
