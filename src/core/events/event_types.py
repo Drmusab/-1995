@@ -8,15 +8,16 @@ providing a centralized registry of events for component communication,
 monitoring, and system coordination.
 """
 
-from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List, Union
-from dataclasses import dataclass, field
-from enum import Enum
 import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
 
 
 class EventCategory(Enum):
     """Categories of events in the system."""
+
     SYSTEM = "system"
     COMPONENT = "component"
     WORKFLOW = "workflow"
@@ -38,6 +39,7 @@ class EventCategory(Enum):
 
 class EventPriority(Enum):
     """Event priority levels."""
+
     LOW = 0
     NORMAL = 1
     HIGH = 2
@@ -47,6 +49,7 @@ class EventPriority(Enum):
 
 class EventSeverity(Enum):
     """Event severity levels."""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -57,6 +60,7 @@ class EventSeverity(Enum):
 @dataclass
 class EventMetadata:
     """Metadata for events."""
+
     priority: EventPriority = EventPriority.NORMAL
     tags: List[str] = field(default_factory=list)
     emitted_at: Optional[datetime] = None
@@ -66,6 +70,7 @@ class EventMetadata:
 @dataclass
 class BaseEvent:
     """Base class for all system events."""
+
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     event_type: str = field(init=False)
     category: EventCategory = field(init=False)
@@ -79,42 +84,42 @@ class BaseEvent:
     tags: List[str] = field(default_factory=list)
     metadata: Optional[EventMetadata] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
+
     def __post_init__(self):
-        if not hasattr(self, 'event_type'):
+        if not hasattr(self, "event_type"):
             self.event_type = self.__class__.__name__
-        if not hasattr(self, 'category'):
+        if not hasattr(self, "category"):
             self.category = self._infer_category()
-    
+
     def _infer_category(self) -> EventCategory:
         """Infer event category from event type."""
         event_name = self.__class__.__name__.lower()
-        
-        if any(x in event_name for x in ['system', 'startup', 'shutdown']):
+
+        if any(x in event_name for x in ["system", "startup", "shutdown"]):
             return EventCategory.SYSTEM
-        elif any(x in event_name for x in ['component', 'health']):
+        elif any(x in event_name for x in ["component", "health"]):
             return EventCategory.COMPONENT
-        elif any(x in event_name for x in ['workflow', 'step', 'task']):
+        elif any(x in event_name for x in ["workflow", "step", "task"]):
             return EventCategory.WORKFLOW
-        elif any(x in event_name for x in ['session', 'conversation']):
+        elif any(x in event_name for x in ["session", "conversation"]):
             return EventCategory.SESSION
-        elif any(x in event_name for x in ['user', 'interaction']):
+        elif any(x in event_name for x in ["user", "interaction"]):
             return EventCategory.USER
-        elif any(x in event_name for x in ['processing', 'modality', 'fusion']):
+        elif any(x in event_name for x in ["processing", "modality", "fusion"]):
             return EventCategory.PROCESSING
-        elif any(x in event_name for x in ['memory', 'retrieval', 'consolidation']):
+        elif any(x in event_name for x in ["memory", "retrieval", "consolidation"]):
             return EventCategory.MEMORY
-        elif any(x in event_name for x in ['learning', 'adaptation', 'feedback']):
+        elif any(x in event_name for x in ["learning", "adaptation", "feedback"]):
             return EventCategory.LEARNING
-        elif any(x in event_name for x in ['auth', 'security', 'violation']):
+        elif any(x in event_name for x in ["auth", "security", "violation"]):
             return EventCategory.SECURITY
-        elif any(x in event_name for x in ['performance', 'metrics', 'monitoring']):
+        elif any(x in event_name for x in ["performance", "metrics", "monitoring"]):
             return EventCategory.PERFORMANCE
-        elif any(x in event_name for x in ['error', 'exception', 'failure']):
+        elif any(x in event_name for x in ["error", "exception", "failure"]):
             return EventCategory.ERROR
-        elif any(x in event_name for x in ['plugin']):
+        elif any(x in event_name for x in ["plugin"]):
             return EventCategory.PLUGIN
-        elif any(x in event_name for x in ['skill']):
+        elif any(x in event_name for x in ["skill"]):
             return EventCategory.SKILL
         else:
             return EventCategory.SYSTEM
@@ -124,9 +129,11 @@ class BaseEvent:
 # CONFIGURATION EVENTS
 # =============================================================================
 
+
 @dataclass
 class ConfigurationLoaded(BaseEvent):
     """Configuration loaded event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     config_file: str = ""
     load_time: float = 0.0
@@ -135,6 +142,7 @@ class ConfigurationLoaded(BaseEvent):
 @dataclass
 class ConfigurationReloaded(BaseEvent):
     """Configuration reloaded event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     config_file: str = ""
     changes: Dict[str, Any] = field(default_factory=dict)
@@ -143,6 +151,7 @@ class ConfigurationReloaded(BaseEvent):
 @dataclass
 class ConfigurationChanged(BaseEvent):
     """Configuration changed event."""
+
     category: EventCategory = field(default=EventCategory.AUDIT, init=False)
     config_section: str = ""
     changes: Dict[str, Any] = field(default_factory=dict)
@@ -152,6 +161,7 @@ class ConfigurationChanged(BaseEvent):
 @dataclass
 class ConfigurationValidationFailed(BaseEvent):
     """Configuration validation failed event."""
+
     category: EventCategory = field(default=EventCategory.ERROR, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -162,6 +172,7 @@ class ConfigurationValidationFailed(BaseEvent):
 @dataclass
 class ConfigurationSourceAdded(BaseEvent):
     """Configuration source added event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     source_type: str = ""
     source_path: str = ""
@@ -170,6 +181,7 @@ class ConfigurationSourceAdded(BaseEvent):
 @dataclass
 class ConfigurationSourceRemoved(BaseEvent):
     """Configuration source removed event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     source_type: str = ""
     source_path: str = ""
@@ -178,6 +190,7 @@ class ConfigurationSourceRemoved(BaseEvent):
 @dataclass
 class ConfigurationEncrypted(BaseEvent):
     """Configuration encrypted event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     config_section: str = ""
 
@@ -185,6 +198,7 @@ class ConfigurationEncrypted(BaseEvent):
 @dataclass
 class ConfigurationDecrypted(BaseEvent):
     """Configuration decrypted event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     config_section: str = ""
 
@@ -193,9 +207,11 @@ class ConfigurationDecrypted(BaseEvent):
 # SYSTEM EVENTS
 # =============================================================================
 
+
 @dataclass
 class SystemStarted(BaseEvent):
     """System startup completed event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     startup_time: float = 0.0
     components_loaded: int = 0
@@ -207,6 +223,7 @@ class SystemStarted(BaseEvent):
 @dataclass
 class SystemShutdownStarted(BaseEvent):
     """System shutdown initiated event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     priority: EventPriority = EventPriority.HIGH
     reason: str = "manual"
@@ -216,6 +233,7 @@ class SystemShutdownStarted(BaseEvent):
 @dataclass
 class SystemShutdownCompleted(BaseEvent):
     """System shutdown completed event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     priority: EventPriority = EventPriority.HIGH
     shutdown_time: float = 0.0
@@ -225,6 +243,7 @@ class SystemShutdownCompleted(BaseEvent):
 @dataclass
 class SystemStateChanged(BaseEvent):
     """System state change event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     old_state: str = ""
     new_state: str = ""
@@ -234,6 +253,7 @@ class SystemStateChanged(BaseEvent):
 @dataclass
 class SystemResourceAlert(BaseEvent):
     """System resource usage alert."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -247,9 +267,11 @@ class SystemResourceAlert(BaseEvent):
 # COMPONENT EVENTS
 # =============================================================================
 
+
 @dataclass
 class ComponentRegistered(BaseEvent):
     """Component registration event."""
+
     category: EventCategory = field(default=EventCategory.COMPONENT, init=False)
     component_id: str = ""
     component_type: str = ""
@@ -259,6 +281,7 @@ class ComponentRegistered(BaseEvent):
 @dataclass
 class ComponentInitialized(BaseEvent):
     """Component initialization completed event."""
+
     category: EventCategory = field(default=EventCategory.COMPONENT, init=False)
     component_id: str = ""
     initialization_time: float = 0.0
@@ -267,6 +290,7 @@ class ComponentInitialized(BaseEvent):
 @dataclass
 class ComponentStarted(BaseEvent):
     """Component started event."""
+
     category: EventCategory = field(default=EventCategory.COMPONENT, init=False)
     component_id: str = ""
 
@@ -274,6 +298,7 @@ class ComponentStarted(BaseEvent):
 @dataclass
 class ComponentStopped(BaseEvent):
     """Component stopped event."""
+
     category: EventCategory = field(default=EventCategory.COMPONENT, init=False)
     component_id: str = ""
     reason: Optional[str] = None
@@ -282,6 +307,7 @@ class ComponentStopped(BaseEvent):
 @dataclass
 class ComponentFailed(BaseEvent):
     """Component failure event."""
+
     category: EventCategory = field(default=EventCategory.COMPONENT, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -293,6 +319,7 @@ class ComponentFailed(BaseEvent):
 @dataclass
 class ComponentHealthChanged(BaseEvent):
     """Component health status change event."""
+
     category: EventCategory = field(default=EventCategory.COMPONENT, init=False)
     component: str = ""
     healthy: bool = True
@@ -302,6 +329,7 @@ class ComponentHealthChanged(BaseEvent):
 @dataclass
 class DependencyResolved(BaseEvent):
     """Dependency resolution event."""
+
     category: EventCategory = field(default=EventCategory.COMPONENT, init=False)
     component_id: str = ""
     dependency_id: str = ""
@@ -312,9 +340,11 @@ class DependencyResolved(BaseEvent):
 # ENGINE EVENTS
 # =============================================================================
 
+
 @dataclass
 class EngineStarted(BaseEvent):
     """Core engine started event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     engine_id: int = 0
     version: str = "1.0.0"
@@ -325,6 +355,7 @@ class EngineStarted(BaseEvent):
 @dataclass
 class EngineShutdown(BaseEvent):
     """Core engine shutdown event."""
+
     category: EventCategory = field(default=EventCategory.SYSTEM, init=False)
     priority: EventPriority = EventPriority.HIGH
     engine_id: int = 0
@@ -336,9 +367,11 @@ class EngineShutdown(BaseEvent):
 # WORKFLOW EVENTS
 # =============================================================================
 
+
 @dataclass
 class WorkflowStarted(BaseEvent):
     """Workflow execution started event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -348,6 +381,7 @@ class WorkflowStarted(BaseEvent):
 @dataclass
 class WorkflowCompleted(BaseEvent):
     """Workflow execution completed event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -358,6 +392,7 @@ class WorkflowCompleted(BaseEvent):
 @dataclass
 class WorkflowFailed(BaseEvent):
     """Workflow execution failed event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -370,6 +405,7 @@ class WorkflowFailed(BaseEvent):
 @dataclass
 class WorkflowPaused(BaseEvent):
     """Workflow execution paused event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -378,6 +414,7 @@ class WorkflowPaused(BaseEvent):
 @dataclass
 class WorkflowResumed(BaseEvent):
     """Workflow execution resumed event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -386,6 +423,7 @@ class WorkflowResumed(BaseEvent):
 @dataclass
 class WorkflowCancelled(BaseEvent):
     """Workflow execution cancelled event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -394,6 +432,7 @@ class WorkflowCancelled(BaseEvent):
 @dataclass
 class WorkflowStepStarted(BaseEvent):
     """Workflow step started event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -405,6 +444,7 @@ class WorkflowStepStarted(BaseEvent):
 @dataclass
 class WorkflowStepCompleted(BaseEvent):
     """Workflow step completed event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -417,6 +457,7 @@ class WorkflowStepCompleted(BaseEvent):
 @dataclass
 class WorkflowStepFailed(BaseEvent):
     """Workflow step failed event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -430,6 +471,7 @@ class WorkflowStepFailed(BaseEvent):
 @dataclass
 class WorkflowStepSkipped(BaseEvent):
     """Workflow step skipped event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -440,6 +482,7 @@ class WorkflowStepSkipped(BaseEvent):
 @dataclass
 class WorkflowBranchingOccurred(BaseEvent):
     """Workflow branching event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -450,6 +493,7 @@ class WorkflowBranchingOccurred(BaseEvent):
 @dataclass
 class WorkflowMerged(BaseEvent):
     """Workflow merge event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -459,6 +503,7 @@ class WorkflowMerged(BaseEvent):
 @dataclass
 class WorkflowAdapted(BaseEvent):
     """Workflow adaptation event."""
+
     category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
     workflow_id: str = ""
     execution_id: str = ""
@@ -470,9 +515,11 @@ class WorkflowAdapted(BaseEvent):
 # SESSION EVENTS
 # =============================================================================
 
+
 @dataclass
 class SessionStarted(BaseEvent):
     """Session started event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     created_at: Optional[datetime] = None
 
@@ -480,6 +527,7 @@ class SessionStarted(BaseEvent):
 @dataclass
 class SessionEnded(BaseEvent):
     """Session ended event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     duration: float = 0.0
     interaction_count: int = 0
@@ -489,6 +537,7 @@ class SessionEnded(BaseEvent):
 @dataclass
 class SessionExpired(BaseEvent):
     """Session expired event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     priority: EventPriority = EventPriority.NORMAL
     duration: float = 0.0
@@ -497,6 +546,7 @@ class SessionExpired(BaseEvent):
 @dataclass
 class SessionRestored(BaseEvent):
     """Session restored event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     restored_from: str = ""  # backup, cache, etc.
 
@@ -504,6 +554,7 @@ class SessionRestored(BaseEvent):
 @dataclass
 class SessionContextUpdated(BaseEvent):
     """Session context updated event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     updates: List[str] = field(default_factory=list)
 
@@ -511,6 +562,7 @@ class SessionContextUpdated(BaseEvent):
 @dataclass
 class SessionStateChanged(BaseEvent):
     """Session state change event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     old_state: str = ""
     new_state: str = ""
@@ -519,6 +571,7 @@ class SessionStateChanged(BaseEvent):
 @dataclass
 class SessionCleanupStarted(BaseEvent):
     """Session cleanup started event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     cleanup_type: str = "expired"
 
@@ -526,6 +579,7 @@ class SessionCleanupStarted(BaseEvent):
 @dataclass
 class SessionCleanupCompleted(BaseEvent):
     """Session cleanup completed event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     sessions_cleaned: int = 0
     cleanup_time: float = 0.0
@@ -534,6 +588,7 @@ class SessionCleanupCompleted(BaseEvent):
 @dataclass
 class SessionMigrated(BaseEvent):
     """Session migrated event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     from_node: str = ""
     to_node: str = ""
@@ -543,6 +598,7 @@ class SessionMigrated(BaseEvent):
 @dataclass
 class SessionClusteringStarted(BaseEvent):
     """Session clustering started event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     cluster_strategy: str = ""
 
@@ -550,6 +606,7 @@ class SessionClusteringStarted(BaseEvent):
 @dataclass
 class SessionHealthCheckFailed(BaseEvent):
     """Session health check failed event."""
+
     category: EventCategory = field(default=EventCategory.SESSION, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -560,9 +617,11 @@ class SessionHealthCheckFailed(BaseEvent):
 # USER AND INTERACTION EVENTS
 # =============================================================================
 
+
 @dataclass
 class UserInteractionStarted(BaseEvent):
     """User interaction started event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     interaction_id: str = ""
     interaction_mode: str = ""
@@ -573,6 +632,7 @@ class UserInteractionStarted(BaseEvent):
 @dataclass
 class UserInteractionCompleted(BaseEvent):
     """User interaction completed event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     interaction_id: str = ""
     duration: float = 0.0
@@ -583,6 +643,7 @@ class UserInteractionCompleted(BaseEvent):
 @dataclass
 class UserInteractionFailed(BaseEvent):
     """User interaction failed event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -594,6 +655,7 @@ class UserInteractionFailed(BaseEvent):
 @dataclass
 class ConversationStarted(BaseEvent):
     """Conversation started event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     conversation_id: str = ""
 
@@ -601,6 +663,7 @@ class ConversationStarted(BaseEvent):
 @dataclass
 class ConversationEnded(BaseEvent):
     """Conversation ended event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     conversation_id: str = ""
     duration: float = 0.0
@@ -610,6 +673,7 @@ class ConversationEnded(BaseEvent):
 @dataclass
 class MessageReceived(BaseEvent):
     """Message received event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     message_id: str = ""
     interaction_id: str = ""
@@ -620,6 +684,7 @@ class MessageReceived(BaseEvent):
 @dataclass
 class MessageSent(BaseEvent):
     """Message sent event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     message_id: str = ""
     interaction_id: str = ""
@@ -629,6 +694,7 @@ class MessageSent(BaseEvent):
 @dataclass
 class MessageProcessed(BaseEvent):
     """Message processed event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     message_id: str = ""
     interaction_id: str = ""
@@ -640,12 +706,14 @@ class MessageProcessed(BaseEvent):
 @dataclass
 class UserJoinedSession(BaseEvent):
     """User joined session event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
 
 
 @dataclass
 class UserLeftSession(BaseEvent):
     """User left session event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     session_duration: float = 0.0
 
@@ -653,6 +721,7 @@ class UserLeftSession(BaseEvent):
 @dataclass
 class UserAuthenticated(BaseEvent):
     """User authentication event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     auth_method: str = ""
     success: bool = True
@@ -661,6 +730,7 @@ class UserAuthenticated(BaseEvent):
 @dataclass
 class UserAuthorized(BaseEvent):
     """User authorization event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     resource: str = ""
     action: str = ""
@@ -670,6 +740,7 @@ class UserAuthorized(BaseEvent):
 @dataclass
 class UserLoggedOut(BaseEvent):
     """User logout event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     session_duration: float = 0.0
 
@@ -677,6 +748,7 @@ class UserLoggedOut(BaseEvent):
 @dataclass
 class UserPreferenceUpdated(BaseEvent):
     """User preference updated event."""
+
     category: EventCategory = field(default=EventCategory.USER, init=False)
     preferences: Dict[str, Any] = field(default_factory=dict)
 
@@ -685,9 +757,11 @@ class UserPreferenceUpdated(BaseEvent):
 # PROCESSING EVENTS
 # =============================================================================
 
+
 @dataclass
 class ProcessingStarted(BaseEvent):
     """Processing started event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     request_id: str = ""
     input_modalities: List[str] = field(default_factory=list)
@@ -696,6 +770,7 @@ class ProcessingStarted(BaseEvent):
 @dataclass
 class ProcessingCompleted(BaseEvent):
     """Processing completed event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     request_id: str = ""
     processing_time: float = 0.0
@@ -706,6 +781,7 @@ class ProcessingCompleted(BaseEvent):
 @dataclass
 class ProcessingError(BaseEvent):
     """Processing error event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -717,6 +793,7 @@ class ProcessingError(BaseEvent):
 @dataclass
 class ModalityProcessingStarted(BaseEvent):
     """Modality processing started event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     request_id: str = ""
     modality: str = ""
@@ -725,6 +802,7 @@ class ModalityProcessingStarted(BaseEvent):
 @dataclass
 class ModalityProcessingCompleted(BaseEvent):
     """Modality processing completed event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     request_id: str = ""
     modality: str = ""
@@ -734,6 +812,7 @@ class ModalityProcessingCompleted(BaseEvent):
 @dataclass
 class ModalityDetected(BaseEvent):
     """Modality detection event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     interaction_id: str = ""
     detected_modalities: List[str] = field(default_factory=list)
@@ -743,6 +822,7 @@ class ModalityDetected(BaseEvent):
 @dataclass
 class FusionStarted(BaseEvent):
     """Multimodal fusion started event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     request_id: str = ""
     modalities: List[str] = field(default_factory=list)
@@ -751,6 +831,7 @@ class FusionStarted(BaseEvent):
 @dataclass
 class FusionCompleted(BaseEvent):
     """Multimodal fusion completed event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     request_id: str = ""
     fusion_confidence: float = 0.0
@@ -759,6 +840,7 @@ class FusionCompleted(BaseEvent):
 @dataclass
 class InteractionModeChanged(BaseEvent):
     """Interaction mode changed event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     interaction_id: str = ""
     old_mode: str = ""
@@ -768,6 +850,7 @@ class InteractionModeChanged(BaseEvent):
 @dataclass
 class RealTimeProcessingStarted(BaseEvent):
     """Real-time processing started event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     interaction_id: str = ""
 
@@ -775,6 +858,7 @@ class RealTimeProcessingStarted(BaseEvent):
 @dataclass
 class RealTimeProcessingCompleted(BaseEvent):
     """Real-time processing completed event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     interaction_id: str = ""
     processing_time: float = 0.0
@@ -783,6 +867,7 @@ class RealTimeProcessingCompleted(BaseEvent):
 @dataclass
 class StreamingStarted(BaseEvent):
     """Streaming started event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     interaction_id: str = ""
 
@@ -790,6 +875,7 @@ class StreamingStarted(BaseEvent):
 @dataclass
 class StreamingCompleted(BaseEvent):
     """Streaming completed event."""
+
     category: EventCategory = field(default=EventCategory.PROCESSING, init=False)
     interaction_id: str = ""
     total_chunks: int = 0
@@ -800,9 +886,11 @@ class StreamingCompleted(BaseEvent):
 # MEMORY EVENTS
 # =============================================================================
 
+
 @dataclass
 class MemoryOperationStarted(BaseEvent):
     """Memory operation started event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     request_id: str = ""
     operation_type: str = ""
@@ -811,6 +899,7 @@ class MemoryOperationStarted(BaseEvent):
 @dataclass
 class MemoryOperationCompleted(BaseEvent):
     """Memory operation completed event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     request_id: str = ""
     operations_completed: List[str] = field(default_factory=list)
@@ -819,6 +908,7 @@ class MemoryOperationCompleted(BaseEvent):
 @dataclass
 class MemoryRetrievalStarted(BaseEvent):
     """Memory retrieval started event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     query: str = ""
     memory_type: str = ""
@@ -827,6 +917,7 @@ class MemoryRetrievalStarted(BaseEvent):
 @dataclass
 class MemoryRetrievalCompleted(BaseEvent):
     """Memory retrieval completed event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     query: str = ""
     results_count: int = 0
@@ -836,6 +927,7 @@ class MemoryRetrievalCompleted(BaseEvent):
 @dataclass
 class MemoryConsolidationStarted(BaseEvent):
     """Memory consolidation started event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     consolidation_type: str = ""
 
@@ -843,6 +935,7 @@ class MemoryConsolidationStarted(BaseEvent):
 @dataclass
 class MemoryConsolidationCompleted(BaseEvent):
     """Memory consolidation completed event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     memories_consolidated: int = 0
     consolidation_time: float = 0.0
@@ -851,6 +944,7 @@ class MemoryConsolidationCompleted(BaseEvent):
 @dataclass
 class MemoryRetrievalRequested(BaseEvent):
     """Memory retrieval requested event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     query: str = ""
     context_id: Optional[str] = None
@@ -859,6 +953,7 @@ class MemoryRetrievalRequested(BaseEvent):
 @dataclass
 class MemoryItemStored(BaseEvent):
     """Memory item stored event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     memory_id: str = ""
     memory_type: str = ""
@@ -868,6 +963,7 @@ class MemoryItemStored(BaseEvent):
 @dataclass
 class MemoryItemRetrieved(BaseEvent):
     """Memory item retrieved event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     memory_id: str = ""
     relevance_score: float = 0.0
@@ -876,6 +972,7 @@ class MemoryItemRetrieved(BaseEvent):
 @dataclass
 class MemoryItemUpdated(BaseEvent):
     """Memory item updated event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     memory_id: str = ""
     update_type: str = ""
@@ -884,6 +981,7 @@ class MemoryItemUpdated(BaseEvent):
 @dataclass
 class MemoryItemDeleted(BaseEvent):
     """Memory item deleted event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     memory_id: str = ""
     reason: str = ""
@@ -892,6 +990,7 @@ class MemoryItemDeleted(BaseEvent):
 @dataclass
 class ContextAdapted(BaseEvent):
     """Context adaptation event."""
+
     category: EventCategory = field(default=EventCategory.MEMORY, init=False)
     adaptation_type: str = ""
     context_changes: List[str] = field(default_factory=list)
@@ -901,9 +1000,11 @@ class ContextAdapted(BaseEvent):
 # SKILL EVENTS
 # =============================================================================
 
+
 @dataclass
 class SkillExecutionStarted(BaseEvent):
     """Skill execution started event."""
+
     category: EventCategory = field(default=EventCategory.SKILL, init=False)
     skill_id: str = ""
     skill_name: str = ""
@@ -913,6 +1014,7 @@ class SkillExecutionStarted(BaseEvent):
 @dataclass
 class SkillExecutionCompleted(BaseEvent):
     """Skill execution completed event."""
+
     category: EventCategory = field(default=EventCategory.SKILL, init=False)
     skill_id: str = ""
     skill_name: str = ""
@@ -924,6 +1026,7 @@ class SkillExecutionCompleted(BaseEvent):
 @dataclass
 class SkillExecutionFailed(BaseEvent):
     """Skill execution failed event."""
+
     category: EventCategory = field(default=EventCategory.SKILL, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -937,6 +1040,7 @@ class SkillExecutionFailed(BaseEvent):
 @dataclass
 class SkillRegistered(BaseEvent):
     """Skill registered event."""
+
     category: EventCategory = field(default=EventCategory.SKILL, init=False)
     skill_id: str = ""
     skill_name: str = ""
@@ -946,6 +1050,7 @@ class SkillRegistered(BaseEvent):
 @dataclass
 class SkillUnregistered(BaseEvent):
     """Skill unregistered event."""
+
     category: EventCategory = field(default=EventCategory.SKILL, init=False)
     skill_id: str = ""
     skill_name: str = ""
@@ -954,6 +1059,7 @@ class SkillUnregistered(BaseEvent):
 @dataclass
 class SkillValidationStarted(BaseEvent):
     """Skill validation started event."""
+
     category: EventCategory = field(default=EventCategory.SKILL, init=False)
     skill_id: str = ""
     validation_type: str = ""
@@ -962,6 +1068,7 @@ class SkillValidationStarted(BaseEvent):
 @dataclass
 class SkillValidationCompleted(BaseEvent):
     """Skill validation completed event."""
+
     category: EventCategory = field(default=EventCategory.SKILL, init=False)
     skill_id: str = ""
     validation_success: bool = True
@@ -972,9 +1079,11 @@ class SkillValidationCompleted(BaseEvent):
 # LEARNING EVENTS
 # =============================================================================
 
+
 @dataclass
 class LearningEventOccurred(BaseEvent):
     """Learning event occurred."""
+
     category: EventCategory = field(default=EventCategory.LEARNING, init=False)
     event_type: str = ""
     data: Dict[str, Any] = field(default_factory=dict)
@@ -983,6 +1092,7 @@ class LearningEventOccurred(BaseEvent):
 @dataclass
 class FeedbackReceived(BaseEvent):
     """Feedback received event."""
+
     category: EventCategory = field(default=EventCategory.LEARNING, init=False)
     interaction_id: str = ""
     feedback_type: str = ""
@@ -992,6 +1102,7 @@ class FeedbackReceived(BaseEvent):
 @dataclass
 class ModelAdaptationStarted(BaseEvent):
     """Model adaptation started event."""
+
     category: EventCategory = field(default=EventCategory.LEARNING, init=False)
     model_id: str = ""
     adaptation_type: str = ""
@@ -1000,6 +1111,7 @@ class ModelAdaptationStarted(BaseEvent):
 @dataclass
 class ModelAdaptationCompleted(BaseEvent):
     """Model adaptation completed event."""
+
     category: EventCategory = field(default=EventCategory.LEARNING, init=False)
     model_id: str = ""
     adaptation_success: bool = True
@@ -1009,6 +1121,7 @@ class ModelAdaptationCompleted(BaseEvent):
 @dataclass
 class LearningMetricsUpdated(BaseEvent):
     """Learning metrics updated event."""
+
     category: EventCategory = field(default=EventCategory.LEARNING, init=False)
     metrics: Dict[str, float] = field(default_factory=dict)
 
@@ -1017,9 +1130,11 @@ class LearningMetricsUpdated(BaseEvent):
 # PLUGIN EVENTS
 # =============================================================================
 
+
 @dataclass
 class PluginLoaded(BaseEvent):
     """Plugin loaded event."""
+
     category: EventCategory = field(default=EventCategory.PLUGIN, init=False)
     plugin_id: str = ""
     plugin_type: str = ""
@@ -1029,6 +1144,7 @@ class PluginLoaded(BaseEvent):
 @dataclass
 class PluginUnloaded(BaseEvent):
     """Plugin unloaded event."""
+
     category: EventCategory = field(default=EventCategory.PLUGIN, init=False)
     plugin_id: str = ""
     plugin_type: str = ""
@@ -1037,6 +1153,7 @@ class PluginUnloaded(BaseEvent):
 @dataclass
 class PluginEnabled(BaseEvent):
     """Plugin enabled event."""
+
     category: EventCategory = field(default=EventCategory.PLUGIN, init=False)
     plugin_id: str = ""
     plugin_type: str = ""
@@ -1045,6 +1162,7 @@ class PluginEnabled(BaseEvent):
 @dataclass
 class PluginDisabled(BaseEvent):
     """Plugin disabled event."""
+
     category: EventCategory = field(default=EventCategory.PLUGIN, init=False)
     plugin_id: str = ""
     plugin_type: str = ""
@@ -1053,6 +1171,7 @@ class PluginDisabled(BaseEvent):
 @dataclass
 class PluginError(BaseEvent):
     """Plugin error event."""
+
     category: EventCategory = field(default=EventCategory.PLUGIN, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -1064,6 +1183,7 @@ class PluginError(BaseEvent):
 @dataclass
 class PluginDependencyResolved(BaseEvent):
     """Plugin dependency resolved event."""
+
     category: EventCategory = field(default=EventCategory.PLUGIN, init=False)
     plugin_id: str = ""
     dependency_id: str = ""
@@ -1072,6 +1192,7 @@ class PluginDependencyResolved(BaseEvent):
 @dataclass
 class PluginHotReloaded(BaseEvent):
     """Plugin hot reloaded event."""
+
     category: EventCategory = field(default=EventCategory.PLUGIN, init=False)
     plugin_id: str = ""
     plugin_type: str = ""
@@ -1080,6 +1201,7 @@ class PluginHotReloaded(BaseEvent):
 @dataclass
 class PluginSecurityViolation(BaseEvent):
     """Plugin security violation event."""
+
     category: EventCategory = field(default=EventCategory.PLUGIN, init=False)
     priority: EventPriority = EventPriority.CRITICAL
     severity: EventSeverity = EventSeverity.CRITICAL
@@ -1091,6 +1213,7 @@ class PluginSecurityViolation(BaseEvent):
 @dataclass
 class PluginPerformanceWarning(BaseEvent):
     """Plugin performance warning event."""
+
     category: EventCategory = field(default=EventCategory.PLUGIN, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -1104,9 +1227,11 @@ class PluginPerformanceWarning(BaseEvent):
 # INTEGRATION EVENTS
 # =============================================================================
 
+
 @dataclass
 class IntegrationConnected(BaseEvent):
     """Integration connected event."""
+
     category: EventCategory = field(default=EventCategory.INTEGRATION, init=False)
     integration_type: str = ""
     integration_name: str = ""
@@ -1115,6 +1240,7 @@ class IntegrationConnected(BaseEvent):
 @dataclass
 class IntegrationDisconnected(BaseEvent):
     """Integration disconnected event."""
+
     category: EventCategory = field(default=EventCategory.INTEGRATION, init=False)
     priority: EventPriority = EventPriority.HIGH
     integration_type: str = ""
@@ -1125,6 +1251,7 @@ class IntegrationDisconnected(BaseEvent):
 @dataclass
 class IntegrationError(BaseEvent):
     """Integration error event."""
+
     category: EventCategory = field(default=EventCategory.INTEGRATION, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -1137,6 +1264,7 @@ class IntegrationError(BaseEvent):
 @dataclass
 class APICallStarted(BaseEvent):
     """API call started event."""
+
     category: EventCategory = field(default=EventCategory.API, init=False)
     api_name: str = ""
     endpoint: str = ""
@@ -1146,6 +1274,7 @@ class APICallStarted(BaseEvent):
 @dataclass
 class APICallCompleted(BaseEvent):
     """API call completed event."""
+
     category: EventCategory = field(default=EventCategory.API, init=False)
     api_name: str = ""
     endpoint: str = ""
@@ -1157,6 +1286,7 @@ class APICallCompleted(BaseEvent):
 @dataclass
 class APICallFailed(BaseEvent):
     """API call failed event."""
+
     category: EventCategory = field(default=EventCategory.API, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -1170,6 +1300,7 @@ class APICallFailed(BaseEvent):
 @dataclass
 class RateLimitExceeded(BaseEvent):
     """Rate limit exceeded event."""
+
     category: EventCategory = field(default=EventCategory.API, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -1183,9 +1314,11 @@ class RateLimitExceeded(BaseEvent):
 # SECURITY EVENTS
 # =============================================================================
 
+
 @dataclass
 class SecurityViolationDetected(BaseEvent):
     """Security violation detected event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     priority: EventPriority = EventPriority.CRITICAL
     severity: EventSeverity = EventSeverity.CRITICAL
@@ -1197,6 +1330,7 @@ class SecurityViolationDetected(BaseEvent):
 @dataclass
 class AuthenticationFailed(BaseEvent):
     """Authentication failed event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -1208,6 +1342,7 @@ class AuthenticationFailed(BaseEvent):
 @dataclass
 class AuthorizationFailed(BaseEvent):
     """Authorization failed event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -1219,6 +1354,7 @@ class AuthorizationFailed(BaseEvent):
 @dataclass
 class SuspiciousActivityDetected(BaseEvent):
     """Suspicious activity detected event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -1230,6 +1366,7 @@ class SuspiciousActivityDetected(BaseEvent):
 @dataclass
 class EncryptionEvent(BaseEvent):
     """Encryption operation event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     operation: str = ""  # encrypt, decrypt
     data_type: str = ""
@@ -1239,6 +1376,7 @@ class EncryptionEvent(BaseEvent):
 @dataclass
 class EncryptionKeyGenerated(BaseEvent):
     """Encryption key generated event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     key_id: str = ""
     key_type: str = ""
@@ -1248,6 +1386,7 @@ class EncryptionKeyGenerated(BaseEvent):
 @dataclass
 class EncryptionKeyRotated(BaseEvent):
     """Encryption key rotated event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     old_key_id: str = ""
     new_key_id: str = ""
@@ -1257,6 +1396,7 @@ class EncryptionKeyRotated(BaseEvent):
 @dataclass
 class EncryptionOperationCompleted(BaseEvent):
     """Encryption operation completed event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     operation_type: str = ""
     operation_time: float = 0.0
@@ -1266,6 +1406,7 @@ class EncryptionOperationCompleted(BaseEvent):
 @dataclass
 class DependencyHealthChanged(BaseEvent):
     """Dependency health changed event."""
+
     category: EventCategory = field(default=EventCategory.HEALTH, init=False)
     dependency_name: str = ""
     health_status: str = ""
@@ -1275,6 +1416,7 @@ class DependencyHealthChanged(BaseEvent):
 @dataclass
 class SystemHealthChanged(BaseEvent):
     """System health changed event."""
+
     category: EventCategory = field(default=EventCategory.HEALTH, init=False)
     health_status: str = ""
     components_affected: List[str] = field(default_factory=list)
@@ -1284,6 +1426,7 @@ class SystemHealthChanged(BaseEvent):
 @dataclass
 class EncryptionOperationFailed(BaseEvent):
     """Encryption operation failed event."""
+
     category: EventCategory = field(default=EventCategory.SECURITY, init=False)
     operation_type: str = ""
     error_message: str = ""
@@ -1294,9 +1437,11 @@ class EncryptionOperationFailed(BaseEvent):
 # PERFORMANCE EVENTS
 # =============================================================================
 
+
 @dataclass
 class PerformanceMetricUpdated(BaseEvent):
     """Performance metric updated event."""
+
     category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
     metric_name: str = ""
     metric_value: float = 0.0
@@ -1307,6 +1452,7 @@ class PerformanceMetricUpdated(BaseEvent):
 @dataclass
 class PerformanceThresholdExceeded(BaseEvent):
     """Performance threshold exceeded event."""
+
     category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -1319,6 +1465,7 @@ class PerformanceThresholdExceeded(BaseEvent):
 @dataclass
 class ResourceUsageHigh(BaseEvent):
     """High resource usage event."""
+
     category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -1330,6 +1477,7 @@ class ResourceUsageHigh(BaseEvent):
 @dataclass
 class PerformanceOptimizationApplied(BaseEvent):
     """Performance optimization applied event."""
+
     category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
     optimization_type: str = ""
     improvement_factor: float = 0.0
@@ -1340,9 +1488,11 @@ class PerformanceOptimizationApplied(BaseEvent):
 # ERROR EVENTS
 # =============================================================================
 
+
 @dataclass
 class ErrorOccurred(BaseEvent):
     """General error occurred event."""
+
     category: EventCategory = field(default=EventCategory.ERROR, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -1354,6 +1504,7 @@ class ErrorOccurred(BaseEvent):
 @dataclass
 class ExceptionCaught(BaseEvent):
     """Exception caught event."""
+
     category: EventCategory = field(default=EventCategory.ERROR, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.ERROR
@@ -1366,6 +1517,7 @@ class ExceptionCaught(BaseEvent):
 @dataclass
 class ErrorRecoveryStarted(BaseEvent):
     """Error recovery started event."""
+
     category: EventCategory = field(default=EventCategory.ERROR, init=False)
     error_id: str = ""
     recovery_strategy: str = ""
@@ -1374,6 +1526,7 @@ class ErrorRecoveryStarted(BaseEvent):
 @dataclass
 class ErrorRecoveryCompleted(BaseEvent):
     """Error recovery completed event."""
+
     category: EventCategory = field(default=EventCategory.ERROR, init=False)
     error_id: str = ""
     recovery_success: bool = True
@@ -1384,9 +1537,11 @@ class ErrorRecoveryCompleted(BaseEvent):
 # HEALTH AND MONITORING EVENTS
 # =============================================================================
 
+
 @dataclass
 class HealthCheckStarted(BaseEvent):
     """Health check started event."""
+
     category: EventCategory = field(default=EventCategory.HEALTH, init=False)
     check_type: str = ""
     target_component: str = ""
@@ -1395,6 +1550,7 @@ class HealthCheckStarted(BaseEvent):
 @dataclass
 class HealthCheckCompleted(BaseEvent):
     """Health check completed event."""
+
     category: EventCategory = field(default=EventCategory.HEALTH, init=False)
     check_type: str = ""
     target_component: str = ""
@@ -1405,6 +1561,7 @@ class HealthCheckCompleted(BaseEvent):
 @dataclass
 class HealthCheckFailed(BaseEvent):
     """Health check failed event."""
+
     category: EventCategory = field(default=EventCategory.HEALTH, init=False)
     priority: EventPriority = EventPriority.HIGH
     severity: EventSeverity = EventSeverity.WARNING
@@ -1416,6 +1573,7 @@ class HealthCheckFailed(BaseEvent):
 @dataclass
 class AlertTriggered(BaseEvent):
     """Alert triggered event."""
+
     category: EventCategory = field(default=EventCategory.HEALTH, init=False)
     priority: EventPriority = EventPriority.HIGH
     alert_type: str = ""
@@ -1426,6 +1584,7 @@ class AlertTriggered(BaseEvent):
 @dataclass
 class AlertResolved(BaseEvent):
     """Alert resolved event."""
+
     category: EventCategory = field(default=EventCategory.HEALTH, init=False)
     alert_type: str = ""
     resolution_time: float = 0.0
@@ -1436,9 +1595,11 @@ class AlertResolved(BaseEvent):
 # AUDIT EVENTS
 # =============================================================================
 
+
 @dataclass
 class AuditLogEntry(BaseEvent):
     """Audit log entry event."""
+
     category: EventCategory = field(default=EventCategory.AUDIT, init=False)
     action: str = ""
     resource: str = ""
@@ -1449,6 +1610,7 @@ class AuditLogEntry(BaseEvent):
 @dataclass
 class DataAccessEvent(BaseEvent):
     """Data access event."""
+
     category: EventCategory = field(default=EventCategory.AUDIT, init=False)
     data_type: str = ""
     access_type: str = ""  # read, write, delete
@@ -1458,6 +1620,7 @@ class DataAccessEvent(BaseEvent):
 @dataclass
 class ConfigurationChanged(BaseEvent):
     """Configuration changed event."""
+
     category: EventCategory = field(default=EventCategory.AUDIT, init=False)
     config_section: str = ""
     changes: Dict[str, Any] = field(default_factory=dict)
@@ -1478,14 +1641,12 @@ EVENT_TYPES = {
     "ConfigurationSourceRemoved": ConfigurationSourceRemoved,
     "ConfigurationEncrypted": ConfigurationEncrypted,
     "ConfigurationDecrypted": ConfigurationDecrypted,
-    
     # System Events
     "SystemStarted": SystemStarted,
     "SystemShutdownStarted": SystemShutdownStarted,
     "SystemShutdownCompleted": SystemShutdownCompleted,
     "SystemStateChanged": SystemStateChanged,
     "SystemResourceAlert": SystemResourceAlert,
-    
     # Component Events
     "ComponentRegistered": ComponentRegistered,
     "ComponentInitialized": ComponentInitialized,
@@ -1494,11 +1655,9 @@ EVENT_TYPES = {
     "ComponentFailed": ComponentFailed,
     "ComponentHealthChanged": ComponentHealthChanged,
     "DependencyResolved": DependencyResolved,
-    
     # Engine Events
     "EngineStarted": EngineStarted,
     "EngineShutdown": EngineShutdown,
-    
     # Workflow Events
     "WorkflowStarted": WorkflowStarted,
     "WorkflowCompleted": WorkflowCompleted,
@@ -1513,7 +1672,6 @@ EVENT_TYPES = {
     "WorkflowBranchingOccurred": WorkflowBranchingOccurred,
     "WorkflowMerged": WorkflowMerged,
     "WorkflowAdapted": WorkflowAdapted,
-    
     # Session Events
     "SessionStarted": SessionStarted,
     "SessionEnded": SessionEnded,
@@ -1526,7 +1684,6 @@ EVENT_TYPES = {
     "SessionMigrated": SessionMigrated,
     "SessionClusteringStarted": SessionClusteringStarted,
     "SessionHealthCheckFailed": SessionHealthCheckFailed,
-    
     # User and Interaction Events
     "UserInteractionStarted": UserInteractionStarted,
     "UserInteractionCompleted": UserInteractionCompleted,
@@ -1542,7 +1699,6 @@ EVENT_TYPES = {
     "UserAuthorized": UserAuthorized,
     "UserLoggedOut": UserLoggedOut,
     "UserPreferenceUpdated": UserPreferenceUpdated,
-    
     # Processing Events
     "ProcessingStarted": ProcessingStarted,
     "ProcessingCompleted": ProcessingCompleted,
@@ -1557,7 +1713,6 @@ EVENT_TYPES = {
     "RealTimeProcessingCompleted": RealTimeProcessingCompleted,
     "StreamingStarted": StreamingStarted,
     "StreamingCompleted": StreamingCompleted,
-    
     # Memory Events
     "MemoryOperationStarted": MemoryOperationStarted,
     "MemoryOperationCompleted": MemoryOperationCompleted,
@@ -1571,7 +1726,6 @@ EVENT_TYPES = {
     "MemoryItemUpdated": MemoryItemUpdated,
     "MemoryItemDeleted": MemoryItemDeleted,
     "ContextAdapted": ContextAdapted,
-    
     # Skill Events
     "SkillExecutionStarted": SkillExecutionStarted,
     "SkillExecutionCompleted": SkillExecutionCompleted,
@@ -1580,14 +1734,12 @@ EVENT_TYPES = {
     "SkillUnregistered": SkillUnregistered,
     "SkillValidationStarted": SkillValidationStarted,
     "SkillValidationCompleted": SkillValidationCompleted,
-    
     # Learning Events
     "LearningEventOccurred": LearningEventOccurred,
     "FeedbackReceived": FeedbackReceived,
     "ModelAdaptationStarted": ModelAdaptationStarted,
     "ModelAdaptationCompleted": ModelAdaptationCompleted,
     "LearningMetricsUpdated": LearningMetricsUpdated,
-    
     # Plugin Events
     "PluginLoaded": PluginLoaded,
     "PluginUnloaded": PluginUnloaded,
@@ -1598,7 +1750,6 @@ EVENT_TYPES = {
     "PluginHotReloaded": PluginHotReloaded,
     "PluginSecurityViolation": PluginSecurityViolation,
     "PluginPerformanceWarning": PluginPerformanceWarning,
-    
     # Integration Events
     "IntegrationConnected": IntegrationConnected,
     "IntegrationDisconnected": IntegrationDisconnected,
@@ -1607,7 +1758,6 @@ EVENT_TYPES = {
     "APICallCompleted": APICallCompleted,
     "APICallFailed": APICallFailed,
     "RateLimitExceeded": RateLimitExceeded,
-    
     # Security Events
     "SecurityViolationDetected": SecurityViolationDetected,
     "AuthenticationFailed": AuthenticationFailed,
@@ -1620,26 +1770,22 @@ EVENT_TYPES = {
     "EncryptionOperationFailed": EncryptionOperationFailed,
     "DependencyHealthChanged": DependencyHealthChanged,
     "SystemHealthChanged": SystemHealthChanged,
-    
     # Performance Events
     "PerformanceMetricUpdated": PerformanceMetricUpdated,
     "PerformanceThresholdExceeded": PerformanceThresholdExceeded,
     "ResourceUsageHigh": ResourceUsageHigh,
     "PerformanceOptimizationApplied": PerformanceOptimizationApplied,
-    
     # Error Events
     "ErrorOccurred": ErrorOccurred,
     "ExceptionCaught": ExceptionCaught,
     "ErrorRecoveryStarted": ErrorRecoveryStarted,
     "ErrorRecoveryCompleted": ErrorRecoveryCompleted,
-    
     # Health and Monitoring Events
     "HealthCheckStarted": HealthCheckStarted,
     "HealthCheckCompleted": HealthCheckCompleted,
     "HealthCheckFailed": HealthCheckFailed,
     "AlertTriggered": AlertTriggered,
     "AlertResolved": AlertResolved,
-    
     # Audit Events
     "AuditLogEntry": AuditLogEntry,
     "DataAccessEvent": DataAccessEvent,
@@ -1656,7 +1802,7 @@ def list_event_types(category: Optional[EventCategory] = None) -> List[str]:
     """List all event types, optionally filtered by category."""
     if category is None:
         return list(EVENT_TYPES.keys())
-    
+
     filtered_events = []
     for event_name, event_class in EVENT_TYPES.items():
         try:
@@ -1666,7 +1812,7 @@ def list_event_types(category: Optional[EventCategory] = None) -> List[str]:
                 filtered_events.append(event_name)
         except Exception:
             continue
-    
+
     return filtered_events
 
 

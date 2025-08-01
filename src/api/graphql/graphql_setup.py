@@ -1,17 +1,18 @@
 """GraphQL API Setup Module"""
 
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
 
 try:
     import graphene
-    from graphene import ObjectType, String, Field, List as GrapheneList, Int, Float
+    from graphene import Field, Float, Int
+    from graphene import List as GrapheneList
+    from graphene import ObjectType, String
 
     GRAPHENE_AVAILABLE = True
 except ImportError:
     GRAPHENE_AVAILABLE = False
 
 from src.observability.logging.config import get_logger
-
 
 if GRAPHENE_AVAILABLE:
 

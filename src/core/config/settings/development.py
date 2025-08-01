@@ -1,6 +1,6 @@
 """
 Development Configuration Settings for AI Assistant
-Author: Drmusab  
+Author: Drmusab
 Last Modified: 2025-06-13 11:04:49 UTC
 
 This module provides comprehensive development-specific configuration that integrates
@@ -9,9 +9,9 @@ debug logging, local storage, and development-friendly defaults.
 """
 
 import os
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
 from datetime import timedelta
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 # Base configuration
 from .base import BaseConfig
@@ -20,7 +20,7 @@ from .base import BaseConfig
 class DevelopmentConfig(BaseConfig):
     """
     Development configuration with enhanced debugging and development features.
-    
+
     This configuration enables:
     - Hot-reloading for rapid development
     - Verbose logging and debugging
@@ -29,20 +29,20 @@ class DevelopmentConfig(BaseConfig):
     - Mock services for external dependencies
     - Enhanced error reporting and profiling
     """
-    
+
     # Environment settings
     ENVIRONMENT = "development"
     DEBUG = True
     TESTING = False
     LOG_LEVEL = "DEBUG"
-    
+
     # Development features
     HOT_RELOAD_ENABLED = True
     AUTO_RESTART_ON_CHANGE = True
     PROFILING_ENABLED = True
     METRICS_COLLECTION_ENABLED = True
     TRACING_ENABLED = True
-    
+
     # Core system configuration
     CORE_ENGINE_CONFIG = {
         # Processing settings
@@ -51,39 +51,33 @@ class DevelopmentConfig(BaseConfig):
         "default_timeout_seconds": 60.0,  # Higher for debugging
         "enable_real_time_processing": True,
         "enable_adaptive_quality": True,
-        
         # Component settings
         "enable_speech_processing": True,
         "enable_vision_processing": True,
         "enable_multimodal_fusion": True,
         "enable_reasoning": True,
         "enable_learning": True,
-        
         # Quality settings
         "default_quality_level": "balanced",
         "quality_monitoring": True,
-        
         # Memory settings
         "working_memory_size": 500,  # Smaller for development
         "context_window_size": 2048,  # Smaller for development
         "memory_consolidation_interval": 1800,  # 30 minutes
-        
         # Caching settings
         "enable_response_caching": True,
         "enable_component_caching": True,
         "cache_ttl_seconds": 1800,  # Shorter for development
-        
         # Security settings
         "require_authentication": False,  # Disabled for development
-        "enable_authorization": False,   # Disabled for development
+        "enable_authorization": False,  # Disabled for development
         "audit_logging": True,
-        
         # Performance settings
         "enable_performance_monitoring": True,
         "enable_profiling": True,
         "gc_interval_seconds": 60,  # More frequent for development
     }
-    
+
     # Component manager configuration
     COMPONENT_MANAGER_CONFIG = {
         "auto_discovery": True,
@@ -98,7 +92,7 @@ class DevelopmentConfig(BaseConfig):
         "dependency_injection": True,
         "component_isolation": False,  # Disabled for easier debugging
     }
-    
+
     # Workflow orchestrator configuration
     WORKFLOW_CONFIG = {
         "max_execution_time": 120.0,  # 2 minutes for development
@@ -112,7 +106,7 @@ class DevelopmentConfig(BaseConfig):
         "enable_workflow_debugging": True,
         "workflow_visualization": True,
     }
-    
+
     # Session manager configuration
     SESSIONS_CONFIG = {
         "storage_type": "memory",  # Use memory for development
@@ -128,7 +122,7 @@ class DevelopmentConfig(BaseConfig):
         "session_debugging": True,
         "context_versioning": True,
     }
-    
+
     # Interaction handler configuration
     INTERACTIONS_CONFIG = {
         "max_duration": 3600.0,  # 1 hour
@@ -142,14 +136,14 @@ class DevelopmentConfig(BaseConfig):
         "feedback_collection": True,
         "interaction_debugging": True,
     }
-    
+
     # Plugin manager configuration
     PLUGINS_CONFIG = {
         "directories": [
             "plugins/",
             "src/plugins/",
             "data/plugins/",
-            "tests/fixtures/plugins/"  # Test plugins
+            "tests/fixtures/plugins/",  # Test plugins
         ],
         "auto_discovery": True,
         "hot_reload": True,
@@ -160,7 +154,7 @@ class DevelopmentConfig(BaseConfig):
         "enable_plugin_debugging": True,
         "allow_unsafe_plugins": True,  # Only for development!
     }
-    
+
     # Memory system configuration
     MEMORY_CONFIG = {
         # Core memory settings
@@ -184,7 +178,6 @@ class DevelopmentConfig(BaseConfig):
             "similarity_threshold": 0.7,
             "max_memories": 50000,
         },
-        
         # Storage settings
         "vector_store": {
             "backend": "faiss",  # Local FAISS for development
@@ -193,7 +186,6 @@ class DevelopmentConfig(BaseConfig):
             "persistence_path": "data/memory/vectors/",
             "backup_enabled": False,
         },
-        
         # Cache settings
         "cache": {
             "backend": "local",  # Local cache for development
@@ -201,16 +193,15 @@ class DevelopmentConfig(BaseConfig):
             "ttl_seconds": 3600,
             "cleanup_interval": 300,
         },
-        
         # Context management
         "context": {
             "max_context_size": 8192,
             "context_window_overlap": 512,
             "auto_summarization": False,
             "context_versioning": True,
-        }
+        },
     }
-    
+
     # Learning system configuration
     LEARNING_CONFIG = {
         "continual_learning": {
@@ -242,9 +233,9 @@ class DevelopmentConfig(BaseConfig):
             "validation_split": 0.2,
             "early_stopping": True,
             "hyperparameter_tuning": False,  # Disabled for development
-        }
+        },
     }
-    
+
     # Processing pipelines configuration
     PROCESSING_CONFIG = {
         # Speech processing
@@ -259,35 +250,32 @@ class DevelopmentConfig(BaseConfig):
             "emotion_detection": True,
             "speaker_recognition": False,  # Disabled for development
         },
-        
         # Vision processing
         "vision": {
             "models": {
                 "object_detection": "yolov5s",  # Faster model
                 "face_recognition": "mtcnn",
                 "ocr": "easyocr",
-                "pose_estimation": "mediapipe"
+                "pose_estimation": "mediapipe",
             },
             "device": "cpu",
             "batch_size": 1,
             "image_preprocessing": True,
             "quality_optimization": False,
         },
-        
         # Natural language processing
         "nlp": {
             "models": {
                 "intent_detection": "distilbert-base-uncased",
                 "sentiment_analysis": "cardiffnlp/twitter-roberta-base-sentiment",
                 "entity_extraction": "dbmdz/bert-large-cased-finetuned-conll03-english",
-                "language_detection": "langdetect"
+                "language_detection": "langdetect",
             },
             "device": "cpu",
             "max_length": 512,
             "batch_size": 1,
             "caching": True,
         },
-        
         # Multimodal processing
         "multimodal": {
             "fusion_strategy": "early_fusion",
@@ -295,9 +283,9 @@ class DevelopmentConfig(BaseConfig):
             "feature_extraction": True,
             "cross_modal_attention": True,
             "temporal_modeling": False,  # Disabled for development
-        }
+        },
     }
-    
+
     # Skills management configuration
     SKILLS_CONFIG = {
         "auto_discovery": True,
@@ -308,7 +296,6 @@ class DevelopmentConfig(BaseConfig):
         "max_concurrent_skills": 5,
         "skill_debugging": True,
         "performance_monitoring": True,
-        
         # Built-in skills
         "builtin_skills": {
             "enabled": True,
@@ -317,23 +304,18 @@ class DevelopmentConfig(BaseConfig):
                 "core_skills",
                 "productivity_skills",
                 "creative_skills",
-                "analytical_skills"
-            ]
+                "analytical_skills",
+            ],
         },
-        
         # Custom skills
         "custom_skills": {
             "enabled": True,
-            "directories": [
-                "src/skills/custom/",
-                "data/skills/user/",
-                "tests/fixtures/skills/"
-            ],
+            "directories": ["src/skills/custom/", "data/skills/user/", "tests/fixtures/skills/"],
             "validation": False,  # Disabled for development
             "sandboxing": False,  # Disabled for development
-        }
+        },
     }
-    
+
     # External integrations configuration
     INTEGRATIONS_CONFIG = {
         # LLM integrations
@@ -345,7 +327,7 @@ class DevelopmentConfig(BaseConfig):
                     "models": {
                         "default": "llama2:7b",
                         "fast": "llama2:7b",
-                        "quality": "llama2:13b"
+                        "quality": "llama2:13b",
                     },
                     "timeout": 30.0,
                     "max_tokens": 2048,
@@ -357,7 +339,7 @@ class DevelopmentConfig(BaseConfig):
                     "models": {
                         "default": "gpt-3.5-turbo",
                         "fast": "gpt-3.5-turbo",
-                        "quality": "gpt-4"
+                        "quality": "gpt-4",
                     },
                     "timeout": 30.0,
                     "max_tokens": 2048,
@@ -368,14 +350,13 @@ class DevelopmentConfig(BaseConfig):
                     "enabled": True,
                     "response_delay": 1.0,
                     "error_rate": 0.01,
-                }
+                },
             },
             "fallback_chain": ["ollama", "mock"],
             "load_balancing": False,
             "caching": True,
             "cache_ttl": 3600,
         },
-        
         # Storage integrations
         "storage": {
             "database": {
@@ -396,9 +377,8 @@ class DevelopmentConfig(BaseConfig):
                 "base_path": "data/blobs/",
                 "compression": False,
                 "encryption": False,
-            }
+            },
         },
-        
         # Cache integrations
         "cache": {
             "backend": "local",  # Use local cache for development
@@ -414,9 +394,8 @@ class DevelopmentConfig(BaseConfig):
                 "max_size_mb": 256,
                 "ttl_seconds": 3600,
                 "cleanup_interval": 300,
-            }
+            },
         },
-        
         # External APIs (mocked for development)
         "external_apis": {
             "web_search": {
@@ -437,10 +416,10 @@ class DevelopmentConfig(BaseConfig):
             "notifications": {
                 "provider": "console",  # Console notifications for development
                 "enabled": True,
-            }
-        }
+            },
+        },
     }
-    
+
     # API configuration
     API_CONFIG = {
         # REST API
@@ -452,7 +431,6 @@ class DevelopmentConfig(BaseConfig):
             "workers": 1,  # Single worker for development
             "timeout": 60.0,
             "max_request_size": "50MB",
-            
             # CORS settings
             "cors": {
                 "enabled": True,
@@ -461,22 +439,19 @@ class DevelopmentConfig(BaseConfig):
                 "allow_headers": ["*"],
                 "allow_credentials": True,
             },
-            
             # Rate limiting
             "rate_limiting": {
                 "enabled": False,  # Disabled for development
                 "requests_per_minute": 1000,
                 "burst_limit": 100,
             },
-            
             # Authentication
             "authentication": {
                 "enabled": False,  # Disabled for development
                 "jwt_secret": "dev-secret-key",
                 "token_expiry": 86400,  # 24 hours
-            }
+            },
         },
-        
         # WebSocket API
         "websocket": {
             "host": "localhost",
@@ -487,7 +462,6 @@ class DevelopmentConfig(BaseConfig):
             "compression": False,
             "authentication": False,  # Disabled for development
         },
-        
         # GraphQL API
         "graphql": {
             "enabled": True,
@@ -497,7 +471,6 @@ class DevelopmentConfig(BaseConfig):
             "max_query_depth": 10,
             "max_query_complexity": 1000,
         },
-        
         # gRPC API
         "grpc": {
             "enabled": False,  # Disabled by default for development
@@ -505,9 +478,9 @@ class DevelopmentConfig(BaseConfig):
             "port": 50051,
             "max_workers": 4,
             "reflection": True,  # Enable reflection for development
-        }
+        },
     }
-    
+
     # Security configuration (relaxed for development)
     SECURITY_CONFIG = {
         "authentication": {
@@ -542,9 +515,9 @@ class DevelopmentConfig(BaseConfig):
             "log_authentication": True,
             "log_authorization": True,
             "retention_days": 30,
-        }
+        },
     }
-    
+
     # Observability configuration
     OBSERVABILITY_CONFIG = {
         # Logging
@@ -558,7 +531,6 @@ class DevelopmentConfig(BaseConfig):
             "structured_logging": True,
             "request_logging": True,
             "performance_logging": True,
-            
             # Component-specific logging
             "component_levels": {
                 "core_engine": "DEBUG",
@@ -570,9 +542,8 @@ class DevelopmentConfig(BaseConfig):
                 "skill_factory": "DEBUG",
                 "api": "INFO",
                 "integrations": "INFO",
-            }
+            },
         },
-        
         # Metrics
         "metrics": {
             "enabled": True,
@@ -585,7 +556,6 @@ class DevelopmentConfig(BaseConfig):
             "component_metrics": True,
             "performance_metrics": True,
         },
-        
         # Tracing
         "tracing": {
             "enabled": True,
@@ -597,7 +567,6 @@ class DevelopmentConfig(BaseConfig):
             "trace_context": True,
             "span_attributes": True,
         },
-        
         # Profiling
         "profiling": {
             "enabled": True,
@@ -608,7 +577,6 @@ class DevelopmentConfig(BaseConfig):
             "output_path": "data/profiles/",
             "flamegraphs": True,
         },
-        
         # Health checks
         "health_checks": {
             "enabled": True,
@@ -620,9 +588,9 @@ class DevelopmentConfig(BaseConfig):
                 "components": "/health/components",
             },
             "detailed_responses": True,
-        }
+        },
     }
-    
+
     # Development-specific features
     DEVELOPMENT_CONFIG = {
         # Hot reloading
@@ -643,7 +611,6 @@ class DevelopmentConfig(BaseConfig):
             "restart_delay": 2.0,
             "max_restart_attempts": 5,
         },
-        
         # Mock services
         "mock_services": {
             "enabled": True,
@@ -658,9 +625,8 @@ class DevelopmentConfig(BaseConfig):
             "error_simulation": {
                 "enabled": True,
                 "error_rate": 0.01,  # 1% error rate
-            }
+            },
         },
-        
         # Testing helpers
         "testing": {
             "auto_test_discovery": True,
@@ -670,7 +636,6 @@ class DevelopmentConfig(BaseConfig):
             "performance_testing": False,
             "load_testing": False,
         },
-        
         # Debugging
         "debugging": {
             "interactive_debugger": True,
@@ -681,7 +646,6 @@ class DevelopmentConfig(BaseConfig):
             "workflow_visualization": True,
             "component_introspection": True,
         },
-        
         # Code quality
         "code_quality": {
             "linting": True,
@@ -690,9 +654,9 @@ class DevelopmentConfig(BaseConfig):
             "import_sorting": True,
             "complexity_analysis": False,
             "security_scanning": False,
-        }
+        },
     }
-    
+
     # File paths (development-specific)
     PATHS_CONFIG = {
         "base_dir": Path(__file__).parent.parent.parent.parent,
@@ -703,78 +667,81 @@ class DevelopmentConfig(BaseConfig):
         "plugins_dir": Path("plugins/"),
         "configs_dir": Path("configs/"),
         "temp_dir": Path("data/temp/"),
-        
         # Development-specific paths
         "dev_data_dir": Path("data/development/"),
         "test_data_dir": Path("tests/fixtures/"),
         "profiles_dir": Path("data/profiles/"),
         "debug_dir": Path("data/debug/"),
     }
-    
+
     # Environment variables override
     @classmethod
-    def from_env(cls) -> 'DevelopmentConfig':
+    def from_env(cls) -> "DevelopmentConfig":
         """Create configuration from environment variables."""
         config = cls()
-        
+
         # Override with environment variables if present
         if os.getenv("DEBUG"):
             config.DEBUG = os.getenv("DEBUG").lower() == "true"
-        
+
         if os.getenv("LOG_LEVEL"):
             config.LOG_LEVEL = os.getenv("LOG_LEVEL")
-        
+
         if os.getenv("HOT_RELOAD_ENABLED"):
             config.HOT_RELOAD_ENABLED = os.getenv("HOT_RELOAD_ENABLED").lower() == "true"
-        
+
         # API configuration overrides
         if os.getenv("API_HOST"):
             config.API_CONFIG["rest"]["host"] = os.getenv("API_HOST")
-        
+
         if os.getenv("API_PORT"):
             config.API_CONFIG["rest"]["port"] = int(os.getenv("API_PORT"))
-        
+
         # Database configuration override
         if os.getenv("DATABASE_URL"):
             config.INTEGRATIONS_CONFIG["storage"]["database"]["url"] = os.getenv("DATABASE_URL")
-        
+
         # LLM configuration overrides
         if os.getenv("OPENAI_API_KEY"):
-            config.INTEGRATIONS_CONFIG["llm"]["providers"]["openai"]["api_key"] = os.getenv("OPENAI_API_KEY")
+            config.INTEGRATIONS_CONFIG["llm"]["providers"]["openai"]["api_key"] = os.getenv(
+                "OPENAI_API_KEY"
+            )
             config.INTEGRATIONS_CONFIG["llm"]["providers"]["openai"]["enabled"] = True
-        
+
         if os.getenv("OLLAMA_BASE_URL"):
-            config.INTEGRATIONS_CONFIG["llm"]["providers"]["ollama"]["base_url"] = os.getenv("OLLAMA_BASE_URL")
-        
+            config.INTEGRATIONS_CONFIG["llm"]["providers"]["ollama"]["base_url"] = os.getenv(
+                "OLLAMA_BASE_URL"
+            )
+
         return config
-    
+
     def validate(self) -> None:
         """Validate the development configuration."""
         super().validate()
-        
+
         # Development-specific validations
         if self.HOT_RELOAD_ENABLED and not self.DEBUG:
             raise ValueError("Hot reload requires DEBUG mode to be enabled")
-        
+
         if self.PROFILING_ENABLED and not self.DEBUG:
             print("Warning: Profiling enabled without DEBUG mode")
-        
+
         # Ensure development directories exist
         for path_key, path_value in self.PATHS_CONFIG.items():
             if isinstance(path_value, Path) and not path_value.exists():
                 path_value.mkdir(parents=True, exist_ok=True)
-        
+
         # Validate that development features are not enabled for production
         production_checks = [
             ("require_authentication", False),
             ("enable_authorization", False),
             ("security_validation", False),
         ]
-        
+
         for check_name, expected_value in production_checks:
             # This is development config, so these should be disabled
             pass
-    
+
     def get_component_config(self, component_name: str) -> Dict[str, Any]:
         """Get configuration for a specific component."""
         component_configs = {
@@ -791,17 +758,17 @@ class DevelopmentConfig(BaseConfig):
             "security": self.SECURITY_CONFIG,
             "observability": self.OBSERVABILITY_CONFIG,
         }
-        
+
         return component_configs.get(component_name, {})
-    
+
     def get_integration_config(self, integration_name: str) -> Dict[str, Any]:
         """Get configuration for a specific integration."""
         return self.INTEGRATIONS_CONFIG.get(integration_name, {})
-    
+
     def get_processing_config(self, processor_name: str) -> Dict[str, Any]:
         """Get configuration for a specific processor."""
         return self.PROCESSING_CONFIG.get(processor_name, {})
-    
+
     def is_feature_enabled(self, feature_name: str) -> bool:
         """Check if a development feature is enabled."""
         feature_flags = {
@@ -813,9 +780,9 @@ class DevelopmentConfig(BaseConfig):
             "mock_services": self.DEVELOPMENT_CONFIG["mock_services"]["enabled"],
             "auto_testing": self.DEVELOPMENT_CONFIG["testing"]["auto_test_discovery"],
         }
-        
+
         return feature_flags.get(feature_name, False)
-    
+
     def get_mock_config(self, service_name: str) -> Dict[str, Any]:
         """Get mock configuration for external services."""
         mock_configs = {
@@ -826,23 +793,31 @@ class DevelopmentConfig(BaseConfig):
                 "responses": {
                     "default": "This is a mock response from the development LLM provider.",
                     "thinking": "I'm thinking about your request...",
-                    "error": "Mock error: Service temporarily unavailable"
-                }
+                    "error": "Mock error: Service temporarily unavailable",
+                },
             },
             "web_search": {
                 "results": [
-                    {"title": "Mock Search Result 1", "url": "https://example.com/1", "snippet": "Mock snippet 1"},
-                    {"title": "Mock Search Result 2", "url": "https://example.com/2", "snippet": "Mock snippet 2"},
+                    {
+                        "title": "Mock Search Result 1",
+                        "url": "https://example.com/1",
+                        "snippet": "Mock snippet 1",
+                    },
+                    {
+                        "title": "Mock Search Result 2",
+                        "url": "https://example.com/2",
+                        "snippet": "Mock snippet 2",
+                    },
                 ]
             },
             "weather": {
                 "temperature": 22,
                 "condition": "sunny",
                 "humidity": 65,
-                "location": "Development City"
-            }
+                "location": "Development City",
+            },
         }
-        
+
         return mock_configs.get(service_name, {})
 
 

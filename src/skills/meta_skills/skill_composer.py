@@ -9,88 +9,97 @@ creation of skill pipelines, parallel skill execution, conditional branching,
 and skill chaining for advanced AI capabilities.
 """
 
+import copy
+import importlib
+import inspect
+import json
+import logging
 import os
 import sys
 import uuid
-import json
-import inspect
-import logging
-import asyncio
-import copy
-from enum import Enum
-from typing import Dict, List, Any, Optional, Union, Tuple, Set, Callable, Type, cast
 from dataclasses import dataclass, field
-import importlib
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union, cast
+
+import asyncio
 import networkx as nx
 import yaml
-
-# Core imports
-from src.core.config.loader import ConfigLoader
-from src.core.events.event_bus import EventBus
-from src.core.events.event_types import (
-    SkillCompositionStarted, SkillCompositionCompleted, SkillCompositionFailed,
-    SkillExecutionStarted, SkillExecutionCompleted, SkillExecutionFailed,
-    SystemConfigurationChanged
-)
-from src.core.error_handling import ErrorHandler, handle_exceptions
-from src.core.dependency_injection import Container
-
-# Skill management
-from src.skills.skill_registry import SkillRegistry
-from src.skills.skill_factory import SkillFactory
-from src.skills.skill_validator import SkillValidator
 
 # Assistant components
 from src.assistant.component_manager import ComponentManager
 from src.assistant.workflow_orchestrator import WorkflowOrchestrator
 
+# Core imports
+from src.core.config.loader import ConfigLoader
+from src.core.dependency_injection import Container
+from src.core.error_handling import ErrorHandler, handle_exceptions
+from src.core.events.event_bus import EventBus
+from src.core.events.event_types import (
+    SkillCompositionCompleted,
+    SkillCompositionFailed,
+    SkillCompositionStarted,
+    SkillExecutionCompleted,
+    SkillExecutionFailed,
+    SkillExecutionStarted,
+    SystemConfigurationChanged,
+)
+
 # Memory components
 from src.memory.core_memory.memory_manager import MemoryManager
 from src.memory.operations.context_manager import ContextManager
-
-# Reasoning
-from src.reasoning.planning.task_planner import TaskPlanner
-from src.reasoning.planning.goal_decomposer import GoalDecomposer
 
 # Observability
 from src.observability.logging.config import get_logger
 from src.observability.monitoring.metrics import MetricsCollector
 from src.observability.monitoring.tracing import TraceManager
+from src.reasoning.planning.goal_decomposer import GoalDecomposer
+
+# Reasoning
+from src.reasoning.planning.task_planner import TaskPlanner
+from src.skills.skill_factory import SkillFactory
+
+# Skill management
+from src.skills.skill_registry import SkillRegistry
+from src.skills.skill_validator import SkillValidator
 
 
 class CompositionType(Enum):
     """Types of skill compositions."""
-    SEQUENTIAL = "sequential"   # Execute skills in sequence
-    PARALLEL = "parallel"       # Execute skills in parallel
-    CONDITIONAL = "conditional" # Execute skills based on conditions
-    ITERATIVE = "iterative"     # Execute skills in a loop
-    AGGREGATED = "aggregated"   # Combine results from multiple skills
-    DYNAMIC = "dynamic"         # Determine skills to execute at runtime
+
+    SEQUENTIAL = "sequential"  # Execute skills in sequence
+    PARALLEL = "parallel"  # Execute skills in parallel
+    CONDITIONAL = "conditional"  # Execute skills based on conditions
+    ITERATIVE = "iterative"  # Execute skills in a loop
+    AGGREGATED = "aggregated"  # Combine results from multiple skills
+    DYNAMIC = "dynamic"  # Determine skills to execute at runtime
 
 
 class ExecutionMode(Enum):
     """Execution modes for composite skills."""
-    ALL = "all"                   # Execute all component skills
+
+    ALL = "all"  # Execute all component skills
     FIRST_SUCCESS = "first_success"  # Stop after first successful skill
-    BEST_RESULT = "best_result"   # Execute all and pick best result
-    FALLBACK = "fallback"         # Try skills in order until success
-    CONSENSUS = "consensus"       # Execute all and use consensus result
+    BEST_RESULT = "best_result"  # Execute all and pick best result
+    FALLBACK = "fallback"  # Try skills in order until success
+    CONSENSUS = "consensus"  # Execute all and use consensus result
 
 
 class DataFlow(Enum):
     """Data flow patterns between skills."""
-    DIRECT = "direct"          # Output directly to input
+
+    DIRECT = "direct"  # Output directly to input
     TRANSFORMED = "transformed"  # Transform output before input
-    MERGED = "merged"         # Merge multiple outputs
-    FILTERED = "filtered"     # Filter output before input
-    MAPPED = "mapped"         # Map specific output fields to input fields
+    MERGED = "merged"  # Merge multiple outputs
+    FILTERED = "filtered"  # Filter output before input
+    MAPPED = "mapped"  # Map specific output fields to input fields
 
 
 @dataclass
 class SkillNode:
     """A node representing a skill in a composition."""
+
     skill_id: str
     parameters: Dict[str, Any] = field(default_factory=dict)
     condition: Optional[str] = None
@@ -107,6 +116,7 @@ class SkillNode:
 @dataclass
 class CompositeSkillDefinition:
     """Definition of a composite skill."""
+
     name: str
     description: str
     version: str = "0.1.0"
@@ -128,7 +138,7 @@ class CompositeSkillDefinition:
 class SkillComposer:
     """
     Handles the composition of skills into more complex workflows.
-    
+
     This class provides functionality to:
     - Combine multiple skills into a single composite skill
     - Define execution flow between skills (sequential, parallel, conditional)
@@ -137,11 +147,11 @@ class SkillComposer:
     - Validate skill compositions for correctness
     - Register composite skills with the skill registry
     """
-    
+
     def __init__(self, container: Container):
         """
         Initialize the skill composer.
-        
+
         Args:
             container: Dependency injection container
         """
@@ -150,20 +160,20 @@ class SkillComposer:
         self.event_bus = container.get(EventBus)
         self.error_handler = container.get(ErrorHandler)
         self.logger = get_logger(f"{__name__}.{self.__class__.__name__}")
-        
+
         # Skill management components
         self.skill_registry = container.get(SkillRegistry)
         self.skill_factory = container.get(SkillFactory)
         self.skill_validator = container.get(SkillValidator)
-        
+
         # System components
         self.component_manager = container.get(ComponentManager)
         self.workflow_orchestrator = container.get(WorkflowOrchestrator)
-        
+
         # Memory components
         self.memory_manager = container.get(MemoryManager)
         self.context_manager = container.get(ContextManager)
-        
+
         # Reasoning components
         try:
             self.task_planner = container.get(TaskPlanner)
@@ -172,18 +182,18 @@ class SkillComposer:
             self.logger.warning(f"Reasoning components not available: {str(e)}")
             self.task_planner = None
             self.goal_decomposer = None
-        
+
         # Observability
         self.metrics = container.get(MetricsCollector)
         self.tracer = container.get(TraceManager)
-        
+
         # Set up paths
         self.base_skills_path = self._get_skills_directory()
         self.composite_skills_path = self.base_skills_path / "custom" / "composite"
-        
+
         # Ensure required directories exist
         self._ensure_directories()
-        
+
         # Register metrics
         if self.metrics:
             self.metrics.register_counter("skill_compositions_total")
@@ -191,17 +201,17 @@ class SkillComposer:
             self.metrics.register_counter("composite_skill_executions_total")
             self.metrics.register_histogram("skill_composition_time_seconds")
             self.metrics.register_histogram("composite_skill_execution_time_seconds")
-    
+
     def _get_skills_directory(self) -> Path:
         """Get the base directory for skills."""
         # First try to get from config
         skills_dir = self.config.get("skills.directory", None)
         if skills_dir:
             return Path(skills_dir)
-        
+
         # Default to src/skills
         return Path("src") / "skills"
-    
+
     def _ensure_directories(self) -> None:
         """Ensure all required directories exist."""
         self.composite_skills_path.mkdir(parents=True, exist_ok=True)
@@ -209,31 +219,33 @@ class SkillComposer:
         init_file = self.composite_skills_path / "__init__.py"
         if not init_file.exists():
             init_file.touch()
-    
+
     async def create_composite_skill(self, definition: CompositeSkillDefinition) -> Dict[str, Any]:
         """
         Create a new composite skill based on the provided definition.
-        
+
         Args:
             definition: Composite skill definition
-            
+
         Returns:
             Information about the created composite skill
         """
         composition_id = str(uuid.uuid4())
         start_time = datetime.now(timezone.utc)
-        
+
         # Track metrics
         if self.metrics:
             self.metrics.increment("skill_compositions_total")
-        
+
         # Emit composition started event
-        await self.event_bus.emit(SkillCompositionStarted(
-            composition_id=composition_id,
-            skill_name=definition.name,
-            composition_type=definition.composition_type.value
-        ))
-        
+        await self.event_bus.emit(
+            SkillCompositionStarted(
+                composition_id=composition_id,
+                skill_name=definition.name,
+                composition_type=definition.composition_type.value,
+            )
+        )
+
         result = {
             "composition_id": composition_id,
             "skill_name": definition.name,
@@ -242,147 +254,157 @@ class SkillComposer:
             "completed_at": None,
             "duration_seconds": None,
             "error": None,
-            "skill_path": None
+            "skill_path": None,
         }
-        
+
         try:
             # Validate the composition
             await self._validate_composition(definition)
-            
+
             # Generate the composite skill class
             skill_path = await self._generate_composite_skill(definition)
             result["skill_path"] = str(skill_path)
-            
+
             # Register the composite skill
             await self._register_composite_skill(definition, skill_path)
-            
+
             # Successful composition
             result["status"] = "completed"
-            
+
             end_time = datetime.now(timezone.utc)
             duration = (end_time - start_time).total_seconds()
-            
+
             result["completed_at"] = end_time.isoformat()
             result["duration_seconds"] = duration
-            
+
             # Log success
             self.logger.info(
                 f"Successfully created composite skill {definition.name} "
                 f"of type {definition.composition_type.value} in {duration:.2f} seconds"
             )
-            
+
             # Emit completion event
-            await self.event_bus.emit(SkillCompositionCompleted(
-                composition_id=composition_id,
-                skill_name=definition.name,
-                execution_time=duration
-            ))
-            
+            await self.event_bus.emit(
+                SkillCompositionCompleted(
+                    composition_id=composition_id,
+                    skill_name=definition.name,
+                    execution_time=duration,
+                )
+            )
+
             if self.metrics:
                 self.metrics.record("skill_composition_time_seconds", duration)
-            
+
             return result
-            
+
         except Exception as e:
             # Handle composition failure
             result["status"] = "failed"
             result["error"] = str(e)
-            
+
             end_time = datetime.now(timezone.utc)
             duration = (end_time - start_time).total_seconds()
-            
+
             result["completed_at"] = end_time.isoformat()
             result["duration_seconds"] = duration
-            
+
             # Log error
             self.logger.error(f"Skill composition failed: {str(e)}")
-            
+
             # Emit failure event
-            await self.event_bus.emit(SkillCompositionFailed(
-                composition_id=composition_id,
-                skill_name=definition.name,
-                error_message=str(e),
-                execution_time=duration
-            ))
-            
+            await self.event_bus.emit(
+                SkillCompositionFailed(
+                    composition_id=composition_id,
+                    skill_name=definition.name,
+                    error_message=str(e),
+                    execution_time=duration,
+                )
+            )
+
             if self.metrics:
                 self.metrics.increment("skill_compositions_failed")
-            
+
             return result
-    
-    async def execute_composite_skill(self, skill_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def execute_composite_skill(
+        self, skill_name: str, parameters: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute a composite skill by name with the provided parameters.
-        
+
         Args:
             skill_name: Name of the composite skill
             parameters: Input parameters for the skill
-            
+
         Returns:
             Execution results
         """
         execution_id = str(uuid.uuid4())
         start_time = datetime.now(timezone.utc)
-        
+
         # Track metrics
         if self.metrics:
             self.metrics.increment("composite_skill_executions_total")
-        
+
         # Emit execution started event
-        await self.event_bus.emit(SkillExecutionStarted(
-            skill_id=skill_name,
-            execution_id=execution_id,
-            parameters=parameters
-        ))
-        
+        await self.event_bus.emit(
+            SkillExecutionStarted(
+                skill_id=skill_name, execution_id=execution_id, parameters=parameters
+            )
+        )
+
         try:
-            with self.tracer.trace(f"composite_skill_execution_{skill_name}") if self.tracer else None:
+            with (
+                self.tracer.trace(f"composite_skill_execution_{skill_name}")
+                if self.tracer
+                else None
+            ):
                 # Get the skill instance
                 skill_instance = self.skill_factory.create_skill(skill_name, self.container)
-                
+
                 # Execute the skill
                 result = await skill_instance.execute(**parameters)
-                
+
                 # Calculate execution time
                 end_time = datetime.now(timezone.utc)
                 duration = (end_time - start_time).total_seconds()
-                
+
                 # Add execution metadata
                 if isinstance(result, dict):
                     result["execution_metadata"] = {
                         "execution_id": execution_id,
                         "skill_name": skill_name,
                         "execution_time": duration,
-                        "executed_at": end_time.isoformat()
+                        "executed_at": end_time.isoformat(),
                     }
-                
+
                 # Emit completion event
-                await self.event_bus.emit(SkillExecutionCompleted(
-                    skill_id=skill_name,
-                    execution_id=execution_id,
-                    execution_time=duration
-                ))
-                
+                await self.event_bus.emit(
+                    SkillExecutionCompleted(
+                        skill_id=skill_name, execution_id=execution_id, execution_time=duration
+                    )
+                )
+
                 if self.metrics:
                     self.metrics.record("composite_skill_execution_time_seconds", duration)
-                
+
                 return result
-                
+
         except Exception as e:
             # Handle execution failure
             end_time = datetime.now(timezone.utc)
             duration = (end_time - start_time).total_seconds()
-            
+
             # Log error
             self.logger.error(f"Composite skill execution failed: {str(e)}")
-            
+
             # Emit failure event
-            await self.event_bus.emit(SkillExecutionFailed(
-                skill_id=skill_name,
-                execution_id=execution_id,
-                error_message=str(e)
-            ))
-            
+            await self.event_bus.emit(
+                SkillExecutionFailed(
+                    skill_id=skill_name, execution_id=execution_id, error_message=str(e)
+                )
+            )
+
             # Return error result
             return {
                 "error": str(e),
@@ -391,98 +413,101 @@ class SkillComposer:
                     "skill_name": skill_name,
                     "execution_time": duration,
                     "executed_at": end_time.isoformat(),
-                    "status": "failed"
-                }
+                    "status": "failed",
+                },
             }
-    
+
     async def list_composite_skills(self) -> List[Dict[str, Any]]:
         """
         List all registered composite skills.
-        
+
         Returns:
             List of composite skill information
         """
         all_skills = self.skill_registry.list_skills()
         composite_skills = []
-        
+
         for skill in all_skills:
             try:
                 # Check if it's a composite skill
                 skill_info = self.skill_registry.get_skill_info(skill["name"])
                 if not skill_info:
                     continue
-                
+
                 skill_path = Path(skill_info.get("path", ""))
                 if not skill_path.exists():
                     continue
-                
+
                 # Look for composite skill marker or metadata
                 with open(skill_path, "r", encoding="utf-8") as f:
                     content = f.read()
                     if "CompositeSkill" in content or "composite_skill_definition" in content:
                         # Extract definition from the file
                         definition = await self._extract_composite_definition(skill_path)
-                        
+
                         # Add to list with additional information
-                        composite_skills.append({
-                            **skill,
-                            "composition_type": definition.get("composition_type", "unknown"),
-                            "component_skills": definition.get("component_skills", []),
-                            "description": definition.get("description", ""),
-                            "author": definition.get("author", "unknown"),
-                            "created_at": definition.get("created_at", "")
-                        })
+                        composite_skills.append(
+                            {
+                                **skill,
+                                "composition_type": definition.get("composition_type", "unknown"),
+                                "component_skills": definition.get("component_skills", []),
+                                "description": definition.get("description", ""),
+                                "author": definition.get("author", "unknown"),
+                                "created_at": definition.get("created_at", ""),
+                            }
+                        )
             except Exception as e:
                 self.logger.warning(f"Error processing skill {skill['name']}: {str(e)}")
-        
+
         return composite_skills
-    
+
     async def get_composite_skill_details(self, skill_name: str) -> Dict[str, Any]:
         """
         Get detailed information about a specific composite skill.
-        
+
         Args:
             skill_name: Name of the composite skill
-            
+
         Returns:
             Detailed information about the composite skill
         """
         skill_info = self.skill_registry.get_skill_info(skill_name)
         if not skill_info:
             raise ValueError(f"Skill '{skill_name}' is not installed")
-        
+
         skill_path = Path(skill_info.get("path", ""))
         if not skill_path.exists():
             raise ValueError(f"Skill path '{skill_path}' does not exist")
-        
+
         # Extract definition
         definition = await self._extract_composite_definition(skill_path)
-        
+
         # Get source code
         with open(skill_path, "r", encoding="utf-8") as f:
             source_code = f.read()
-        
+
         # Build dependency graph
         graph = await self._build_dependency_graph(definition)
-        
+
         return {
             "name": skill_name,
             "path": str(skill_path),
             "definition": definition,
             "source_code": source_code,
             "dependency_graph": graph,
-            "component_skills": definition.get("component_skills", [])
+            "component_skills": definition.get("component_skills", []),
         }
-    
-    async def update_composite_skill(self, skill_name: str, 
-                                   updated_definition: CompositeSkillDefinition) -> Dict[str, Any]:
+
+    async def update_composite_skill(
+        self, skill_name: str, updated_definition: CompositeSkillDefinition
+    ) -> Dict[str, Any]:
         """
         Update an existing composite skill with a new definition.
-        
+
         Args:
             skill_name: Name of the existing composite skill
             updated_definition: New skill definition
-            
+
         Returns:
             Update result information
         """
@@ -490,27 +515,25 @@ class SkillComposer:
         skill_info = self.skill_registry.get_skill_info(skill_name)
         if not skill_info:
             raise ValueError(f"Composite skill '{skill_name}' does not exist")
-        
+
         # Ensure the names match
         if skill_name != updated_definition.name:
-            raise ValueError(f"Cannot change skill name from '{skill_name}' to '{updated_definition.name}'")
-        
+            raise ValueError(
+                f"Cannot change skill name from '{skill_name}' to '{updated_definition.name}'"
+            )
+
         # Create a new composite skill (will replace the old one)
         result = await self.create_composite_skill(updated_definition)
-        
-        return {
-            **result,
-            "updated": True,
-            "previous_version": skill_info.get("version", "unknown")
-        }
-    
+
+        return {**result, "updated": True, "previous_version": skill_info.get("version", "unknown")}
+
     async def delete_composite_skill(self, skill_name: str) -> Dict[str, Any]:
         """
         Delete a composite skill.
-        
+
         Args:
             skill_name: Name of the composite skill to delete
-            
+
         Returns:
             Deletion result information
         """
@@ -518,43 +541,43 @@ class SkillComposer:
         skill_info = self.skill_registry.get_skill_info(skill_name)
         if not skill_info:
             raise ValueError(f"Composite skill '{skill_name}' does not exist")
-        
+
         skill_path = Path(skill_info.get("path", ""))
         if not skill_path.exists():
             raise ValueError(f"Skill path '{skill_path}' does not exist")
-        
+
         # Verify it's a composite skill
         with open(skill_path, "r", encoding="utf-8") as f:
             content = f.read()
             if "CompositeSkill" not in content and "composite_skill_definition" not in content:
                 raise ValueError(f"Skill '{skill_name}' is not a composite skill")
-        
+
         # Unregister the skill
         self.skill_registry.unregister_skill(skill_name)
-        
+
         # Delete the file
         skill_path.unlink()
-        
+
         return {
             "skill_name": skill_name,
             "status": "deleted",
-            "deleted_at": datetime.now(timezone.utc).isoformat()
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
         }
-    
+
     async def _validate_composition(self, definition: CompositeSkillDefinition) -> None:
         """
         Validate a skill composition for correctness.
-        
+
         Args:
             definition: Composite skill definition
-            
+
         Raises:
             ValueError: If validation fails
         """
         # Check for empty composition
         if not definition.skills:
             raise ValueError("Composition must contain at least one skill")
-        
+
         # Check for duplicate skill name
         existing_skill = self.skill_registry.get_skill_info(definition.name)
         if existing_skill:
@@ -563,21 +586,30 @@ class SkillComposer:
             if skill_path.exists():
                 with open(skill_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                    if "CompositeSkill" not in content and "composite_skill_definition" not in content:
-                        raise ValueError(f"A non-composite skill with name '{definition.name}' already exists")
-        
+                    if (
+                        "CompositeSkill" not in content
+                        and "composite_skill_definition" not in content
+                    ):
+                        raise ValueError(
+                            f"A non-composite skill with name '{definition.name}' already exists"
+                        )
+
         # Validate each component skill
         for node in definition.skills:
             skill_info = self.skill_registry.get_skill_info(node.skill_id)
             if not skill_info:
-                raise ValueError(f"Skill '{node.skill_id}' is not registered and cannot be used in composition")
-        
+                raise ValueError(
+                    f"Skill '{node.skill_id}' is not registered and cannot be used in composition"
+                )
+
         # Validate conditional nodes
         if definition.composition_type == CompositionType.CONDITIONAL:
             for node in definition.skills:
                 if not node.condition:
-                    raise ValueError(f"Skill '{node.skill_id}' in conditional composition must have a condition")
-        
+                    raise ValueError(
+                        f"Skill '{node.skill_id}' in conditional composition must have a condition"
+                    )
+
         # Validate dependency graph for cycles
         try:
             graph = await self._build_dependency_graph(vars(definition))
@@ -585,7 +617,7 @@ class SkillComposer:
                 raise ValueError("Composition contains cyclic dependencies, which is not supported")
         except Exception as e:
             raise ValueError(f"Error validating dependency graph: {str(e)}")
-        
+
         # Additional validation for specific composition types
         if definition.composition_type == CompositionType.SEQUENTIAL:
             # No additional validation needed
@@ -608,37 +640,37 @@ class SkillComposer:
                     break
             if not has_stop_condition:
                 raise ValueError("Iterative composition must have a stop condition")
-    
+
     async def _generate_composite_skill(self, definition: CompositeSkillDefinition) -> Path:
         """
         Generate a Python file for the composite skill.
-        
+
         Args:
             definition: Composite skill definition
-            
+
         Returns:
             Path to the generated skill file
         """
         # Create safe file name
         safe_name = definition.name.replace(" ", "_").replace("-", "_").lower()
         skill_file = self.composite_skills_path / f"{safe_name}.py"
-        
+
         # Generate the skill class code
         skill_code = self._generate_skill_code(definition)
-        
+
         # Write to file
         with open(skill_file, "w", encoding="utf-8") as f:
             f.write(skill_code)
-        
+
         return skill_file
-    
+
     def _generate_skill_code(self, definition: CompositeSkillDefinition) -> str:
         """
         Generate Python code for a composite skill class.
-        
+
         Args:
             definition: Composite skill definition
-            
+
         Returns:
             Generated Python code
         """
@@ -660,12 +692,12 @@ class SkillComposer:
             "tags": definition.tags,
             "metadata": definition.metadata,
             "created_at": definition.created_at,
-            "component_skills": [skill.skill_id for skill in definition.skills]
+            "component_skills": [skill.skill_id for skill in definition.skills],
         }
-        
+
         # Format as JSON for embedding in the code
         definition_json = json.dumps(definition_dict, indent=4)
-        
+
         # Generate code with appropriate imports and class definition
         code = f'''"""
 {definition.name} - Composite Skill
@@ -1482,14 +1514,15 @@ class CompositeSkill:
                 # Overwrite or add key
                 target[key] = value
 '''
-        
+
         return code
-    
-    async def _register_composite_skill(self, definition: CompositeSkillDefinition, 
-                                       skill_path: Path) -> None:
+
+    async def _register_composite_skill(
+        self, definition: CompositeSkillDefinition, skill_path: Path
+    ) -> None:
         """
         Register the composite skill with the skill registry.
-        
+
         Args:
             definition: Composite skill definition
             skill_path: Path to the generated skill file
@@ -1498,59 +1531,65 @@ class CompositeSkill:
         module_path = str(skill_path).replace(os.sep, ".").replace(".py", "")
         if module_path.startswith("src."):
             module_path = module_path[4:]  # Remove "src." prefix
-        
+
         self.logger.info(f"Registering composite skill {definition.name} from module {module_path}")
-        
+
         # Register with skill registry
         self.skill_registry.register_skill(
             name=definition.name,
             module_path=module_path,
             path=str(skill_path),
             version=definition.version,
-            category=definition.category
+            category=definition.category,
         )
-        
+
         # Emit configuration changed event
-        await self.event_bus.emit(SystemConfigurationChanged(
-            component="skills",
-            change_type="skill_composed",
-            details={
-                "skill_name": definition.name,
-                "skill_version": definition.version,
-                "skill_category": definition.category,
-                "composition_type": definition.composition_type.value,
-                "component_skills": [skill.skill_id for skill in definition.skills]
-            }
-        ))
-    
+        await self.event_bus.emit(
+            SystemConfigurationChanged(
+                component="skills",
+                change_type="skill_composed",
+                details={
+                    "skill_name": definition.name,
+                    "skill_version": definition.version,
+                    "skill_category": definition.category,
+                    "composition_type": definition.composition_type.value,
+                    "component_skills": [skill.skill_id for skill in definition.skills],
+                },
+            )
+        )
+
     async def _extract_composite_definition(self, skill_path: Path) -> Dict[str, Any]:
         """
         Extract composite skill definition from a skill file.
-        
+
         Args:
             skill_path: Path to the skill file
-            
+
         Returns:
             Extracted definition as a dictionary
         """
         with open(skill_path, "r", encoding="utf-8") as f:
             content = f.read()
-        
+
         # Look for composite_skill_definition in the code
-        definition_match = re.search(r'self\.composite_skill_definition\s*=\s*(\{.*?\})', content, re.DOTALL)
+        definition_match = re.search(
+            r"self\.composite_skill_definition\s*=\s*(\{.*?\})", content, re.DOTALL
+        )
         if not definition_match:
             # Look for it assigned as a multi-line json
-            definition_match = re.search(r'self\.composite_skill_definition\s*=\s*"""(\{.*?\})"""', content, re.DOTALL)
-        
+            definition_match = re.search(
+                r'self\.composite_skill_definition\s*=\s*"""(\{.*?\})"""', content, re.DOTALL
+            )
+
         if not definition_match:
             # Return minimal definition
             return {
                 "name": Path(skill_path).stem,
                 "description": "",
                 "composition_type": "unknown",
-                "component_skills": []
+                "component_skills": [],
             }
-        
+
         # Parse the definition JSON
         definition_json = definition_match.group(1)
         try:
@@ -1562,48 +1601,48 @@ class CompositeSkill:
                 "name": Path(skill_path).stem,
                 "description": "",
                 "composition_type": "unknown",
-                "component_skills": []
+                "component_skills": [],
             }
-    
+
     async def _build_dependency_graph(self, definition: Dict[str, Any]) -> Dict[str, Any]:
         """
         Build a dependency graph for a composite skill.
-        
+
         Args:
             definition: Skill definition
-            
+
         Returns:
             Graph representation
         """
         graph = nx.DiGraph()
-        
+
         # Add nodes for each skill
         skills = definition.get("skills", [])
         for skill in skills:
             skill_id = skill.get("skill_id", "unknown")
             graph.add_node(skill_id, **skill)
-        
+
         # Add edges based on composition type
         composition_type = definition.get("composition_type")
-        
+
         if composition_type == CompositionType.SEQUENTIAL.value:
             # Sequential: each skill depends on the previous one
             for i in range(1, len(skills)):
-                prev_skill = skills[i-1].get("skill_id")
+                prev_skill = skills[i - 1].get("skill_id")
                 curr_skill = skills[i].get("skill_id")
                 graph.add_edge(prev_skill, curr_skill)
-        
+
         elif composition_type == CompositionType.CONDITIONAL.value:
             # No explicit dependencies, could add based on condition analysis
             pass
-        
+
         elif composition_type == CompositionType.ITERATIVE.value:
             # Potential cycle for iterative, mark special
             if len(skills) > 1:
                 first_skill = skills[0].get("skill_id")
                 last_skill = skills[-1].get("skill_id")
                 graph.add_edge(last_skill, first_skill, is_cycle=True)
-        
+
         # Check for cycles
         has_cycle = False
         try:
@@ -1611,30 +1650,30 @@ class CompositeSkill:
             has_cycle = True
         except nx.NetworkXNoCycle:
             has_cycle = False
-        
+
         # Convert to serializable format
         nodes = [{"id": node, **graph.nodes[node]} for node in graph.nodes]
         edges = [{"source": u, "target": v, **graph.edges[u, v]} for u, v in graph.edges]
-        
+
         return {
             "nodes": nodes,
             "edges": edges,
             "has_cycle": has_cycle,
-            "composition_type": composition_type
+            "composition_type": composition_type,
         }
 
 
 class SkillComposerFactory:
     """Factory for creating SkillComposer instances."""
-    
+
     @staticmethod
     def create(container: Container) -> SkillComposer:
         """
         Create a SkillComposer instance.
-        
+
         Args:
             container: Dependency injection container
-            
+
         Returns:
             SkillComposer instance
         """
