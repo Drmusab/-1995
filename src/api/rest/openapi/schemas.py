@@ -10,17 +10,17 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, root_validator, validator
 from pydantic.types import Json
-
 
 # =============================================================================
 # Base Models
 # =============================================================================
 
+
 class BaseSchema(BaseModel):
     """Base schema with common configuration."""
-    
+
     class Config:
         use_enum_values = True
         validate_assignment = True
@@ -33,6 +33,7 @@ class BaseSchema(BaseModel):
 
 class TimestampMixin(BaseModel):
     """Mixin for models with timestamp fields."""
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
 
@@ -41,8 +42,10 @@ class TimestampMixin(BaseModel):
 # Core System Schemas
 # =============================================================================
 
+
 class HealthStatus(str, Enum):
     """Health check status enumeration."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -50,12 +53,13 @@ class HealthStatus(str, Enum):
 
 class HealthCheckResponse(BaseSchema):
     """Health check response schema."""
+
     status: HealthStatus
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     version: str
     components: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     uptime: timedelta
-    
+
     class Config:
         json_encoders = {
             **BaseSchema.Config.json_encoders,
@@ -67,8 +71,10 @@ class HealthCheckResponse(BaseSchema):
 # Session Management Schemas
 # =============================================================================
 
+
 class SessionStatus(str, Enum):
     """Session status enumeration."""
+
     ACTIVE = "active"
     IDLE = "idle"
     EXPIRED = "expired"
@@ -77,6 +83,7 @@ class SessionStatus(str, Enum):
 
 class SessionContext(BaseSchema):
     """Session context schema."""
+
     user_id: Optional[str] = None
     preferences: Dict[str, Any] = Field(default_factory=dict)
     capabilities: List[str] = Field(default_factory=list)
@@ -85,6 +92,7 @@ class SessionContext(BaseSchema):
 
 class SessionRequest(BaseSchema):
     """Session creation request schema."""
+
     user_id: Optional[str] = None
     session_type: str = "interactive"
     context: Optional[SessionContext] = None
@@ -93,6 +101,7 @@ class SessionRequest(BaseSchema):
 
 class SessionResponse(BaseSchema, TimestampMixin):
     """Session response schema."""
+
     session_id: UUID
     status: SessionStatus
     context: SessionContext
@@ -103,8 +112,10 @@ class SessionResponse(BaseSchema, TimestampMixin):
 # Interaction Schemas
 # =============================================================================
 
+
 class MessageType(str, Enum):
     """Message type enumeration."""
+
     TEXT = "text"
     AUDIO = "audio"
     IMAGE = "image"
@@ -115,6 +126,7 @@ class MessageType(str, Enum):
 
 class InteractionMode(str, Enum):
     """Interaction mode enumeration."""
+
     CHAT = "chat"
     VOICE = "voice"
     VISION = "vision"
@@ -123,6 +135,7 @@ class InteractionMode(str, Enum):
 
 class MessageContent(BaseSchema):
     """Message content schema."""
+
     type: MessageType
     text: Optional[str] = None
     audio_url: Optional[str] = None
@@ -130,22 +143,23 @@ class MessageContent(BaseSchema):
     video_url: Optional[str] = None
     document_url: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    
+
     @root_validator
     def validate_content(cls, values):
         """Validate that appropriate content is provided for the message type."""
-        msg_type = values.get('type')
-        if msg_type == MessageType.TEXT and not values.get('text'):
+        msg_type = values.get("type")
+        if msg_type == MessageType.TEXT and not values.get("text"):
             raise ValueError("Text content required for text messages")
-        elif msg_type == MessageType.AUDIO and not values.get('audio_url'):
+        elif msg_type == MessageType.AUDIO and not values.get("audio_url"):
             raise ValueError("Audio URL required for audio messages")
-        elif msg_type == MessageType.IMAGE and not values.get('image_url'):
+        elif msg_type == MessageType.IMAGE and not values.get("image_url"):
             raise ValueError("Image URL required for image messages")
         return values
 
 
 class InteractionRequest(BaseSchema):
     """Interaction request schema."""
+
     session_id: UUID
     content: MessageContent
     mode: InteractionMode = InteractionMode.CHAT
@@ -157,6 +171,7 @@ class InteractionRequest(BaseSchema):
 
 class InteractionResponse(BaseSchema, TimestampMixin):
     """Interaction response schema."""
+
     interaction_id: UUID
     session_id: UUID
     request: MessageContent
@@ -170,8 +185,10 @@ class InteractionResponse(BaseSchema, TimestampMixin):
 # Memory System Schemas
 # =============================================================================
 
+
 class MemoryType(str, Enum):
     """Memory type enumeration."""
+
     WORKING = "working"
     SHORT_TERM = "short_term"
     LONG_TERM = "long_term"
@@ -181,6 +198,7 @@ class MemoryType(str, Enum):
 
 class MemoryEntry(BaseSchema, TimestampMixin):
     """Memory entry schema."""
+
     memory_id: UUID
     type: MemoryType
     content: Dict[str, Any]
@@ -193,6 +211,7 @@ class MemoryEntry(BaseSchema, TimestampMixin):
 
 class MemoryQuery(BaseSchema):
     """Memory query schema."""
+
     query: str
     memory_types: Optional[List[MemoryType]] = None
     tags: Optional[List[str]] = None
@@ -202,6 +221,7 @@ class MemoryQuery(BaseSchema):
 
 class MemoryQueryResponse(BaseSchema):
     """Memory query response schema."""
+
     results: List[MemoryEntry]
     total_count: int
     query_time_ms: int
@@ -211,8 +231,10 @@ class MemoryQueryResponse(BaseSchema):
 # Skills System Schemas
 # =============================================================================
 
+
 class SkillType(str, Enum):
     """Skill type enumeration."""
+
     BUILTIN = "builtin"
     CUSTOM = "custom"
     EXTERNAL = "external"
@@ -221,6 +243,7 @@ class SkillType(str, Enum):
 
 class SkillStatus(str, Enum):
     """Skill status enumeration."""
+
     ACTIVE = "active"
     INACTIVE = "inactive"
     DEPRECATED = "deprecated"
@@ -229,6 +252,7 @@ class SkillStatus(str, Enum):
 
 class SkillParameter(BaseSchema):
     """Skill parameter schema."""
+
     name: str
     type: str
     description: str
@@ -239,6 +263,7 @@ class SkillParameter(BaseSchema):
 
 class SkillDefinition(BaseSchema, TimestampMixin):
     """Skill definition schema."""
+
     skill_id: str
     name: str
     description: str
@@ -253,6 +278,7 @@ class SkillDefinition(BaseSchema, TimestampMixin):
 
 class SkillExecutionRequest(BaseSchema):
     """Skill execution request schema."""
+
     skill_id: str
     parameters: Dict[str, Any] = Field(default_factory=dict)
     context: Optional[Dict[str, Any]] = Field(default_factory=dict)
@@ -261,6 +287,7 @@ class SkillExecutionRequest(BaseSchema):
 
 class SkillExecutionResponse(BaseSchema):
     """Skill execution response schema."""
+
     execution_id: UUID
     skill_id: str
     status: str
@@ -274,8 +301,10 @@ class SkillExecutionResponse(BaseSchema):
 # Workflow Orchestration Schemas
 # =============================================================================
 
+
 class WorkflowStatus(str, Enum):
     """Workflow status enumeration."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -286,6 +315,7 @@ class WorkflowStatus(str, Enum):
 
 class WorkflowStep(BaseSchema):
     """Workflow step schema."""
+
     step_id: str
     skill_id: str
     parameters: Dict[str, Any] = Field(default_factory=dict)
@@ -296,6 +326,7 @@ class WorkflowStep(BaseSchema):
 
 class WorkflowDefinition(BaseSchema, TimestampMixin):
     """Workflow definition schema."""
+
     workflow_id: str
     name: str
     description: str
@@ -306,6 +337,7 @@ class WorkflowDefinition(BaseSchema, TimestampMixin):
 
 class WorkflowExecutionRequest(BaseSchema):
     """Workflow execution request schema."""
+
     workflow_id: str
     parameters: Dict[str, Any] = Field(default_factory=dict)
     context: Optional[Dict[str, Any]] = Field(default_factory=dict)
@@ -313,6 +345,7 @@ class WorkflowExecutionRequest(BaseSchema):
 
 class WorkflowExecutionResponse(BaseSchema, TimestampMixin):
     """Workflow execution response schema."""
+
     execution_id: UUID
     workflow_id: str
     status: WorkflowStatus
@@ -328,8 +361,10 @@ class WorkflowExecutionResponse(BaseSchema, TimestampMixin):
 # Plugin System Schemas
 # =============================================================================
 
+
 class PluginType(str, Enum):
     """Plugin type enumeration."""
+
     PROCESSOR = "processor"
     INTEGRATOR = "integrator"
     ENHANCER = "enhancer"
@@ -338,6 +373,7 @@ class PluginType(str, Enum):
 
 class PluginStatus(str, Enum):
     """Plugin status enumeration."""
+
     INSTALLED = "installed"
     ACTIVE = "active"
     INACTIVE = "inactive"
@@ -347,6 +383,7 @@ class PluginStatus(str, Enum):
 
 class PluginInfo(BaseSchema, TimestampMixin):
     """Plugin information schema."""
+
     plugin_id: str
     name: str
     description: str
@@ -362,6 +399,7 @@ class PluginInfo(BaseSchema, TimestampMixin):
 
 class PluginInstallRequest(BaseSchema):
     """Plugin installation request schema."""
+
     plugin_id: str
     source: str  # URL, file path, or registry reference
     configuration: Optional[Dict[str, Any]] = Field(default_factory=dict)
@@ -370,6 +408,7 @@ class PluginInstallRequest(BaseSchema):
 
 class PluginInstallResponse(BaseSchema):
     """Plugin installation response schema."""
+
     plugin_id: str
     status: str
     message: str
@@ -380,8 +419,10 @@ class PluginInstallResponse(BaseSchema):
 # Processing Schemas
 # =============================================================================
 
+
 class ProcessingMode(str, Enum):
     """Processing mode enumeration."""
+
     SYNC = "sync"
     ASYNC = "async"
     STREAM = "stream"
@@ -390,6 +431,7 @@ class ProcessingMode(str, Enum):
 
 class ProcessingRequest(BaseSchema):
     """Processing request schema."""
+
     input_data: Union[str, Dict[str, Any], List[Any]]
     processing_type: str
     mode: ProcessingMode = ProcessingMode.SYNC
@@ -399,6 +441,7 @@ class ProcessingRequest(BaseSchema):
 
 class ProcessingResponse(BaseSchema):
     """Processing response schema."""
+
     processing_id: UUID
     status: str
     result: Optional[Any] = None
@@ -411,8 +454,10 @@ class ProcessingResponse(BaseSchema):
 # Learning System Schemas
 # =============================================================================
 
+
 class LearningType(str, Enum):
     """Learning type enumeration."""
+
     SUPERVISED = "supervised"
     UNSUPERVISED = "unsupervised"
     REINFORCEMENT = "reinforcement"
@@ -422,6 +467,7 @@ class LearningType(str, Enum):
 
 class FeedbackType(str, Enum):
     """Feedback type enumeration."""
+
     POSITIVE = "positive"
     NEGATIVE = "negative"
     NEUTRAL = "neutral"
@@ -430,6 +476,7 @@ class FeedbackType(str, Enum):
 
 class LearningData(BaseSchema):
     """Learning data schema."""
+
     input_data: Any
     target_output: Optional[Any] = None
     feedback: Optional[str] = None
@@ -439,6 +486,7 @@ class LearningData(BaseSchema):
 
 class LearningRequest(BaseSchema):
     """Learning request schema."""
+
     learning_type: LearningType
     data: List[LearningData]
     model_id: Optional[str] = None
@@ -447,6 +495,7 @@ class LearningRequest(BaseSchema):
 
 class LearningResponse(BaseSchema):
     """Learning response schema."""
+
     learning_id: UUID
     status: str
     model_id: Optional[str] = None
@@ -458,8 +507,10 @@ class LearningResponse(BaseSchema):
 # Integration Schemas
 # =============================================================================
 
+
 class IntegrationType(str, Enum):
     """Integration type enumeration."""
+
     LLM = "llm"
     CACHE = "cache"
     STORAGE = "storage"
@@ -468,6 +519,7 @@ class IntegrationType(str, Enum):
 
 class IntegrationStatus(str, Enum):
     """Integration status enumeration."""
+
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"
     ERROR = "error"
@@ -476,6 +528,7 @@ class IntegrationStatus(str, Enum):
 
 class IntegrationConfig(BaseSchema):
     """Integration configuration schema."""
+
     integration_id: str
     type: IntegrationType
     name: str
@@ -487,6 +540,7 @@ class IntegrationConfig(BaseSchema):
 
 class IntegrationTestRequest(BaseSchema):
     """Integration test request schema."""
+
     integration_id: str
     test_type: str = "connectivity"
     parameters: Dict[str, Any] = Field(default_factory=dict)
@@ -494,6 +548,7 @@ class IntegrationTestRequest(BaseSchema):
 
 class IntegrationTestResponse(BaseSchema):
     """Integration test response schema."""
+
     integration_id: str
     test_type: str
     success: bool
@@ -506,8 +561,10 @@ class IntegrationTestResponse(BaseSchema):
 # Monitoring & Observability Schemas
 # =============================================================================
 
+
 class MetricType(str, Enum):
     """Metric type enumeration."""
+
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -516,6 +573,7 @@ class MetricType(str, Enum):
 
 class MetricData(BaseSchema):
     """Metric data schema."""
+
     name: str
     type: MetricType
     value: float
@@ -526,6 +584,7 @@ class MetricData(BaseSchema):
 
 class LogLevel(str, Enum):
     """Log level enumeration."""
+
     DEBUG = "debug"
     INFO = "info"
     WARNING = "warning"
@@ -535,6 +594,7 @@ class LogLevel(str, Enum):
 
 class LogEntry(BaseSchema):
     """Log entry schema."""
+
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     level: LogLevel
     message: str
@@ -550,8 +610,10 @@ class LogEntry(BaseSchema):
 # Error Handling Schemas
 # =============================================================================
 
+
 class ErrorType(str, Enum):
     """Error type enumeration."""
+
     VALIDATION_ERROR = "validation_error"
     AUTHENTICATION_ERROR = "authentication_error"
     AUTHORIZATION_ERROR = "authorization_error"
@@ -565,6 +627,7 @@ class ErrorType(str, Enum):
 
 class ErrorDetail(BaseSchema):
     """Error detail schema."""
+
     field: Optional[str] = None
     message: str
     code: Optional[str] = None
@@ -572,6 +635,7 @@ class ErrorDetail(BaseSchema):
 
 class ErrorResponse(BaseSchema):
     """Error response schema."""
+
     error_type: ErrorType
     message: str
     details: List[ErrorDetail] = Field(default_factory=list)
@@ -584,14 +648,17 @@ class ErrorResponse(BaseSchema):
 # Pagination & Filtering Schemas
 # =============================================================================
 
+
 class SortOrder(str, Enum):
     """Sort order enumeration."""
+
     ASC = "asc"
     DESC = "desc"
 
 
 class PaginationRequest(BaseSchema):
     """Pagination request schema."""
+
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
     sort_by: Optional[str] = None
@@ -600,6 +667,7 @@ class PaginationRequest(BaseSchema):
 
 class PaginationResponse(BaseSchema):
     """Pagination response schema."""
+
     page: int
     page_size: int
     total_count: int
@@ -610,6 +678,7 @@ class PaginationResponse(BaseSchema):
 
 class FilterRequest(BaseSchema):
     """Filter request schema."""
+
     filters: Dict[str, Any] = Field(default_factory=dict)
     search_query: Optional[str] = None
     date_range: Optional[Dict[str, datetime]] = None
@@ -619,8 +688,10 @@ class FilterRequest(BaseSchema):
 # Batch Operation Schemas
 # =============================================================================
 
+
 class BatchOperationType(str, Enum):
     """Batch operation type enumeration."""
+
     CREATE = "create"
     UPDATE = "update"
     DELETE = "delete"
@@ -629,6 +700,7 @@ class BatchOperationType(str, Enum):
 
 class BatchOperation(BaseSchema):
     """Batch operation schema."""
+
     operation_type: BatchOperationType
     data: Any
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -636,6 +708,7 @@ class BatchOperation(BaseSchema):
 
 class BatchRequest(BaseSchema):
     """Batch request schema."""
+
     operations: List[BatchOperation]
     fail_on_error: bool = False
     timeout_seconds: Optional[int] = Field(default=300, ge=1, le=3600)
@@ -643,6 +716,7 @@ class BatchRequest(BaseSchema):
 
 class BatchResult(BaseSchema):
     """Batch result schema."""
+
     operation_index: int
     success: bool
     result: Optional[Any] = None
@@ -651,6 +725,7 @@ class BatchResult(BaseSchema):
 
 class BatchResponse(BaseSchema):
     """Batch response schema."""
+
     batch_id: UUID
     total_operations: int
     successful_operations: int
@@ -668,30 +743,25 @@ __all__ = [
     # Base models
     "BaseSchema",
     "TimestampMixin",
-    
     # Core system
     "HealthStatus",
     "HealthCheckResponse",
-    
     # Session management
     "SessionStatus",
     "SessionContext",
     "SessionRequest",
     "SessionResponse",
-    
     # Interactions
     "MessageType",
     "InteractionMode",
     "MessageContent",
     "InteractionRequest",
     "InteractionResponse",
-    
     # Memory system
     "MemoryType",
     "MemoryEntry",
     "MemoryQuery",
     "MemoryQueryResponse",
-    
     # Skills system
     "SkillType",
     "SkillStatus",
@@ -699,57 +769,48 @@ __all__ = [
     "SkillDefinition",
     "SkillExecutionRequest",
     "SkillExecutionResponse",
-    
     # Workflow orchestration
     "WorkflowStatus",
     "WorkflowStep",
     "WorkflowDefinition",
     "WorkflowExecutionRequest",
     "WorkflowExecutionResponse",
-    
     # Plugin system
     "PluginType",
     "PluginStatus",
     "PluginInfo",
     "PluginInstallRequest",
     "PluginInstallResponse",
-    
     # Processing
     "ProcessingMode",
     "ProcessingRequest",
     "ProcessingResponse",
-    
     # Learning system
     "LearningType",
     "FeedbackType",
     "LearningData",
     "LearningRequest",
     "LearningResponse",
-    
     # Integrations
     "IntegrationType",
     "IntegrationStatus",
     "IntegrationConfig",
     "IntegrationTestRequest",
     "IntegrationTestResponse",
-    
     # Monitoring & observability
     "MetricType",
     "MetricData",
     "LogLevel",
     "LogEntry",
-    
     # Error handling
     "ErrorType",
     "ErrorDetail",
     "ErrorResponse",
-    
     # Pagination & filtering
     "SortOrder",
     "PaginationRequest",
     "PaginationResponse",
     "FilterRequest",
-    
     # Batch operations
     "BatchOperationType",
     "BatchOperation",
