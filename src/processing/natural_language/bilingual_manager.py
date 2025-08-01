@@ -115,6 +115,13 @@ class BilingualManager:
         # Load configuration
         self.config_loader = container.get(ConfigLoader)
         config_data = self.config_loader.get("bilingual", {})
+        
+        # Convert string values to enums if needed
+        if "primary_language" in config_data and isinstance(config_data["primary_language"], str):
+            config_data["primary_language"] = Language(config_data["primary_language"])
+        if "secondary_language" in config_data and isinstance(config_data["secondary_language"], str):
+            config_data["secondary_language"] = Language(config_data["secondary_language"])
+        
         self.config = BilingualConfig(**config_data)
         
         # Language detection patterns
@@ -212,29 +219,29 @@ class BilingualManager:
         """
         text_lower = text.lower()
         
+        # Check for file paths first (highest priority for mixed language)
+        if any(indicator in text for indicator in self.file_path_indicators):
+            return ContentType.FILE_PATH
+        
         # Check for code snippets
         if any(indicator in text for indicator in self.code_indicators):
             return ContentType.CODE_SNIPPET
         
-        # Check for file paths
-        if any(indicator in text for indicator in self.file_path_indicators):
-            return ContentType.FILE_PATH
-        
-        # Check for technical terms
-        if any(term.lower() in text_lower for term in self.technical_indicators):
-            return ContentType.TECHNICAL_TERM
-        
-        # Check for API references
-        if 'api' in text_lower or 'endpoint' in text_lower:
-            return ContentType.API_REFERENCE
+        # Check for debugging content (higher priority than technical terms)
+        if any(keyword in text_lower for keyword in self.debugging_keywords):
+            return ContentType.DEBUGGING
         
         # Check for project structure discussion
         if any(keyword in text_lower for keyword in self.project_keywords):
             return ContentType.PROJECT_STRUCTURE
         
-        # Check for debugging content
-        if any(keyword in text_lower for keyword in self.debugging_keywords):
-            return ContentType.DEBUGGING
+        # Check for API references
+        if 'api' in text_lower and ('endpoint' in text_lower or 'rest' in text_lower or 'graphql' in text_lower):
+            return ContentType.API_REFERENCE
+        
+        # Check for technical terms
+        if any(term.lower() in text_lower for term in self.technical_indicators):
+            return ContentType.TECHNICAL_TERM
         
         # Default to general conversation
         return ContentType.GENERAL_CONVERSATION
@@ -304,15 +311,23 @@ class BilingualManager:
         if context.is_project_discussion:
             return Language.ENGLISH
         
-        # Rule 4: Use English for technical content
+        # Special case: Arabic query asking about files should use mixed language
+        if (context.user_query_language == Language.ARABIC and 
+            context.content_type == ContentType.FILE_PATH):
+            return Language.MIXED
+        
+        # Rule 4: Use English for pure technical content types (but not if Arabic query with code/files)
         if context.content_type in self.config.use_english_for:
             return Language.ENGLISH
         
+        # Rule 5: Use mixed language if Arabic query but has technical/code elements
+        if (context.user_query_language == Language.ARABIC and 
+            context.content_type in self.config.use_arabic_for and
+            (context.has_code or context.has_file_paths or context.has_technical_terms)):
+            return Language.MIXED
+        
         # Rule 3: Use Arabic for general conversation, explanations, guidance
         if context.content_type in self.config.use_arabic_for:
-            # Rule 5: But use mixed language if embedding English terms
-            if context.has_code or context.has_file_paths or context.has_technical_terms:
-                return Language.MIXED
             return Language.ARABIC
         
         # Default to primary language
