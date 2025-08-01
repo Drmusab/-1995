@@ -44,17 +44,14 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    AutoRecoveryCompleted,
-    AutoRecoveryStarted,
-    CircuitBreakerStateChanged,
+    ErrorRecoveryCompleted,
+    ErrorRecoveryStarted,
     ComponentHealthChanged,
     DependencyHealthChanged,
     ErrorOccurred,
     HealthCheckCompleted,
     HealthCheckFailed,
     HealthCheckStarted,
-    HealthPredictionAlert,
-    HealthThresholdExceeded,
     SystemHealthChanged,
 )
 from src.observability.logging.config import get_logger
@@ -688,7 +685,7 @@ class AutoRecoveryManager:
             return False
 
         await self.event_bus.emit(
-            AutoRecoveryStarted(
+            ErrorRecoveryStarted(
                 component_id=component_id, issue=issue, strategies_available=len(strategies)
             )
         )
@@ -723,7 +720,7 @@ class AutoRecoveryManager:
         )
 
         await self.event_bus.emit(
-            AutoRecoveryCompleted(component_id=component_id, issue=issue, success=recovery_success)
+            ErrorRecoveryCompleted(component_id=component_id, issue=issue, success=recovery_success)
         )
 
         return recovery_success
