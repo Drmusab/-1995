@@ -1065,13 +1065,13 @@ class LocalCache(Generic[K, V]):
                 if self.metrics:
                     stats = self.get_statistics()
                     
-                    self.metrics.set(f"cache_entries", len(self._entries), 
+                    self.metrics.set("cache_entries", len(self._entries), 
                                    tags={'cache': self.name})
-                    self.metrics.set(f"cache_memory_usage_bytes", stats.memory_usage_bytes,
+                    self.metrics.set("cache_memory_usage_bytes", stats.memory_usage_bytes,
                                    tags={'cache': self.name})
-                    self.metrics.set(f"cache_hit_ratio", stats.hit_ratio,
+                    self.metrics.set("cache_hit_ratio", stats.hit_ratio,
                                    tags={'cache': self.name})
-                    self.metrics.set(f"cache_compression_ratio", stats.compression_ratio,
+                    self.metrics.set("cache_compression_ratio", stats.compression_ratio,
                                    tags={'cache': self.name})
                     self.metrics.set(f"cache_average_access_time_ms", stats.average_access_time_ms,
                                    tags={'cache': self.name})

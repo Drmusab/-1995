@@ -624,7 +624,7 @@ class AssistantCLI:
                     
                     self.console.print(table)
                 else:
-                    print(f"=== AI Assistant System Monitor ===")
+                    print("=== AI Assistant System Monitor ===")
                     print(f"System status: {status.get('status', 'unknown')}")
                     print(f"Uptime: {status.get('uptime_seconds', 0):.1f}s")
                     print()

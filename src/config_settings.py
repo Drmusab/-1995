@@ -429,36 +429,56 @@ class BaseSettings:
 
     def _register_assistant_components(self) -> None:
         """Register core assistant components."""
-        # Component manager
-        self.container.register(
-            EnhancedComponentManager,
-            lifecycle=ComponentLifecycle.SINGLETON.value
-        )
+        try:
+            # Component manager - dynamic import to avoid circular dependencies
+            from src.assistant.component_manager import EnhancedComponentManager
+            self.container.register(
+                EnhancedComponentManager,
+                lifecycle=ComponentLifecycle.SINGLETON.value
+            )
+        except ImportError:
+            self.logger.warning("EnhancedComponentManager not available")
         
-        # Session manager
-        self.container.register(
-            EnhancedSessionManager,
-            lifecycle=ComponentLifecycle.SINGLETON.value
-        )
+        try:
+            # Session manager
+            from src.assistant.session_manager import EnhancedSessionManager
+            self.container.register(
+                EnhancedSessionManager,
+                lifecycle=ComponentLifecycle.SINGLETON.value
+            )
+        except ImportError:
+            self.logger.warning("EnhancedSessionManager not available")
         
-        # Workflow orchestrator
-        self.container.register(
-            WorkflowOrchestrator,
-            lifecycle=ComponentLifecycle.SINGLETON.value
-        )
+        try:
+            # Workflow orchestrator
+            from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+            self.container.register(
+                WorkflowOrchestrator,
+                lifecycle=ComponentLifecycle.SINGLETON.value
+            )
+        except ImportError:
+            self.logger.warning("WorkflowOrchestrator not available")
         
-        # Interaction handler
-        self.container.register(
-            InteractionHandler,
-            lifecycle=ComponentLifecycle.SINGLETON.value
-        )
+        try:
+            # Interaction handler
+            from src.assistant.interaction_handler import InteractionHandler
+            self.container.register(
+                InteractionHandler,
+                lifecycle=ComponentLifecycle.SINGLETON.value
+            )
+        except ImportError:
+            self.logger.warning("InteractionHandler not available")
         
         # Plugin manager
         if self.plugins.enabled:
-            self.container.register(
-                EnhancedPluginManager,
-                lifecycle=ComponentLifecycle.SINGLETON.value
-            )
+            try:
+                from src.assistant.plugin_manager import EnhancedPluginManager
+                self.container.register(
+                    EnhancedPluginManager,
+                    lifecycle=ComponentLifecycle.SINGLETON.value
+                )
+            except ImportError:
+                self.logger.warning("EnhancedPluginManager not available")
         
         # Core engine (main orchestrator)
         self.container.register(
@@ -726,8 +746,11 @@ class BaseSettings:
             
             # Initialize plugin manager if enabled
             if self.plugins.enabled:
-                plugin_manager = self.container.get(EnhancedPluginManager)
-                await plugin_manager.initialize()
+                try:
+                    plugin_manager = self.container.get('EnhancedPluginManager')
+                    await plugin_manager.initialize()
+                except Exception as e:
+                    self.logger.warning(f"Plugin manager initialization failed: {e}")
             
             self.logger.info("AI assistant system initialized successfully")
             
@@ -750,8 +773,11 @@ class BaseSettings:
             
             # Shutdown plugin manager if enabled
             if self.plugins.enabled:
-                plugin_manager = self.container.get(EnhancedPluginManager)
-                await plugin_manager.shutdown()
+                try:
+                    plugin_manager = self.container.get('EnhancedPluginManager')
+                    await plugin_manager.shutdown()
+                except Exception as e:
+                    self.logger.warning(f"Plugin manager shutdown failed: {e}")
             
             self.logger.info("AI assistant system cleanup completed")
             

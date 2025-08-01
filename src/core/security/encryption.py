@@ -480,7 +480,8 @@ class KeyManager:
                 try:
                     import ctypes
                     ctypes.memset(id(key.key_data), 0, len(key.key_data))
-                except:
+                except (ImportError, AttributeError, TypeError, OSError):
+                    # Secure memory cleanup failed, but continue
                     pass
             
             self.logger.info(f"Deleted key: {key_id}")

@@ -11,6 +11,8 @@ Merged functionality from core_engine.py and core_engine_memory.py to provide
 a unified memory-enhanced processing pipeline.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Optional, Dict, Any, Union, List, Callable, AsyncGenerator, TypeVar, Generic
 import asyncio
@@ -290,9 +292,9 @@ class ProcessingResult:
     generated_image: Optional[np.ndarray] = None
     
     # Intermediate results
-    transcription_result: Optional["TranscriptionResult"] = None
-    emotion_result: Optional["EmotionResult"] = None
-    speaker_result: Optional["SpeakerRecognitionResult"] = None
+    transcription_result: Optional[TranscriptionResult] = None
+    emotion_result: Optional[EmotionResult] = None
+    speaker_result: Optional[SpeakerRecognitionResult] = None
     vision_result: Optional[Dict[str, Any]] = None
     intent_result: Optional[Dict[str, Any]] = None
     entity_result: Optional[List[Dict[str, Any]]] = None
@@ -846,16 +848,17 @@ class EnhancedCoreEngine:
     def _register_learning_systems(self) -> None:
         """Register learning and adaptation systems."""
         if self.config.enable_learning:
+            learning_components = _lazy_importer.get_processing_component("learning")
             self.component_manager.register_component(
                 "feedback_processor",
-                FeedbackProcessor,
+                learning_components.get('FeedbackProcessor'),
                 priority=ComponentPriority.NORMAL,
                 config_section="learning.feedback"
             )
             
             self.component_manager.register_component(
                 "preference_learner",
-                PreferenceLearner,
+                learning_components.get('PreferenceLearner'),
                 priority=ComponentPriority.NORMAL,
                 dependencies=[
                     ComponentDependency("feedback_processor", DependencyType.REQUIRED),
@@ -866,7 +869,7 @@ class EnhancedCoreEngine:
             
             self.component_manager.register_component(
                 "model_adapter",
-                ModelAdapter,
+                learning_components.get('ModelAdapter'),
                 priority=ComponentPriority.NORMAL,
                 dependencies=[
                     ComponentDependency("model_router", DependencyType.REQUIRED)
@@ -876,7 +879,7 @@ class EnhancedCoreEngine:
             
             self.component_manager.register_component(
                 "continual_learner",
-                ContinualLearner,
+                learning_components.get('ContinualLearner'),
                 priority=ComponentPriority.NORMAL,
                 dependencies=[
                     ComponentDependency("feedback_processor", DependencyType.REQUIRED),
