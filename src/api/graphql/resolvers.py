@@ -40,7 +40,7 @@ from src.core.security.authorization import AuthorizationManager
 # Assistant components
 from src.assistant.core_engine import (
     EnhancedCoreEngine, MultimodalInput as CoreMultimodalInput, ProcessingContext,
-    ProcessingResult as CoreProcessingResult, EngineState, ProcessingMode
+    ProcessingResult as CoreProcessingResult, EngineState, ProcessingMode, PriorityLevel
 )
 from src.assistant.component_manager import (
     EnhancedComponentManager, ComponentState, ComponentPriority
@@ -49,7 +49,7 @@ from src.assistant.workflow_orchestrator import (
     WorkflowOrchestrator, WorkflowState, WorkflowPriority, ExecutionMode
 )
 from src.assistant.session_manager import (
-    EnhancedSessionManager, SessionState, SessionType, SessionConfiguration
+    EnhancedSessionManager, SessionState, SessionType, SessionConfiguration, SessionPriority
 )
 from src.assistant.interaction_handler import (
     InteractionHandler, InteractionState, InteractionMode, InputModality, OutputModality

@@ -290,9 +290,9 @@ class ProcessingResult:
     generated_image: Optional[np.ndarray] = None
     
     # Intermediate results
-    transcription_result: Optional[TranscriptionResult] = None
-    emotion_result: Optional[EmotionResult] = None
-    speaker_result: Optional[SpeakerRecognitionResult] = None
+    transcription_result: Optional["TranscriptionResult"] = None
+    emotion_result: Optional["EmotionResult"] = None
+    speaker_result: Optional["SpeakerRecognitionResult"] = None
     vision_result: Optional[Dict[str, Any]] = None
     intent_result: Optional[Dict[str, Any]] = None
     entity_result: Optional[List[Dict[str, Any]]] = None
@@ -688,16 +688,17 @@ class EnhancedCoreEngine:
         
         self.component_manager.register_component(
             "entity_extractor",
-            EntityExtractor,
+            nlp_components.get('EntityExtractor'),
             priority=ComponentPriority.NORMAL,
             config_section="processing.nlp.entity"
         )
         
         # Multimodal fusion
         if self.config.enable_multimodal_fusion:
+            multimodal_components = _lazy_importer.get_processing_component("multimodal")
             self.component_manager.register_component(
                 "fusion_strategy",
-                MultimodalFusionStrategy,
+                multimodal_components.get('MultimodalFusionStrategy'),
                 priority=ComponentPriority.HIGH,
                 config_section="processing.multimodal.fusion"
             )
@@ -713,9 +714,10 @@ class EnhancedCoreEngine:
     def _register_reasoning_components(self) -> None:
         """Register reasoning and planning components."""
         if self.config.enable_reasoning:
+            logic_components = _lazy_importer.get_processing_component("logic")
             self.component_manager.register_component(
                 "logic_engine",
-                LogicEngine,
+                logic_components.get('LogicEngine'),
                 priority=ComponentPriority.HIGH,
                 dependencies=[
                     ComponentDependency("model_router", DependencyType.REQUIRED)
@@ -723,16 +725,18 @@ class EnhancedCoreEngine:
                 config_section="reasoning.logic"
             )
             
+            knowledge_components = _lazy_importer.get_processing_component("knowledge")
             self.component_manager.register_component(
                 "knowledge_graph",
-                KnowledgeGraph,
+                knowledge_components.get('KnowledgeGraph'),
                 priority=ComponentPriority.HIGH,
                 config_section="reasoning.knowledge"
             )
             
+            planning_components = _lazy_importer.get_processing_component("planning")
             self.component_manager.register_component(
                 "task_planner",
-                TaskPlanner,
+                planning_components.get('TaskPlanner'),
                 priority=ComponentPriority.HIGH,
                 dependencies=[
                     ComponentDependency("logic_engine", DependencyType.REQUIRED),
@@ -743,7 +747,7 @@ class EnhancedCoreEngine:
             
             self.component_manager.register_component(
                 "decision_tree",
-                DecisionTree,
+                planning_components.get('DecisionTree'),
                 priority=ComponentPriority.HIGH,
                 dependencies=[
                     ComponentDependency("logic_engine", DependencyType.REQUIRED)
