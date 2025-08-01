@@ -1437,18 +1437,20 @@ class MemoryGraphStore(BaseMemoryStore):
                     
                     # Convert to GraphPath
                     path_nodes = []
+                    # Performance optimization: Pre-build edge lookup for faster path reconstruction
+                    edge_lookup = {}  # (source_id, target_id) -> edge
+                    for edge_id in self._edges:
+                        edge = self._edges[edge_id]
+                        edge_lookup[(edge.source_id, edge.target_id)] = edge
+                    
                     prev_node_id = None
                     for i, node_id in enumerate(path):
                         node = self._nodes[node_id]
                         incoming_edge = None
                         
                         if prev_node_id:
-                            # Find edge between prev_node and current node
-                            for edge_id in self._outgoing_edges.get(prev_node_id, []):
-                                edge = self._edges[edge_id]
-                                if edge.target_id == node_id:
-                                    incoming_edge = edge
-                                    break
+                            # Fast lookup using pre-built index instead of nested iteration
+                            incoming_edge = edge_lookup.get((prev_node_id, node_id))
                         
                         path_nodes.append(GraphPathNode(
                             node=node,
@@ -1577,30 +1579,51 @@ class MemoryGraphStore(BaseMemoryStore):
             if include_edges:
                 # Start with the specified nodes
                 current_distance = 0
+                # Performance optimization: Use batch operations and sets for faster lookups
                 frontier = set(valid_node_ids)
                 
+                # Pre-build lookup tables for better performance
+                outgoing_lookup = {nid: self._outgoing_edges.get(nid, []) for nid in frontier}
+                incoming_lookup = {nid: self._incoming_edges.get(nid, []) for nid in frontier}
+                
                 # Expand to neighbors up to max_distance
-                while current_distance < max_distance:
+                while current_distance < max_distance and frontier:
                     next_frontier = set()
+                    new_edges = set()
                     
+                    # Batch process frontier nodes to reduce nested iterations
                     for node_id in frontier:
-                        # Outgoing connections
-                        for edge_id in self._outgoing_edges.get(node_id, []):
-                            edge = self._edges[edge_id]
-                            included_edges.add(edge_id)
-                            
-                            if edge.target_id not in included_nodes:
-                                included_nodes.add(edge.target_id)
-                                next_frontier.add(edge.target_id)
+                        # Outgoing connections - process in batches
+                        outgoing_edges = outgoing_lookup.get(node_id, [])
+                        for edge_id in outgoing_edges:
+                            if edge_id in self._edges:  # Existence check
+                                edge = self._edges[edge_id]
+                                new_edges.add(edge_id)
+                                
+                                if edge.target_id not in included_nodes:
+                                    included_nodes.add(edge.target_id)
+                                    next_frontier.add(edge.target_id)
                         
-                        # Incoming connections
-                        for edge_id in self._incoming_edges.get(node_id, []):
-                            edge = self._edges[edge_id]
-                            included_edges.add(edge_id)
-                            
-                            if edge.source_id not in included_nodes:
-                                included_nodes.add(edge.source_id)
-                                next_frontier.add(edge.source_id)
+                        # Incoming connections - process in batches
+                        incoming_edges = incoming_lookup.get(node_id, [])
+                        for edge_id in incoming_edges:
+                            if edge_id in self._edges:  # Existence check
+                                edge = self._edges[edge_id]
+                                new_edges.add(edge_id)
+                                
+                                if edge.source_id not in included_nodes:
+                                    included_nodes.add(edge.source_id)
+                                    next_frontier.add(edge.source_id)
+                    
+                    # Update edge collection
+                    included_edges.update(new_edges)
+                    
+                    # Update lookups for new frontier nodes (performance optimization)
+                    for nid in next_frontier:
+                        if nid not in outgoing_lookup:
+                            outgoing_lookup[nid] = self._outgoing_edges.get(nid, [])
+                        if nid not in incoming_lookup:
+                            incoming_lookup[nid] = self._incoming_edges.get(nid, [])
                     
                     current_distance += 1
                     frontier = next_frontier

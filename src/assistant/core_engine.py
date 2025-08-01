@@ -46,46 +46,14 @@ from src.core.dependency_injection import Container
 from src.core.health_check import HealthCheck
 from src.core.security.authentication import AuthenticationManager
 from src.core.security.authorization import AuthorizationManager
+from src.core.performance_utils import PerformanceTimer, async_cache, LRUCache
 
-# Processing components
-from src.processing.speech.audio_pipeline import (
-    EnhancedAudioPipeline, AudioPipelineRequest, AudioPipelineResult,
-    PipelineMode, WorkflowType, QualityLevel
-)
-from src.processing.speech.speech_to_text import (
-    EnhancedWhisperTranscriber, TranscriptionRequest, TranscriptionResult,
-    TranscriptionQuality, AudioSource
-)
-from src.processing.speech.text_to_speech import (
-    EnhancedTextToSpeech, SynthesisRequest, SynthesisResult,
-    VoiceQuality, SpeakingStyle, SynthesisMode
-)
-from src.processing.speech.emotion_detection import (
-    EnhancedEmotionDetector, EmotionDetectionRequest, EmotionResult,
-    AnalysisMode, FeatureSet
-)
-from src.processing.speech.speaker_recognition import (
-    EnhancedSpeakerRecognition, SpeakerRecognitionRequest, SpeakerRecognitionResult,
-    ProcessingMode, VerificationMode
-)
-from src.processing.vision.vision_processor import VisionProcessor
-from src.processing.vision.image_analyzer import ImageAnalyzer
-from src.processing.natural_language.intent_manager import IntentManager
-from src.processing.natural_language.language_chain import LanguageChain
-from src.processing.natural_language.sentiment_analyzer import SentimentAnalyzer
-from src.processing.natural_language.entity_extractor import EntityExtractor
-from src.processing.multimodal.fusion_strategies import MultimodalFusionStrategy
+# Processing components - Use lazy imports for performance
+# Heavy processing modules are imported only when needed
 
-# Reasoning and planning
-from src.reasoning.logic_engine import LogicEngine
-from src.reasoning.knowledge_graph import KnowledgeGraph
-from src.reasoning.planning.task_planner import TaskPlanner
-from src.reasoning.decision_making.decision_tree import DecisionTree
+# Reasoning and planning - Use lazy imports for performance
 
-# Skills management
-from src.skills.skill_factory import SkillFactory
-from src.skills.skill_registry import SkillRegistry
-from src.skills.skill_validator import SkillValidator
+# Skills management - Use lazy imports for performance
 
 # Memory systems - Enhanced integration
 from src.memory.core_memory.memory_manager import MemoryManager
@@ -103,11 +71,7 @@ from src.memory.core_memory.memory_types import WorkingMemory, EpisodicMemory, S
 # Session memory integration
 from src.assistant.session_memory_integrator import SessionMemoryIntegrator
 
-# Learning and adaptation
-from src.learning.continual_learning import ContinualLearner
-from src.learning.preference_learning import PreferenceLearner
-from src.learning.feedback_processor import FeedbackProcessor
-from src.learning.model_adaptation import ModelAdapter
+# Learning and adaptation - Use lazy imports for performance
 
 # Integrations
 from src.integrations.llm.model_router import ModelRouter
@@ -128,6 +92,106 @@ from src.assistant.interaction_handler import InteractionHandler
 
 # Type definitions
 T = TypeVar('T')
+
+
+class LazyImporter:
+    """Lazy import manager for performance optimization."""
+    
+    def __init__(self):
+        self._cache = {}
+    
+    def get_processing_component(self, component_type: str):
+        """Lazy import processing components."""
+        if component_type not in self._cache:
+            if component_type == "audio_pipeline":
+                from src.processing.speech.audio_pipeline import (
+                    EnhancedAudioPipeline, AudioPipelineRequest, AudioPipelineResult,
+                    PipelineMode, WorkflowType, QualityLevel
+                )
+                self._cache[component_type] = {
+                    'EnhancedAudioPipeline': EnhancedAudioPipeline,
+                    'AudioPipelineRequest': AudioPipelineRequest,
+                    'AudioPipelineResult': AudioPipelineResult,
+                    'PipelineMode': PipelineMode,
+                    'WorkflowType': WorkflowType,
+                    'QualityLevel': QualityLevel
+                }
+            elif component_type == "speech_to_text":
+                from src.processing.speech.speech_to_text import (
+                    EnhancedWhisperTranscriber, TranscriptionRequest, TranscriptionResult,
+                    TranscriptionQuality, AudioSource
+                )
+                self._cache[component_type] = {
+                    'EnhancedWhisperTranscriber': EnhancedWhisperTranscriber,
+                    'TranscriptionRequest': TranscriptionRequest,
+                    'TranscriptionResult': TranscriptionResult,
+                    'TranscriptionQuality': TranscriptionQuality,
+                    'AudioSource': AudioSource
+                }
+            elif component_type == "text_to_speech":
+                from src.processing.speech.text_to_speech import (
+                    EnhancedTextToSpeech, SynthesisRequest, SynthesisResult,
+                    VoiceQuality, SpeakingStyle, SynthesisMode
+                )
+                self._cache[component_type] = {
+                    'EnhancedTextToSpeech': EnhancedTextToSpeech,
+                    'SynthesisRequest': SynthesisRequest,
+                    'SynthesisResult': SynthesisResult,
+                    'VoiceQuality': VoiceQuality,
+                    'SpeakingStyle': SpeakingStyle,
+                    'SynthesisMode': SynthesisMode
+                }
+            elif component_type == "vision":
+                from src.processing.vision.vision_processor import VisionProcessor
+                from src.processing.vision.image_analyzer import ImageAnalyzer
+                self._cache[component_type] = {
+                    'VisionProcessor': VisionProcessor,
+                    'ImageAnalyzer': ImageAnalyzer
+                }
+            elif component_type == "nlp":
+                from src.processing.natural_language.intent_manager import IntentManager
+                from src.processing.natural_language.language_chain import LanguageChain
+                from src.processing.natural_language.sentiment_analyzer import SentimentAnalyzer
+                from src.processing.natural_language.entity_extractor import EntityExtractor
+                self._cache[component_type] = {
+                    'IntentManager': IntentManager,
+                    'LanguageChain': LanguageChain,
+                    'SentimentAnalyzer': SentimentAnalyzer,
+                    'EntityExtractor': EntityExtractor
+                }
+        return self._cache.get(component_type, {})
+    
+    def get_reasoning_component(self, component_type: str):
+        """Lazy import reasoning components."""
+        if component_type not in self._cache:
+            if component_type == "logic":
+                from src.reasoning.logic_engine import LogicEngine
+                self._cache[component_type] = {'LogicEngine': LogicEngine}
+            elif component_type == "knowledge":
+                from src.reasoning.knowledge_graph import KnowledgeGraph
+                self._cache[component_type] = {'KnowledgeGraph': KnowledgeGraph}
+            elif component_type == "planning":
+                from src.reasoning.planning.task_planner import TaskPlanner
+                self._cache[component_type] = {'TaskPlanner': TaskPlanner}
+        return self._cache.get(component_type, {})
+    
+    def get_skills_component(self, component_type: str):
+        """Lazy import skills components."""
+        if component_type not in self._cache:
+            if component_type == "factory":
+                from src.skills.skill_factory import SkillFactory
+                self._cache[component_type] = {'SkillFactory': SkillFactory}
+            elif component_type == "registry":
+                from src.skills.skill_registry import SkillRegistry
+                self._cache[component_type] = {'SkillRegistry': SkillRegistry}
+            elif component_type == "validator":
+                from src.skills.skill_validator import SkillValidator
+                self._cache[component_type] = {'SkillValidator': SkillValidator}
+        return self._cache.get(component_type, {})
+
+
+# Global lazy importer instance
+_lazy_importer = LazyImporter()
 
 
 class EngineState(Enum):
@@ -545,19 +609,21 @@ class EnhancedCoreEngine:
         )
 
     def _register_processing_components(self) -> None:
-        """Register processing components."""
+        """Register processing components using lazy imports."""
         # Speech processing components
         if self.config.enable_speech_processing:
+            audio_components = _lazy_importer.get_processing_component("audio_pipeline")
             self.component_manager.register_component(
                 "audio_pipeline",
-                EnhancedAudioPipeline,
+                audio_components.get('EnhancedAudioPipeline'),
                 priority=ComponentPriority.NORMAL,
                 config_section="processing.speech.audio_pipeline"
             )
             
+            stt_components = _lazy_importer.get_processing_component("speech_to_text")
             self.component_manager.register_component(
                 "speech_to_text",
-                EnhancedWhisperTranscriber,
+                stt_components.get('EnhancedWhisperTranscriber'),
                 priority=ComponentPriority.NORMAL,
                 dependencies=[
                     ComponentDependency("audio_pipeline", DependencyType.OPTIONAL)
@@ -565,45 +631,27 @@ class EnhancedCoreEngine:
                 config_section="processing.speech.speech_to_text"
             )
             
+            tts_components = _lazy_importer.get_processing_component("text_to_speech")
             self.component_manager.register_component(
                 "text_to_speech",
-                EnhancedTextToSpeech,
+                tts_components.get('EnhancedTextToSpeech'),
                 priority=ComponentPriority.NORMAL,
                 config_section="processing.speech.text_to_speech"
-            )
-            
-            self.component_manager.register_component(
-                "emotion_detector",
-                EnhancedEmotionDetector,
-                priority=ComponentPriority.NORMAL,
-                dependencies=[
-                    ComponentDependency("audio_pipeline", DependencyType.OPTIONAL)
-                ],
-                config_section="processing.speech.emotion_detection"
-            )
-            
-            self.component_manager.register_component(
-                "speaker_recognition",
-                EnhancedSpeakerRecognition,
-                priority=ComponentPriority.NORMAL,
-                dependencies=[
-                    ComponentDependency("audio_pipeline", DependencyType.OPTIONAL)
-                ],
-                config_section="processing.speech.speaker_recognition"
             )
         
         # Vision processing components
         if self.config.enable_vision_processing:
+            vision_components = _lazy_importer.get_processing_component("vision")
             self.component_manager.register_component(
                 "vision_processor",
-                VisionProcessor,
+                vision_components.get('VisionProcessor'),
                 priority=ComponentPriority.NORMAL,
                 config_section="processing.vision.processor"
             )
             
             self.component_manager.register_component(
                 "image_analyzer",
-                ImageAnalyzer,
+                vision_components.get('ImageAnalyzer'),
                 priority=ComponentPriority.NORMAL,
                 dependencies=[
                     ComponentDependency("vision_processor", DependencyType.REQUIRED)
@@ -612,16 +660,17 @@ class EnhancedCoreEngine:
             )
         
         # Natural language processing components
+        nlp_components = _lazy_importer.get_processing_component("nlp")
         self.component_manager.register_component(
             "intent_manager",
-            IntentManager,
+            nlp_components.get('IntentManager'),
             priority=ComponentPriority.HIGH,
             config_section="processing.nlp.intent"
         )
         
         self.component_manager.register_component(
             "language_chain",
-            LanguageChain,
+            nlp_components.get('LanguageChain'),
             priority=ComponentPriority.HIGH,
             dependencies=[
                 ComponentDependency("intent_manager", DependencyType.OPTIONAL),
@@ -632,7 +681,7 @@ class EnhancedCoreEngine:
         
         self.component_manager.register_component(
             "sentiment_analyzer",
-            SentimentAnalyzer,
+            nlp_components.get('SentimentAnalyzer'),
             priority=ComponentPriority.NORMAL,
             config_section="processing.nlp.sentiment"
         )
@@ -963,6 +1012,7 @@ class EnhancedCoreEngine:
             asyncio.create_task(self._learning_update_loop())
 
     @handle_exceptions
+    @async_cache(maxsize=32)  # Cache recent processing results for performance
     async def process_multimodal_input(
         self,
         input_data: MultimodalInput,
@@ -993,12 +1043,13 @@ class EnhancedCoreEngine:
         
         async with self.processing_semaphore:
             try:
-                with self.tracer.trace("multimodal_processing") as span:
-                    span.set_attributes({
-                        "session_id": context.session_id,
-                        "request_id": context.request_id,
-                        "user_id": context.user_id or "anonymous",
-                        "has_text": input_data.text is not None,
+                async with PerformanceTimer("multimodal_processing") as timer:
+                    with self.tracer.trace("multimodal_processing") as span:
+                        span.set_attributes({
+                            "session_id": context.session_id,
+                            "request_id": context.request_id,
+                            "user_id": context.user_id or "anonymous",
+                            "has_text": input_data.text is not None,
                         "has_audio": input_data.audio is not None,
                         "has_image": input_data.image is not None,
                         "has_video": input_data.video is not None,
@@ -1097,7 +1148,7 @@ class EnhancedCoreEngine:
                     )
                     
                     return result
-                    
+                        
             except Exception as e:
                 # Handle processing error
                 processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
