@@ -1463,6 +1463,53 @@ class PerformanceThresholdExceeded(BaseEvent):
 
 
 @dataclass
+class MetricExported(BaseEvent):
+    """Metric exported event."""
+    
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    metric_name: str = ""
+    metric_value: Union[float, int, str] = ""
+    export_format: str = ""
+    export_destination: str = ""
+
+
+@dataclass
+class MetricRecorded(BaseEvent):
+    """Metric recorded event."""
+    
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    metric_name: str = ""
+    metric_value: Union[float, int, str] = ""
+    metric_type: str = "gauge"  # gauge, counter, histogram
+    tags: Dict[str, str] = field(default_factory=dict)
+
+
+@dataclass  
+class MetricThresholdExceeded(BaseEvent):
+    """Metric threshold exceeded event."""
+    
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.WARNING
+    metric_name: str = ""
+    current_value: Union[float, int] = 0
+    threshold_value: Union[float, int] = 0
+    threshold_type: str = "upper"  # upper, lower
+
+
+@dataclass
+class PerformanceWarning(BaseEvent):
+    """Performance warning event."""
+    
+    category: EventCategory = field(default=EventCategory.PERFORMANCE, init=False)
+    priority: EventPriority = EventPriority.HIGH
+    severity: EventSeverity = EventSeverity.WARNING
+    warning_type: str = ""
+    message: str = ""
+    details: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class ResourceUsageHigh(BaseEvent):
     """High resource usage event."""
 
