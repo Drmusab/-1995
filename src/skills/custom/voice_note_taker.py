@@ -4,6 +4,14 @@ Supports Arabic (primary) and English (secondary)
 
 Author: Drmusab
 Created: 2025-08-05
+
+Take meeting notes, class summaries, or personal thoughts from voice input
+Structure notes by topic or timestamp
+Export as text, JSON, or Markdown
+Summarize content into bullet points or action items
+Save notes with date and time
+Store voice recordings in WAV or FLAC format
+Automatically tag/categorize content (tasks, ideas, quotes, memory, experience)
 """
 
 import json
