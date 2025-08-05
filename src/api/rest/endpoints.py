@@ -15,6 +15,7 @@ from src.core.config.loader import ConfigLoader
 from src.core.dependency_injection import Container
 from src.core.events.event_bus import EventBus
 from src.observability.logging.config import get_logger
+from src.skills.builtin.note_taker.note_taker_skill import NoteTakerSkill
 
 
 # Pydantic models for API requests/responses
@@ -89,6 +90,66 @@ class MemoryResponse(BaseModel):
     query_time: float = Field(..., description="Query time in seconds")
 
 
+# Note-taking API models
+class NoteStartRequest(BaseModel):
+    """Request to start note recording."""
+    
+    user_id: Optional[str] = Field(None, description="User ID")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+
+
+class NoteStartResponse(BaseModel):
+    """Response for note recording start."""
+    
+    note_id: str = Field(..., description="Note ID")
+    status: str = Field(..., description="Recording status")
+    message: str = Field(..., description="Status message")
+    session_info: Dict[str, Any] = Field(..., description="Session information")
+
+
+class NoteStopResponse(BaseModel):
+    """Response for note recording stop."""
+    
+    note_id: str = Field(..., description="Note ID")
+    status: str = Field(..., description="Processing status")
+    summary: Dict[str, Any] = Field(..., description="Note summary")
+    content: Dict[str, Any] = Field(..., description="Note content")
+
+
+class NoteResponse(BaseModel):
+    """Note data response."""
+    
+    metadata: Dict[str, Any] = Field(..., description="Note metadata")
+    content: Dict[str, Any] = Field(..., description="Note content")
+    audio_path: Optional[str] = Field(None, description="Audio file path")
+
+
+class NoteSearchResponse(BaseModel):
+    """Note search response."""
+    
+    notes: List[Dict[str, Any]] = Field(..., description="Matching notes")
+    total_count: int = Field(..., description="Total matching notes")
+    query_time: float = Field(..., description="Search time in seconds")
+
+
+class NoteExportRequest(BaseModel):
+    """Note export request."""
+    
+    format: str = Field("markdown", description="Export format")
+    include_audio: bool = Field(True, description="Include audio reference")
+
+
+class NoteExportResponse(BaseModel):
+    """Note export response."""
+    
+    note_id: str = Field(..., description="Note ID")
+    export_path: str = Field(..., description="Export file path")
+    format: str = Field(..., description="Export format")
+    file_size: int = Field(..., description="File size in bytes")
+    exported_at: str = Field(..., description="Export timestamp")
+
+
 # Security dependency
 security = HTTPBearer(auto_error=False)
 
@@ -158,6 +219,7 @@ class APIEndpoints:
         self.session_manager: Optional[EnhancedSessionManager] = None
         self.memory_integrator: Optional[SessionMemoryIntegrator] = None
         self.core_engine: Optional[EnhancedCoreEngine] = None
+        self.note_taker_skill: Optional[NoteTakerSkill] = None
 
         # Create router
         self.router = APIRouter(prefix="/api/v1", tags=["assistant"])
@@ -169,6 +231,7 @@ class APIEndpoints:
             self.session_manager = self.container.get(EnhancedSessionManager)
             self.memory_integrator = self.container.get(SessionMemoryIntegrator)
             self.core_engine = self.container.get(EnhancedCoreEngine)
+            self.note_taker_skill = NoteTakerSkill(self.container)
 
             self.logger.info("API endpoints initialized with core components")
         except Exception as e:
@@ -473,6 +536,166 @@ class APIEndpoints:
             except Exception as e:
                 self.logger.error(f"Store memory error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to store memory: {str(e)}")
+
+        # Note-taking endpoints
+        @self.router.post("/notes/start-recording", response_model=NoteStartResponse)
+        async def start_note_recording(
+            request: NoteStartRequest,
+            current_user: Optional[str] = Depends(get_current_user)
+        ) -> NoteStartResponse:
+            """Start a new voice recording session for note taking."""
+            try:
+                if not self.note_taker_skill:
+                    raise HTTPException(status_code=503, detail="Note taking service not available")
+                
+                result = await self.note_taker_skill.start_recording(
+                    user_id=request.user_id or current_user,
+                    session_id=request.session_id,
+                    metadata=request.metadata
+                )
+                
+                return NoteStartResponse(**result)
+                
+            except Exception as e:
+                self.logger.error(f"Start recording error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to start recording: {str(e)}")
+
+        @self.router.post("/notes/{note_id}/stop-recording", response_model=NoteStopResponse)
+        async def stop_note_recording(
+            note_id: str,
+            current_user: Optional[str] = Depends(get_current_user)
+        ) -> NoteStopResponse:
+            """Stop recording and process the captured note."""
+            try:
+                if not self.note_taker_skill:
+                    raise HTTPException(status_code=503, detail="Note taking service not available")
+                
+                result = await self.note_taker_skill.stop_recording(note_id)
+                
+                return NoteStopResponse(**result)
+                
+            except ValueError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            except Exception as e:
+                self.logger.error(f"Stop recording error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to stop recording: {str(e)}")
+
+        @self.router.get("/notes/{note_id}", response_model=NoteResponse)
+        async def get_note(
+            note_id: str,
+            current_user: Optional[str] = Depends(get_current_user)
+        ) -> NoteResponse:
+            """Retrieve a specific note by ID."""
+            try:
+                if not self.note_taker_skill:
+                    raise HTTPException(status_code=503, detail="Note taking service not available")
+                
+                result = await self.note_taker_skill.get_note(note_id)
+                
+                return NoteResponse(**result)
+                
+            except ValueError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            except Exception as e:
+                self.logger.error(f"Get note error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to retrieve note: {str(e)}")
+
+        @self.router.get("/notes/search", response_model=NoteSearchResponse)
+        async def search_notes(
+            query: Optional[str] = Query(None, description="Search query"),
+            category: Optional[str] = Query(None, description="Note category"),
+            tags: Optional[str] = Query(None, description="Comma-separated tags"),
+            language: Optional[str] = Query(None, description="Note language"),
+            limit: int = Query(20, description="Maximum results", ge=1, le=100),
+            current_user: Optional[str] = Depends(get_current_user)
+        ) -> NoteSearchResponse:
+            """Search notes by content, category, tags, or language."""
+            try:
+                if not self.note_taker_skill:
+                    raise HTTPException(status_code=503, detail="Note taking service not available")
+                
+                start_time = datetime.now(timezone.utc)
+                
+                # Parse tags
+                tag_list = tags.split(',') if tags else None
+                
+                notes = await self.note_taker_skill.search_notes(
+                    query=query,
+                    category=category,
+                    tags=tag_list,
+                    language=language,
+                    limit=limit
+                )
+                
+                query_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+                
+                return NoteSearchResponse(
+                    notes=notes,
+                    total_count=len(notes),
+                    query_time=query_time
+                )
+                
+            except Exception as e:
+                self.logger.error(f"Search notes error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to search notes: {str(e)}")
+
+        @self.router.post("/notes/{note_id}/export", response_model=NoteExportResponse)
+        async def export_note(
+            note_id: str,
+            request: NoteExportRequest,
+            current_user: Optional[str] = Depends(get_current_user)
+        ) -> NoteExportResponse:
+            """Export a note in the specified format."""
+            try:
+                if not self.note_taker_skill:
+                    raise HTTPException(status_code=503, detail="Note taking service not available")
+                
+                result = await self.note_taker_skill.export_note(
+                    note_id=note_id,
+                    format=request.format,
+                    include_audio=request.include_audio
+                )
+                
+                return NoteExportResponse(**result)
+                
+            except ValueError as e:
+                if "not found" in str(e):
+                    raise HTTPException(status_code=404, detail=str(e))
+                else:
+                    raise HTTPException(status_code=400, detail=str(e))
+            except Exception as e:
+                self.logger.error(f"Export note error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to export note: {str(e)}")
+
+        @self.router.get("/notes/categories")
+        async def get_note_categories(
+            current_user: Optional[str] = Depends(get_current_user)
+        ) -> List[Dict[str, str]]:
+            """Get available note categories."""
+            try:
+                if not self.note_taker_skill:
+                    raise HTTPException(status_code=503, detail="Note taking service not available")
+                
+                return await self.note_taker_skill.get_categories()
+                
+            except Exception as e:
+                self.logger.error(f"Get categories error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to get categories: {str(e)}")
+
+        @self.router.get("/notes/statistics")
+        async def get_note_statistics(
+            current_user: Optional[str] = Depends(get_current_user)
+        ) -> Dict[str, Any]:
+            """Get note-taking statistics."""
+            try:
+                if not self.note_taker_skill:
+                    raise HTTPException(status_code=503, detail="Note taking service not available")
+                
+                return await self.note_taker_skill.get_statistics()
+                
+            except Exception as e:
+                self.logger.error(f"Get statistics error: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
 
         @self.router.get("/health")
         async def health_check() -> Dict[str, Any]:

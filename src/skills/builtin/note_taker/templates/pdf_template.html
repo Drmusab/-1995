@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 40px;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        .metadata {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .tag {
+            background-color: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+            margin-right: 5px;
+        }
+        .transcription {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #6c757d;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        ul.action-list {
+            list-style-type: none;
+        }
+        ul.action-list li {
+            margin: 5px 0;
+        }
+        dl dt {
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        dl dd {
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+        code {
+            background-color: #e9ecef;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>{{ title }}</h1>
+    
+    <div class="metadata">
+        <p><strong>Created:</strong> {{ created_at }}</p>
+        <p><strong>Category:</strong> {{ category }}</p>
+        <p><strong>Language:</strong> {{ language }}</p>
+        <p><strong>Word Count:</strong> {{ word_count }}</p>
+        <p><strong>Duration:</strong> {{ duration }} seconds</p>
+        {% if tags %}
+        <p><strong>Tags:</strong> {% for tag in tags %}<span class="tag">{{ tag }}</span> {% endfor %}</p>
+        {% endif %}
+    </div>
+
+    {% if audio_path %}
+    <div class="audio-section">
+        <h2>Audio</h2>
+        <p>📎 <strong>Audio File:</strong> <code>{{ audio_path }}</code></p>
+    </div>
+    {% endif %}
+
+    {% if summary %}
+    <div class="summary-section">
+        <h2>Summary</h2>
+        <p>{{ summary }}</p>
+    </div>
+    {% endif %}
+
+    {% if key_points %}
+    <div class="keypoints-section">
+        <h2>Key Points</h2>
+        <ul>
+            {% for point in key_points %}
+            <li>{{ point }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if action_items %}
+    <div class="actions-section">
+        <h2>Action Items</h2>
+        <ul class="action-list">
+            {% for item in action_items %}
+            <li>☐ {{ item }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if definitions %}
+    <div class="definitions-section">
+        <h2>Definitions</h2>
+        <dl>
+            {% for term, definition in definitions.items() %}
+            <dt>{{ term }}</dt>
+            <dd>{{ definition }}</dd>
+            {% endfor %}
+        </dl>
+    </div>
+    {% endif %}
+
+    <div class="transcription-section">
+        <h2>Full Transcription</h2>
+        <div class="transcription">{{ transcription }}</div>
+    </div>
+</body>
+</html>
