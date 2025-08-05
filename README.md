@@ -103,13 +103,36 @@ mypy src
 
 ### Running in Docker
 
+#### Production Deployment
 ```bash
-# Development
-docker-compose -f docker/docker-compose.dev.yml up
+# Using docker-compose (recommended)
+cd docker
+docker-compose up -d
 
-# Production
-docker-compose -f docker/docker-compose.prod.yml up
+# Using Docker directly
+docker build -f docker/Dockerfile -t ai-assistant:latest .
+docker run -d -p 8000:8000 -v ai_data:/data ai-assistant:latest
 ```
+
+#### Development Environment
+```bash
+# Development with hot reload
+cd docker
+docker-compose -f docker-compose.dev.yml up -d
+
+# Access development container
+docker exec -it ai_assistant_dev bash
+```
+
+#### Docker Features
+- **Multi-stage builds** for optimized production images
+- **Security hardened** with non-root user and minimal attack surface
+- **Health checks** for reliable container orchestration
+- **Environment-specific** configurations for dev/prod
+- **Persistent volumes** for data and model storage
+- **Service mesh** with Redis, PostgreSQL, and Qdrant integration
+
+For detailed Docker deployment instructions, see [Docker Deployment Guide](docs/docker-deployment.md).
 
 ## Configuration
 

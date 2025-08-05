@@ -1,5 +1,5 @@
 # Multi-stage build for AI Assistant System
-FROM python:3.10-slim as builder
+FROM python:3.10-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -15,18 +15,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1-dev \
     ffmpeg \
     libgl1-mesa-glx \
+    ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install poetry for dependency management
-RUN pip install --no-cache-dir poetry
+# Configure pip to use HTTPS with proper certificates
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org
 
-# Copy only dependency definition files first for better caching
-COPY pyproject.toml poetry.lock* ./
+# Copy requirements and install dependencies directly
+COPY requirements/base.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org
 
-# Configure poetry to not create a virtual environment
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi --no-root
+# Copy the entire source code
+COPY . ./
 
 # Second stage: Runtime
 FROM python:3.10-slim
@@ -40,6 +41,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     ffmpeg \
     libgl1-mesa-glx \
+    curl \
+    ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -50,8 +53,14 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY . .
 
-# Create necessary directories for data persistence
-RUN mkdir -p /data/models /data/cache /data/user_data /data/knowledge_base /data/logs
+# Create necessary directories for data persistence and set permissions
+RUN mkdir -p /data/models /data/cache /data/user_data /data/knowledge_base /data/logs \
+    && chmod -R 755 /data
+
+# Create non-root user for security
+RUN groupadd -r aiassistant && useradd -r -g aiassistant aiassistant \
+    && chown -R aiassistant:aiassistant /app /data
+USER aiassistant
 
 # Environment variables
 ENV PYTHONPATH=/app
@@ -68,12 +77,12 @@ ENV LOG_PATH=/data/logs
 # Expose necessary ports (adjust based on your API needs)
 EXPOSE 8000 8080 50051
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+# Health check - simplified for containerized environment
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
 
 # Set up entrypoint
 ENTRYPOINT ["python", "-m", "src.main"]
 
 # Default command (can be overridden)
-CMD ["--config", "${CONFIG_PATH}"]
+CMD ["--config", "/app/configs/environments/production.yaml"]
