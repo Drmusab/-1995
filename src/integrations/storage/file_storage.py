@@ -46,13 +46,13 @@ import aiofiles.os
 import asyncio
 
 # Assistant components
-from src.assistant.component_manager import (
+from src.assistant.core import (
     ComponentMetadata,
     ComponentPriority,
     EnhancedComponentManager,
 )
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader

@@ -69,7 +69,7 @@ async def setup_rest_api(container: Container) -> FastAPI:
             components = {}
 
             try:
-                from src.assistant.session_manager import EnhancedSessionManager
+                from src.assistant.core import EnhancedSessionManager
 
                 container.get(EnhancedSessionManager)  # Test if available
                 components["session_manager"] = "available"
@@ -85,9 +85,9 @@ async def setup_rest_api(container: Container) -> FastAPI:
                 components["memory_integrator"] = "unavailable"
 
             try:
-                from src.assistant.core_engine import EnhancedCoreEngine
+                from src.assistant.core import CoreAssistantEngine
 
-                container.get(EnhancedCoreEngine)  # Test if available
+                container.get(CoreAssistantEngine)  # Test if available
                 components["core_engine"] = "available"
             except (ImportError, Exception):
                 components["core_engine"] = "unavailable"

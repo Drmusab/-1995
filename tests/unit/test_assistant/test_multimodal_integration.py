@@ -6,7 +6,7 @@ import numpy as np
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone
 
-from src.assistant.core_engine import EnhancedCoreEngine, MultimodalInput, ProcessingContext
+from src.assistant.core import EnhancedCoreEngine, MultimodalInput, ProcessingContext
 from src.core.dependency_injection import Container
 
 

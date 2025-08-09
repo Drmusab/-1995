@@ -101,12 +101,12 @@ from src.skills.skill_validator import SkillValidator
 
 # Assistant core components - Commented out to fix circular dependencies
 # TODO: Move assistant component configuration to application layer
-# from src.assistant.core_engine import EnhancedCoreEngine, EngineConfiguration
-# from src.assistant.component_manager import EnhancedComponentManager
-# from src.assistant.workflow_orchestrator import WorkflowOrchestrator
-# from src.assistant.session_manager import EnhancedSessionManager
-# from src.assistant.interaction_handler import InteractionHandler
-# from src.assistant.plugin_manager import EnhancedPluginManager
+# from src.assistant.core import CoreAssistantEngine, EngineConfiguration
+# from src.assistant.core import EnhancedComponentManager
+# from src.assistant.core import WorkflowOrchestrator
+# from src.assistant.core import EnhancedSessionManager
+# from src.assistant.core import InteractionHandler
+# from src.assistant.core import EnhancedPluginManager
 
 
 
@@ -443,7 +443,7 @@ class BaseSettings:
         """Register core assistant components."""
         try:
             # Component manager - dynamic import to avoid circular dependencies
-            from src.assistant.component_manager import EnhancedComponentManager
+            from src.assistant.core import EnhancedComponentManager
 
             self.container.register(
                 EnhancedComponentManager, lifecycle=ComponentLifecycle.SINGLETON.value
@@ -453,7 +453,7 @@ class BaseSettings:
 
         try:
             # Session manager
-            from src.assistant.session_manager import EnhancedSessionManager
+            from src.assistant.core import EnhancedSessionManager
 
             self.container.register(
                 EnhancedSessionManager, lifecycle=ComponentLifecycle.SINGLETON.value
@@ -463,7 +463,7 @@ class BaseSettings:
 
         try:
             # Workflow orchestrator
-            from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+            from src.assistant.core import WorkflowOrchestrator
 
             self.container.register(
                 WorkflowOrchestrator, lifecycle=ComponentLifecycle.SINGLETON.value
@@ -473,7 +473,7 @@ class BaseSettings:
 
         try:
             # Interaction handler
-            from src.assistant.interaction_handler import InteractionHandler
+            from src.assistant.core import InteractionHandler
 
             self.container.register(
                 InteractionHandler, lifecycle=ComponentLifecycle.SINGLETON.value
@@ -484,7 +484,7 @@ class BaseSettings:
         # Plugin manager
         if self.plugins.enabled:
             try:
-                from src.assistant.plugin_manager import EnhancedPluginManager
+                from src.assistant.core import EnhancedPluginManager
 
                 self.container.register(
                     EnhancedPluginManager, lifecycle=ComponentLifecycle.SINGLETON.value
@@ -494,8 +494,8 @@ class BaseSettings:
 
         # Core engine (main orchestrator)
         self.container.register(
-            EnhancedCoreEngine,
-            factory=lambda container: EnhancedCoreEngine(
+            CoreAssistantEngine,
+            factory=lambda container: CoreAssistantEngine(
                 container,
                 EngineConfiguration(
                     enable_speech_processing=self.processing.enable_speech_processing,
@@ -756,7 +756,7 @@ class BaseSettings:
             self.logger.info("Starting AI assistant system initialization...")
 
             # Get core engine and initialize
-            core_engine = self.container.get(EnhancedCoreEngine)
+            core_engine = self.container.get(CoreAssistantEngine)
             await core_engine.initialize()
 
             # Initialize component manager
@@ -783,7 +783,7 @@ class BaseSettings:
             self.logger.info("Starting AI assistant system cleanup...")
 
             # Shutdown core engine
-            core_engine = self.container.get(EnhancedCoreEngine)
+            core_engine = self.container.get(CoreAssistantEngine)
             await core_engine.shutdown()
 
             # Shutdown component manager

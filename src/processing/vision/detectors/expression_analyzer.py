@@ -32,8 +32,8 @@ import cv2
 import numpy as np
 
 # Assistant components
-from src.assistant.component_manager import ComponentInterface, ComponentMetadata, ComponentPriority
-from src.assistant.session_manager import SessionContext
+from src.assistant.core import ComponentInterface, ComponentMetadata, ComponentPriority
+from src.assistant.core import SessionContext
 
 # Core imports
 from src.core.config.loader import ConfigLoader

@@ -43,12 +43,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.assistant.component_manager import ComponentMetadata, EnhancedComponentManager
+from src.assistant.core import ComponentMetadata, EnhancedComponentManager
 
 # Assistant components
-from src.assistant.core_engine import EnhancedCoreEngine, ProcessingContext, ProcessingResult
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import CoreAssistantEngine, ProcessingContext, ProcessingResult
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader
@@ -1096,7 +1096,7 @@ class MultimodalAlignmentSystem:
         self.health_check = container.get(HealthCheck)
 
         # Assistant components
-        self.core_engine = container.get(EnhancedCoreEngine)
+        self.core_engine = container.get(CoreAssistantEngine)
         self.component_manager = container.get(EnhancedComponentManager)
         self.session_manager = container.get(EnhancedSessionManager)
         self.workflow_orchestrator = container.get(WorkflowOrchestrator)

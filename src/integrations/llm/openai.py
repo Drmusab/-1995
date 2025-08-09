@@ -43,7 +43,7 @@ from openai.types.images_response import ImagesResponse
 from PIL import Image
 
 # Assistant components
-from src.assistant.component_manager import ComponentManager, ComponentMetadata, ComponentPriority
+from src.assistant.core import ComponentManager, ComponentMetadata, ComponentPriority
 
 # Core imports
 from src.core.config.loader import ConfigLoader

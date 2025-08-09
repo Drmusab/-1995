@@ -37,8 +37,8 @@ from git import Repo
 from git.exc import GitCommandError, InvalidGitRepositoryError
 
 # Assistant components
-from src.assistant.component_manager import ComponentManager
-from src.assistant.plugin_manager import PluginManager
+from src.assistant.core import ComponentManager
+from src.assistant.core import PluginManager
 
 # Core imports
 from src.core.config.loader import ConfigLoader

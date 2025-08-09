@@ -28,8 +28,8 @@ import networkx as nx
 import yaml
 
 # Assistant components
-from src.assistant.component_manager import ComponentManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import ComponentManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader

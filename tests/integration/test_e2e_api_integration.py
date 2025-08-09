@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from src.core.dependency_injection import Container
 from src.core.di_config import create_configured_container, create_mock_factories
 from src.api.rest.setup import setup_rest_api
-from src.assistant.session_manager import EnhancedSessionManager, SessionType
+from src.assistant.core import EnhancedSessionManager, SessionType
 from src.assistant.session_memory_integrator import SessionMemoryIntegrator
 
 

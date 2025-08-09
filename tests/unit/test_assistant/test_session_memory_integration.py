@@ -6,7 +6,7 @@ from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone
 import uuid
 
-from src.assistant.session_manager import EnhancedSessionManager, SessionConfiguration, SessionType
+from src.assistant.core import EnhancedSessionManager, SessionConfiguration, SessionType
 from src.assistant.session_memory_integrator import SessionMemoryIntegrator, SessionMemoryContext
 from src.core.dependency_injection import Container
 from src.core.config.loader import ConfigLoader

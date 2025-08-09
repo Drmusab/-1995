@@ -7,15 +7,15 @@ from typing import Any, Dict, Type
 
 import asyncio
 
-from src.assistant.component_manager import EnhancedComponentManager
-from src.assistant.core_engine import EnhancedCoreEngine
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.plugin_manager import EnhancedPluginManager
+from src.assistant.core import EnhancedComponentManager
+from src.assistant.core import CoreAssistantEngine
+from src.assistant.core import InteractionHandler
+from src.assistant.core import EnhancedPluginManager
 
 # Core components
-from src.assistant.session_manager import EnhancedSessionManager
+from src.assistant.core import EnhancedSessionManager
 from src.assistant.session_memory_integrator import SessionMemoryIntegrator
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import WorkflowOrchestrator
 from src.core.config.loader import ConfigLoader
 from src.core.dependency_injection import Container, LifecycleScope
 from src.core.error_handling import ErrorHandler
@@ -238,8 +238,8 @@ class ComponentConfiguration:
 
         # Core engine (depends on many components)
         container.register(
-            EnhancedCoreEngine,
-            factory=lambda: EnhancedCoreEngine(container),
+            CoreAssistantEngine,
+            factory=lambda: CoreAssistantEngine(container),
             scope=LifecycleScope.SINGLETON,
         )
 

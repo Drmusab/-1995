@@ -21,12 +21,12 @@ from typing import Any, Dict, List, Optional, Set
 
 import asyncio
 
-from src.assistant.component_manager import EnhancedComponentManager
+from src.assistant.core import EnhancedComponentManager
 
 # Assistant components
-from src.assistant.core_engine import (
+from src.assistant.core import (
     EngineState,
-    EnhancedCoreEngine,
+    CoreAssistantEngine,
     ModalityType,
     MultimodalInput,
     PriorityLevel,
@@ -34,16 +34,16 @@ from src.assistant.core_engine import (
     ProcessingMode,
     ProcessingResult,
 )
-from src.assistant.interaction_handler import (
+from src.assistant.core import (
     InputModality,
     InteractionHandler,
     InteractionMode,
     OutputModality,
     UserMessage,
 )
-from src.assistant.plugin_manager import EnhancedPluginManager
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import EnhancedPluginManager
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader
@@ -217,8 +217,8 @@ class AIAssistant:
             await self.plugin_manager.initialize()
 
             # 5. Initialize core engine (processes inputs)
-            self.core_engine = EnhancedCoreEngine(self.container)
-            self.container.register(EnhancedCoreEngine, lambda: self.core_engine)
+            self.core_engine = CoreAssistantEngine(self.container)
+            self.container.register(CoreAssistantEngine, lambda: self.core_engine)
             await self.core_engine.initialize()
 
             # 6. Initialize interaction handler (manages user interactions)

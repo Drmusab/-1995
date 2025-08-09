@@ -34,14 +34,14 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.tree import Tree
 
-from src.assistant.component_manager import ComponentManager
+from src.assistant.core import ComponentManager
 
 # Assistant imports
-from src.assistant.core_engine import CoreEngine
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.plugin_manager import PluginManager
-from src.assistant.session_manager import SessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import CoreEngine
+from src.assistant.core import InteractionHandler
+from src.assistant.core import PluginManager
+from src.assistant.core import SessionManager
+from src.assistant.core import WorkflowOrchestrator
 from src.core.config.loader import ConfigLoader
 
 # Core imports

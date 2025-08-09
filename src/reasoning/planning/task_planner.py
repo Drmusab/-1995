@@ -31,7 +31,7 @@ from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Tup
 import asyncio
 import numpy as np
 
-from src.assistant.component_manager import ComponentManager
+from src.assistant.core import ComponentManager
 
 # Core imports
 from src.core.config.loader import ConfigLoader

@@ -31,10 +31,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.assistant.component_manager import ComponentManager
+from src.assistant.core import ComponentManager
 
 # Assistant components
-from src.assistant.session_manager import SessionManager
+from src.assistant.core import SessionManager
 
 # Core imports
 from src.core.config.loader import ConfigLoader

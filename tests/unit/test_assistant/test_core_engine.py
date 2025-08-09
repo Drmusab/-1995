@@ -102,7 +102,7 @@ class TestCoreEngineImportability:
                 'src.observability.monitoring.metrics': Mock(),
                 'src.utils.health': Mock()
             }):
-                from src.assistant.core_engine import CoreEngine
+                from src.assistant.core import CoreEngine
                 assert CoreEngine is not None, "CoreEngine class should be importable"
                 
         except ImportError as e:

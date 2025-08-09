@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from src.core.security.authentication import AuthenticationManager
 from src.core.security.authorization import AuthorizationManager  
 from src.core.security.sanitization import SecuritySanitizer
-from src.assistant.plugin_manager import EnhancedPluginManager, PluginType, SecurityLevel
+from src.assistant.core import EnhancedPluginManager, PluginType, SecurityLevel
 
 
 @pytest.fixture
@@ -260,7 +260,7 @@ class TestSecurityValidation:
     @pytest.mark.asyncio
     async def test_plugin_sandbox_isolation(self, mock_container):
         """Test plugin sandbox isolation."""
-        from src.assistant.plugin_manager import PluginSandbox
+        from src.assistant.core import PluginSandbox
         
         # Create sandbox for untrusted plugin
         sandbox = PluginSandbox(
@@ -289,7 +289,7 @@ class TestSecurityValidation:
     @pytest.mark.asyncio 
     async def test_session_security_validation(self):
         """Test session security validation."""
-        from src.assistant.session_manager import EnhancedSessionManager
+        from src.assistant.core import EnhancedSessionManager
         
         # Mock container for session manager
         container = Mock()

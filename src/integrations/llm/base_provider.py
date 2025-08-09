@@ -43,17 +43,17 @@ import asyncio
 import numpy as np
 import tiktoken
 
-from src.assistant.component_manager import (
+from src.assistant.core import (
     ComponentMetadata,
     ComponentPriority,
     EnhancedComponentManager,
 )
 
 # Assistant components
-from src.assistant.core_engine import ProcessingContext, ProcessingResult
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import ProcessingContext, ProcessingResult
+from src.assistant.core import InteractionHandler
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader

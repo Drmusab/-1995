@@ -73,45 +73,45 @@ from src.api.graphql.schema import (  # Core types; Enum types from schema; Sche
     WorkflowExecutionSchema,
     WorkflowStateEnum,
 )
-from src.assistant.component_manager import (
+from src.assistant.core import (
     ComponentPriority,
     ComponentState,
     EnhancedComponentManager,
 )
 
 # Assistant components
-from src.assistant.core_engine import (
+from src.assistant.core import (
     EngineState,
-    EnhancedCoreEngine,
+    CoreAssistantEngine,
 )
-from src.assistant.core_engine import MultimodalInput as CoreMultimodalInput
-from src.assistant.core_engine import (
+from src.assistant.core import MultimodalInput as CoreMultimodalInput
+from src.assistant.core import (
     PriorityLevel,
     ProcessingContext,
     ProcessingMode,
 )
-from src.assistant.core_engine import ProcessingResult as CoreProcessingResult
-from src.assistant.interaction_handler import (
+from src.assistant.core import ProcessingResult as CoreProcessingResult
+from src.assistant.core import (
     InputModality,
     InteractionHandler,
     InteractionMode,
     InteractionState,
     OutputModality,
 )
-from src.assistant.plugin_manager import (
+from src.assistant.core import (
     EnhancedPluginManager,
     PluginState,
     PluginType,
     SecurityLevel,
 )
-from src.assistant.session_manager import (
+from src.assistant.core import (
     EnhancedSessionManager,
     SessionConfiguration,
     SessionPriority,
     SessionState,
     SessionType,
 )
-from src.assistant.workflow_orchestrator import (
+from src.assistant.core import (
     ExecutionMode,
     WorkflowOrchestrator,
     WorkflowPriority,
@@ -284,7 +284,7 @@ class GraphQLContext:
         self.user_info: Optional[Dict[str, Any]] = None
 
         # Core components
-        self.core_engine = container.get(EnhancedCoreEngine)
+        self.core_engine = container.get(CoreAssistantEngine)
         self.component_manager = container.get(EnhancedComponentManager)
         self.workflow_orchestrator = container.get(WorkflowOrchestrator)
         self.session_manager = container.get(EnhancedSessionManager)
@@ -1053,7 +1053,7 @@ class GraphQLResolver:
         self.logger = get_logger(__name__)
 
         # Core components
-        self.core_engine = container.get(EnhancedCoreEngine)
+        self.core_engine = container.get(CoreAssistantEngine)
         self.component_manager = container.get(EnhancedComponentManager)
         self.workflow_orchestrator = container.get(WorkflowOrchestrator)
         self.session_manager = container.get(EnhancedSessionManager)

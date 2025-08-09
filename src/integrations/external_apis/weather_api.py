@@ -31,10 +31,10 @@ import aiohttp
 import asyncio
 
 # Assistant components
-from src.assistant.component_manager import ComponentManager, ComponentMetadata, ComponentPriority
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.session_manager import SessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import ComponentManager, ComponentMetadata, ComponentPriority
+from src.assistant.core import InteractionHandler
+from src.assistant.core import SessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader
