@@ -1038,6 +1038,53 @@ class SkillExecutionFailed(BaseEvent):
 
 
 @dataclass
+class SkillExecuted(BaseEvent):
+    """Skill executed successfully event (alias for compatibility)."""
+
+    category: EventCategory = field(default=EventCategory.SKILL, init=False)
+    skill_id: str = ""
+    skill_name: str = ""
+    execution_id: str = ""
+    execution_time: float = 0.0
+    result: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TaskCompleted(BaseEvent):
+    """Task completed event."""
+
+    category: EventCategory = field(default=EventCategory.WORKFLOW, init=False)
+    task_id: str = ""
+    task_name: str = ""
+    execution_id: str = ""
+    result: Dict[str, Any] = field(default_factory=dict)
+    completion_time: float = 0.0
+
+
+@dataclass
+class MemoryUpdated(BaseEvent):
+    """Memory updated event."""
+
+    category: EventCategory = field(default=EventCategory.MEMORY, init=False)
+    memory_type: str = ""
+    operation: str = ""  # add, update, delete, consolidate
+    memory_id: str = ""
+    content_preview: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SystemHealthCheck(BaseEvent):
+    """System health check event."""
+
+    category: EventCategory = field(default=EventCategory.HEALTH, init=False)
+    component_name: str = ""
+    health_status: str = ""  # healthy, degraded, unhealthy
+    metrics: Dict[str, Any] = field(default_factory=dict)
+    recommendations: List[str] = field(default_factory=list)
+
+
+@dataclass
 class SkillRegistered(BaseEvent):
     """Skill registered event."""
 
@@ -1777,6 +1824,8 @@ EVENT_TYPES = {
     "SkillExecutionStarted": SkillExecutionStarted,
     "SkillExecutionCompleted": SkillExecutionCompleted,
     "SkillExecutionFailed": SkillExecutionFailed,
+    "SkillExecuted": SkillExecuted,  # New compatibility alias
+    "TaskCompleted": TaskCompleted,  # New event type
     "SkillRegistered": SkillRegistered,
     "SkillUnregistered": SkillUnregistered,
     "SkillValidationStarted": SkillValidationStarted,
@@ -1831,8 +1880,11 @@ EVENT_TYPES = {
     "HealthCheckStarted": HealthCheckStarted,
     "HealthCheckCompleted": HealthCheckCompleted,
     "HealthCheckFailed": HealthCheckFailed,
+    "SystemHealthCheck": SystemHealthCheck,  # New event type
     "AlertTriggered": AlertTriggered,
     "AlertResolved": AlertResolved,
+    # Memory Events
+    "MemoryUpdated": MemoryUpdated,  # New event type
     # Audit Events
     "AuditLogEntry": AuditLogEntry,
     "DataAccessEvent": DataAccessEvent,
