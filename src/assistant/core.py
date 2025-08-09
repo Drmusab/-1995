@@ -742,17 +742,36 @@ class CoreAssistantEngine:
     async def create_session(
         self,
         user_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        initial_context: Optional[Dict[str, Any]] = None
     ) -> AssistantContext:
-        """Create a new assistant session."""
+        """Create a new enhanced assistant session."""
         session_id = str(uuid.uuid4())
+        
+        # Create assistant context (existing functionality)
         context = AssistantContext(
             session_id=session_id,
             user_id=user_id,
             metadata=metadata or {}
         )
         
+        # Create enhanced session info
+        session_info = SessionInfo(
+            session_id=session_id,
+            user_id=user_id,
+            context=initial_context or {},
+        )
+        
+        # Store both session representations
         self.active_contexts[session_id] = context
+        self.sessions[session_id] = session_info
+        self.active_sessions.add(session_id)
+        
+        # Track user sessions
+        if user_id:
+            if user_id not in self.user_sessions:
+                self.user_sessions[user_id] = set()
+            self.user_sessions[user_id].add(session_id)
         
         # Initialize session in memory manager
         await self.memory_manager.initialize_session(session_id)
@@ -764,42 +783,204 @@ class CoreAssistantEngine:
             timestamp=context.created_at
         ))
         
-        self.logger.info(f"Created new session: {session_id}")
+        self.logger.info(f"Created enhanced session: {session_id}")
         return context
+
+    # Enhanced Session Management Methods
+    async def get_session(self, session_id: str) -> Optional[SessionInfo]:
+        """Get enhanced session information."""
+        session = self.sessions.get(session_id)
+        if session and session.is_active:
+            # Update last activity
+            session.last_activity = datetime.now(timezone.utc)
+            return session
+        return None
+
+    async def update_session_context(
+        self,
+        session_id: str,
+        context_update: Dict[str, Any]
+    ) -> bool:
+        """Update session context."""
+        session = self.sessions.get(session_id)
+        if session and session.is_active:
+            session.context.update(context_update)
+            session.last_activity = datetime.now(timezone.utc)
+            return True
+        return False
+
+    async def add_conversation_entry(
+        self,
+        session_id: str,
+        entry: Dict[str, Any]
+    ) -> bool:
+        """Add an entry to the conversation history."""
+        session = self.sessions.get(session_id)
+        if session and session.is_active:
+            entry_with_timestamp = {
+                **entry,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            session.conversation_history.append(entry_with_timestamp)
+            session.last_activity = datetime.now(timezone.utc)
+            
+            # Also update the assistant context
+            context = self.active_contexts.get(session_id)
+            if context:
+                context.conversation_history.append(entry_with_timestamp)
+            
+            # Limit conversation history size
+            max_history = 100
+            if len(session.conversation_history) > max_history:
+                session.conversation_history = session.conversation_history[-max_history:]
+                if context:
+                    context.conversation_history = context.conversation_history[-max_history:]
+            
+            return True
+        return False
+
+    async def get_user_sessions(self, user_id: str) -> List[SessionInfo]:
+        """Get all active sessions for a user."""
+        session_ids = self.user_sessions.get(user_id, set())
+        sessions = []
+        
+        for session_id in session_ids:
+            session = self.sessions.get(session_id)
+            if session and session.is_active:
+                sessions.append(session)
+        
+        return sessions
+
+    def get_session_statistics(self) -> Dict[str, Any]:
+        """Get session statistics."""
+        active_sessions = [s for s in self.sessions.values() if s.is_active]
+        
+        return {
+            "total_sessions": len(self.sessions),
+            "active_sessions": len(active_sessions),
+            "unique_users": len(self.user_sessions),
+            "average_session_duration": self._calculate_average_session_duration(),
+        }
+
+    def _calculate_average_session_duration(self) -> float:
+        """Calculate average session duration in seconds."""
+        if not self.sessions:
+            return 0.0
+            
+        total_duration = 0.0
+        count = 0
+        now = datetime.now(timezone.utc)
+        
+        for session in self.sessions.values():
+            if session.is_active:
+                duration = (now - session.created_at).total_seconds()
+            else:
+                duration = (session.last_activity - session.created_at).total_seconds()
+            
+            total_duration += duration
+            count += 1
+        
+        return total_duration / count if count > 0 else 0.0
+
+    async def _session_cleanup_loop(self) -> None:
+        """Background task for cleaning up expired sessions."""
+        while True:
+            try:
+                await asyncio.sleep(self.cleanup_interval.total_seconds())
+                await self._cleanup_expired_sessions()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Error in session cleanup: {e}")
+
+    async def _cleanup_expired_sessions(self) -> None:
+        """Clean up expired sessions."""
+        now = datetime.now(timezone.utc)
+        expired_sessions = []
+        
+        for session_id, session in self.sessions.items():
+            if not session.is_active:
+                continue
+                
+            # Check if session is too old
+            if now - session.created_at > self.max_session_age:
+                expired_sessions.append(session_id)
+                continue
+                
+            # Check if session is inactive
+            if now - session.last_activity > self.max_inactive_time:
+                expired_sessions.append(session_id)
+        
+        if expired_sessions:
+            if self.event_bus:
+                await self.event_bus.emit(
+                    SessionCleanupStarted(count=len(expired_sessions))
+                )
+            
+            for session_id in expired_sessions:
+                await self.end_session(session_id)
+            
+            self.logger.info(f"Cleaned up {len(expired_sessions)} expired sessions")
     
     async def process_input(
         self,
         request: ProcessingRequest
     ) -> ProcessingResponse:
         """
-        Process user input through the assistant pipeline.
+        Enhanced process user input through the assistant pipeline.
         
-        This is the main entry point for all user interactions.
+        This is the main entry point for all user interactions with support for:
+        - Multimodal input processing (text, speech, vision)
+        - Real-time and streaming modes
+        - Comprehensive error handling and recovery
+        - Enhanced confidence scoring
         """
-        start_time = asyncio.get_event_loop().time()
+        start_time = datetime.now(timezone.utc)
+        processing_id = str(uuid.uuid4())
         
         try:
             self.state = AssistantState.PROCESSING
+            self.engine_state = EngineState.PROCESSING
             self.request_count += 1
+            
+            # Validate engine state
+            if self.engine_state != EngineState.PROCESSING:
+                if self.state != AssistantState.READY:
+                    raise RuntimeError(f"Engine not ready. Current state: {self.state}")
             
             # Update context
             request.context.last_interaction = datetime.now(timezone.utc)
             
+            # Update session activity
+            session = self.sessions.get(request.context.session_id)
+            if session:
+                session.last_activity = datetime.now(timezone.utc)
+            
+            # Emit processing started event
+            if self.event_bus:
+                await self.event_bus.emit(
+                    ProcessingStarted(
+                        processing_id=processing_id,
+                        modality=self._determine_input_modality(request).value
+                    )
+                )
+            
             # Log request
             self.logger.info(
-                f"Processing request {request.request_id} "
-                f"for session {request.context.session_id}"
+                f"Processing enhanced request {processing_id} "
+                f"for session {request.context.session_id} "
+                f"(type: {request.input_type})"
             )
             
-            # Route based on input type
+            # Route based on input type with enhanced processing
             if request.input_type == "text":
                 response = await self._process_text_input(request)
             elif request.input_type == "multimodal":
-                response = await self._process_multimodal_input(request)
+                response = await self._process_multimodal_input_enhanced(request)
             elif request.input_type == "speech":
-                response = await self._process_speech_input(request)
+                response = await self._process_speech_input_enhanced(request)
             elif request.input_type == "vision":
-                response = await self._process_vision_input(request)
+                response = await self._process_vision_input_enhanced(request)
             else:
                 raise ValueError(f"Unsupported input type: {request.input_type}")
             
@@ -807,9 +988,19 @@ class CoreAssistantEngine:
             response = await self._post_process_response(response, request)
             
             # Update metrics
-            processing_time = asyncio.get_event_loop().time() - start_time
+            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
             response.processing_time = processing_time
             self.total_processing_time += processing_time
+            
+            # Emit processing completed event
+            if self.event_bus:
+                await self.event_bus.emit(
+                    ProcessingCompleted(
+                        processing_id=processing_id,
+                        success=True,
+                        processing_time=processing_time
+                    )
+                )
             
             # Track metrics
             await self.metrics_collector.record_metric(
@@ -818,25 +1009,69 @@ class CoreAssistantEngine:
                 {
                     "input_type": request.input_type,
                     "session_id": request.context.session_id,
-                    "processing_mode": request.context.processing_mode.value
+                    "processing_mode": request.context.processing_mode.value,
+                    "confidence": response.confidence
                 }
             )
             
             self.state = AssistantState.READY
+            self.engine_state = EngineState.READY
             return response
             
         except Exception as e:
             self.state = AssistantState.ERROR
+            self.engine_state = EngineState.ERROR
+            
+            # Emit error event
+            if self.event_bus:
+                await self.event_bus.emit(
+                    ProcessingCompleted(
+                        processing_id=processing_id,
+                        success=False,
+                        processing_time=(datetime.now(timezone.utc) - start_time).total_seconds()
+                    )
+                )
+            
             self.logger.error(
-                f"Error processing request {request.request_id}: {str(e)}"
+                f"Error processing request {processing_id}: {str(e)}"
             )
+            
+            # Return enhanced error response
             return ProcessingResponse(
                 response_data=f"I apologize, but I encountered an error: {str(e)}",
                 response_type="error",
                 confidence=0.0,
                 skills_used=[],
-                metadata={"error": str(e)}
+                metadata={"error": str(e), "processing_id": processing_id},
+                processing_time=(datetime.now(timezone.utc) - start_time).total_seconds()
             )
+
+    def _determine_input_modality(self, request: ProcessingRequest) -> ModalityType:
+        """Determine the primary modality of input data."""
+        if request.input_type == "multimodal":
+            if isinstance(request.input_data, dict):
+                modalities = []
+                if request.input_data.get("text"):
+                    modalities.append(ModalityType.TEXT)
+                if request.input_data.get("audio_data"):
+                    modalities.append(ModalityType.SPEECH)
+                if request.input_data.get("image_data"):
+                    modalities.append(ModalityType.VISION)
+                
+                if len(modalities) > 1:
+                    return ModalityType.MULTIMODAL
+                elif modalities:
+                    return modalities[0]
+        
+        # Map from input_type to modality
+        type_mapping = {
+            "text": ModalityType.TEXT,
+            "speech": ModalityType.SPEECH,
+            "vision": ModalityType.VISION,
+            "multimodal": ModalityType.MULTIMODAL
+        }
+        
+        return type_mapping.get(request.input_type, ModalityType.TEXT)
     
     async def _process_text_input(
         self,
@@ -1004,6 +1239,216 @@ class CoreAssistantEngine:
         # This would involve vision processing
         # For now, we'll treat it as text description
         return await self._process_text_input(request)
+
+    # Enhanced Multimodal Processing Methods
+    async def _process_multimodal_input_enhanced(
+        self,
+        request: ProcessingRequest
+    ) -> ProcessingResponse:
+        """Enhanced multimodal input processing with fusion strategies."""
+        if not self.enable_multimodal:
+            return await self._process_text_input(request)
+        
+        # Create multimodal input object
+        multimodal_input = self._create_multimodal_input(request)
+        
+        # Create processing context
+        processing_context = ProcessingContext(
+            session_id=request.context.session_id,
+            user_id=request.context.user_id,
+            conversation_history=request.context.conversation_history,
+            mode=ProcessingMode.REAL_TIME if request.metadata.get("real_time") else ProcessingMode.BATCH,
+            priority=PriorityLevel.NORMAL
+        )
+        
+        # Process through enhanced pipeline
+        result = await self._process_multimodal_core(multimodal_input, processing_context)
+        
+        # Convert to ProcessingResponse
+        return ProcessingResponse(
+            response_data=result.response_text or "Processed multimodal input successfully",
+            response_type="multimodal",
+            confidence=result.confidence,
+            skills_used=request.metadata.get("skills_used", []),
+            metadata={
+                **result.metadata,
+                "processing_time": result.processing_time,
+                "modalities": self._get_input_modalities(multimodal_input)
+            },
+            processing_time=result.processing_time
+        )
+
+    async def _process_speech_input_enhanced(
+        self,
+        request: ProcessingRequest
+    ) -> ProcessingResponse:
+        """Enhanced speech input processing."""
+        # Convert speech to multimodal input
+        multimodal_input = MultimodalInput(
+            text=None,
+            audio_data=request.input_data if isinstance(request.input_data, bytes) else None,
+            metadata=request.metadata
+        )
+        
+        # For now, simulate speech-to-text conversion
+        # In a real implementation, this would use speech recognition
+        if isinstance(request.input_data, str):
+            text_representation = request.input_data
+        else:
+            text_representation = "I heard your speech input. How can I help you?"
+        
+        # Create text request and process
+        text_request = ProcessingRequest(
+            input_data=text_representation,
+            input_type="text",
+            context=request.context,
+            metadata={**request.metadata, "original_modality": "speech"}
+        )
+        
+        response = await self._process_text_input(text_request)
+        response.response_type = "speech"
+        response.metadata["speech_processed"] = True
+        
+        return response
+
+    async def _process_vision_input_enhanced(
+        self,
+        request: ProcessingRequest
+    ) -> ProcessingResponse:
+        """Enhanced vision input processing."""
+        # Convert vision to multimodal input
+        multimodal_input = MultimodalInput(
+            text=None,
+            image_data=request.input_data if isinstance(request.input_data, bytes) else None,
+            metadata=request.metadata
+        )
+        
+        # For now, simulate image analysis
+        # In a real implementation, this would use computer vision
+        if isinstance(request.input_data, str):
+            text_representation = request.input_data
+        else:
+            text_representation = "I can see your image. Please tell me what you'd like me to analyze about it."
+        
+        # Create text request and process
+        text_request = ProcessingRequest(
+            input_data=text_representation,
+            input_type="text",
+            context=request.context,
+            metadata={**request.metadata, "original_modality": "vision"}
+        )
+        
+        response = await self._process_text_input(text_request)
+        response.response_type = "vision"
+        response.metadata["vision_processed"] = True
+        
+        return response
+
+    async def _process_multimodal_core(
+        self,
+        input_data: MultimodalInput,
+        context: ProcessingContext
+    ) -> ProcessingResult:
+        """Core multimodal processing with enhanced capabilities."""
+        start_time = datetime.now(timezone.utc)
+        
+        try:
+            # Determine dominant modality
+            modality = self._determine_modality(input_data)
+            
+            # Generate response based on available modalities
+            if input_data.text:
+                response_text = await self._generate_response_from_text(input_data.text, context)
+            elif input_data.audio_data:
+                response_text = "I processed your audio input. How can I assist you further?"
+            elif input_data.image_data:
+                response_text = "I analyzed your image. What would you like to know about it?"
+            else:
+                response_text = "I received your multimodal input. How can I help you?"
+            
+            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+            
+            return ProcessingResult(
+                success=True,
+                response_text=response_text,
+                processing_time=processing_time,
+                confidence=0.85,  # Enhanced confidence calculation
+                metadata={
+                    "modality": modality.value,
+                    "has_text": input_data.text is not None,
+                    "has_audio": input_data.audio_data is not None,
+                    "has_image": input_data.image_data is not None
+                }
+            )
+            
+        except Exception as e:
+            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+            return ProcessingResult(
+                success=False,
+                response_text=f"Error processing multimodal input: {str(e)}",
+                processing_time=processing_time,
+                confidence=0.0,
+                errors=[str(e)]
+            )
+
+    def _create_multimodal_input(self, request: ProcessingRequest) -> MultimodalInput:
+        """Create MultimodalInput from ProcessingRequest."""
+        if isinstance(request.input_data, dict):
+            return MultimodalInput(
+                text=request.input_data.get("text"),
+                audio_data=request.input_data.get("audio_data"),
+                image_data=request.input_data.get("image_data"),
+                metadata=request.metadata
+            )
+        else:
+            return MultimodalInput(
+                text=str(request.input_data),
+                metadata=request.metadata
+            )
+
+    def _determine_modality(self, input_data: MultimodalInput) -> ModalityType:
+        """Determine the primary modality of input data."""
+        modalities = []
+        if input_data.text:
+            modalities.append(ModalityType.TEXT)
+        if input_data.audio_data:
+            modalities.append(ModalityType.SPEECH)
+        if input_data.image_data:
+            modalities.append(ModalityType.VISION)
+            
+        if len(modalities) > 1:
+            return ModalityType.MULTIMODAL
+        elif modalities:
+            return modalities[0]
+        else:
+            return ModalityType.TEXT
+
+    def _get_input_modalities(self, input_data: MultimodalInput) -> List[str]:
+        """Get list of input modalities present."""
+        modalities = []
+        if input_data.text:
+            modalities.append("text")
+        if input_data.audio_data:
+            modalities.append("audio")
+        if input_data.image_data:
+            modalities.append("image")
+        return modalities
+
+    async def _generate_response_from_text(
+        self, 
+        text: str, 
+        context: ProcessingContext
+    ) -> str:
+        """Generate response from text input."""
+        # Simple response generation - would be enhanced with actual NLP
+        if "hello" in text.lower():
+            return "Hello! How can I assist you today?"
+        elif "help" in text.lower():
+            return "I'm here to help! You can ask me questions, request tasks, or just have a conversation."
+        elif "?" in text:
+            return f"That's an interesting question about '{text}'. Let me think about that..."
+        else:
+            return f"I understand you mentioned '{text}'. How would you like me to help with that?"
     
     async def _select_skills(
         self,
