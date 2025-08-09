@@ -1597,26 +1597,489 @@ Please provide a helpful and contextual response in {context.language_preference
         ))
     
     async def end_session(self, session_id: str) -> None:
-        """End an assistant session."""
+        """End an enhanced assistant session."""
         if session_id not in self.active_contexts:
             self.logger.warning(f"Attempted to end non-existent session: {session_id}")
             return
         
         context = self.active_contexts[session_id]
+        session = self.sessions.get(session_id)
+        
+        # Mark session as inactive
+        if session:
+            session.is_active = False
+            
+            # Remove from user sessions
+            if session.user_id and session.user_id in self.user_sessions:
+                self.user_sessions[session.user_id].discard(session_id)
+                if not self.user_sessions[session.user_id]:
+                    del self.user_sessions[session.user_id]
         
         # Clean up session in memory manager
         await self.memory_manager.cleanup_session(session_id)
         
-        # Remove from active contexts
+        # Remove from active contexts and sessions
         del self.active_contexts[session_id]
+        self.active_sessions.discard(session_id)
+        
+        # End any active interactions for this session
+        interactions_to_end = [
+            iid for iid, info in self.active_interactions.items()
+            if info.session_id == session_id
+        ]
+        for interaction_id in interactions_to_end:
+            await self.end_interaction(interaction_id)
+        
+        # Calculate duration
+        duration = (datetime.now(timezone.utc) - context.created_at).total_seconds()
         
         # Emit session ended event
         await self.event_bus.emit(SessionEnded(
             session_id=session_id,
-            duration=(datetime.now(timezone.utc) - context.created_at).total_seconds()
+            user_id=context.user_id,
+            duration=duration
         ))
         
-        self.logger.info(f"Ended session: {session_id}")
+        self.logger.info(f"Ended enhanced session: {session_id}")
+
+    # Interaction Handling Methods
+    async def start_interaction(
+        self,
+        user_id: Optional[str],
+        session_id: str,
+        interaction_mode: InteractionMode,
+        input_modalities: Set[InputModality],
+        output_modalities: Set[OutputModality],
+        context: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Start a new interaction."""
+        interaction_id = str(uuid.uuid4())
+        
+        interaction_info = InteractionInfo(
+            interaction_id=interaction_id,
+            user_id=user_id,
+            session_id=session_id,
+            mode=interaction_mode,
+            input_modalities=input_modalities,
+            output_modalities=output_modalities,
+            context=context or {}
+        )
+        
+        self.active_interactions[interaction_id] = interaction_info
+        
+        if self.event_bus:
+            await self.event_bus.emit(
+                UserInteractionStarted(
+                    interaction_id=interaction_id,
+                    user_id=user_id,
+                    session_id=session_id
+                )
+            )
+        
+        self.logger.info(f"Started interaction {interaction_id}")
+        return interaction_id
+
+    async def process_user_message(
+        self,
+        interaction_id: str,
+        message: UserMessage,
+        real_time: bool = False,
+        streaming: bool = False
+    ) -> AssistantResponse:
+        """Process a user message and generate response."""
+        interaction = self.active_interactions.get(interaction_id)
+        if not interaction:
+            raise ValueError(f"Interaction {interaction_id} not found")
+        
+        start_time = datetime.now(timezone.utc)
+        
+        try:
+            # Update interaction info
+            interaction.last_activity = datetime.now(timezone.utc)
+            interaction.message_count += 1
+            
+            # Create processing request from user message
+            request = ProcessingRequest(
+                input_data=message.text or "No text provided",
+                input_type=message.modality.value,
+                context=self.active_contexts[interaction.session_id],
+                metadata={
+                    "interaction_id": interaction_id,
+                    "message_id": message.message_id,
+                    "real_time": real_time,
+                    "streaming": streaming
+                }
+            )
+            
+            # Process through main pipeline
+            processing_response = await self.process_input(request)
+            
+            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+            
+            # Convert to assistant response
+            response = AssistantResponse(
+                text=processing_response.response_data,
+                modalities={OutputModality.TEXT},
+                processing_time=processing_time,
+                confidence=processing_response.confidence,
+                metadata=processing_response.metadata
+            )
+            
+            # Add suggested follow-ups
+            response.suggested_follow_ups = [
+                "Can you tell me more about that?",
+                "What else can I help you with?",
+                "Would you like to explore related topics?"
+            ]
+            
+            return response
+            
+        except Exception as e:
+            self.logger.error(f"Error processing message: {e}")
+            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+            
+            return AssistantResponse(
+                text="I apologize, but I encountered an error processing your request. Please try again.",
+                modalities={OutputModality.TEXT},
+                processing_time=processing_time,
+                confidence=0.0,
+                metadata={"error": str(e)}
+            )
+
+    async def end_interaction(self, interaction_id: str) -> bool:
+        """End an interaction."""
+        interaction = self.active_interactions.get(interaction_id)
+        if not interaction:
+            return False
+        
+        duration = (datetime.now(timezone.utc) - interaction.started_at).total_seconds()
+        
+        if self.event_bus:
+            await self.event_bus.emit(
+                UserInteractionCompleted(
+                    interaction_id=interaction_id,
+                    user_id=interaction.user_id,
+                    session_id=interaction.session_id,
+                    duration=duration,
+                    message_count=interaction.message_count
+                )
+            )
+        
+        del self.active_interactions[interaction_id]
+        self.logger.info(f"Ended interaction {interaction_id}")
+        return True
+
+    def get_active_interactions(self) -> List[str]:
+        """Get list of active interaction IDs."""
+        return list(self.active_interactions.keys())
+
+    # Plugin Management Methods
+    async def _load_plugin(self, plugin_id: str) -> bool:
+        """Load a plugin."""
+        plugin = self.plugins.get(plugin_id)
+        if not plugin:
+            self.logger.error(f"Plugin {plugin_id} not found")
+            return False
+        
+        if plugin.status != PluginStatus.UNLOADED:
+            self.logger.warning(f"Plugin {plugin_id} already loaded")
+            return True
+        
+        try:
+            # Check dependencies
+            if not await self._check_plugin_dependencies(plugin_id):
+                return False
+            
+            # Load plugin (stub implementation)
+            await self._load_plugin_implementation(plugin_id)
+            
+            plugin.status = PluginStatus.LOADED
+            plugin.loaded_at = datetime.now(timezone.utc)
+            
+            if self.event_bus:
+                await self.event_bus.emit(
+                    PluginLoaded(
+                        plugin_id=plugin_id,
+                        plugin_name=plugin.name,
+                        version=plugin.version
+                    )
+                )
+            
+            self.logger.info(f"Loaded plugin {plugin_id}")
+            return True
+            
+        except Exception as e:
+            plugin.status = PluginStatus.ERROR
+            self.logger.error(f"Failed to load plugin {plugin_id}: {e}")
+            return False
+
+    async def _enable_plugin(self, plugin_id: str) -> bool:
+        """Enable a plugin."""
+        plugin = self.plugins.get(plugin_id)
+        if not plugin:
+            return False
+        
+        if plugin.status != PluginStatus.LOADED:
+            # Try to load first
+            if not await self._load_plugin(plugin_id):
+                return False
+        
+        try:
+            plugin.status = PluginStatus.ENABLED
+            self.enabled_plugins.add(plugin_id)
+            
+            if self.event_bus:
+                await self.event_bus.emit(
+                    PluginEnabled(
+                        plugin_id=plugin_id,
+                        plugin_name=plugin.name
+                    )
+                )
+            
+            self.logger.info(f"Enabled plugin {plugin_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to enable plugin {plugin_id}: {e}")
+            return False
+
+    async def _check_plugin_dependencies(self, plugin_id: str) -> bool:
+        """Check if plugin dependencies are satisfied."""
+        plugin = self.plugins.get(plugin_id)
+        if not plugin:
+            return False
+        
+        for dep_id in plugin.dependencies:
+            dep_plugin = self.plugins.get(dep_id)
+            if not dep_plugin or dep_plugin.status not in [PluginStatus.LOADED, PluginStatus.ENABLED]:
+                self.logger.error(f"Plugin {plugin_id} dependency {dep_id} not satisfied")
+                return False
+        
+        return True
+
+    async def _load_plugin_implementation(self, plugin_id: str) -> None:
+        """Load the actual plugin implementation (stub)."""
+        # This would normally load the plugin code, validate it, etc.
+        await asyncio.sleep(0.1)  # Simulate loading time
+
+    def list_plugins(self) -> List[PluginInfo]:
+        """List all plugins."""
+        return list(self.plugins.values())
+
+    def get_enabled_plugins(self) -> List[str]:
+        """Get list of enabled plugin IDs."""
+        return list(self.enabled_plugins)
+
+    # Workflow Execution Methods
+    async def execute_workflow(
+        self,
+        workflow_id: str,
+        input_data: Dict[str, Any],
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> str:
+        """Execute a workflow."""
+        workflow = self.workflows.get(workflow_id)
+        if not workflow:
+            raise ValueError(f"Workflow {workflow_id} not found")
+        
+        execution_id = str(uuid.uuid4())
+        
+        execution = WorkflowExecution(
+            execution_id=execution_id,
+            workflow_id=workflow_id,
+            session_id=session_id,
+            user_id=user_id,
+            input_data=input_data,
+            started_at=datetime.now(timezone.utc)
+        )
+        
+        self.executions[execution_id] = execution
+        self.active_executions.add(execution_id)
+        
+        if self.event_bus:
+            await self.event_bus.emit(
+                WorkflowStarted(
+                    workflow_id=workflow_id,
+                    execution_id=execution_id,
+                    user_id=user_id
+                )
+            )
+        
+        # Start execution in background
+        asyncio.create_task(self._execute_workflow(execution_id))
+        
+        self.logger.info(f"Started workflow execution {execution_id}")
+        return execution_id
+
+    async def _execute_workflow(self, execution_id: str) -> None:
+        """Execute a workflow instance."""
+        execution = self.executions.get(execution_id)
+        workflow = self.workflows.get(execution.workflow_id) if execution else None
+        
+        if not execution or not workflow:
+            return
+        
+        try:
+            execution.status = WorkflowStatus.RUNNING
+            
+            # Execute steps in dependency order
+            for step in workflow.steps:
+                if execution.status != WorkflowStatus.RUNNING:
+                    break
+                
+                await self._execute_workflow_step(execution_id, step)
+            
+            # Mark as completed
+            execution.status = WorkflowStatus.COMPLETED
+            execution.completed_at = datetime.now(timezone.utc)
+            
+            if self.event_bus:
+                await self.event_bus.emit(
+                    WorkflowCompleted(
+                        workflow_id=workflow.workflow_id,
+                        execution_id=execution_id,
+                        success=True,
+                        duration=(execution.completed_at - execution.started_at).total_seconds()
+                    )
+                )
+            
+            self.logger.info(f"Workflow execution {execution_id} completed successfully")
+            
+        except Exception as e:
+            execution.status = WorkflowStatus.FAILED
+            execution.error_message = str(e)
+            execution.completed_at = datetime.now(timezone.utc)
+            
+            self.logger.error(f"Workflow execution {execution_id} failed: {e}")
+            
+        finally:
+            self.active_executions.discard(execution_id)
+
+    async def _execute_workflow_step(self, execution_id: str, step: WorkflowStep) -> None:
+        """Execute a workflow step."""
+        execution = self.executions[execution_id]
+        
+        if self.event_bus:
+            await self.event_bus.emit(
+                WorkflowStepStarted(
+                    execution_id=execution_id,
+                    step_id=step.step_id,
+                    step_name=step.name
+                )
+            )
+        
+        try:
+            # Check dependencies
+            for dep_step_id in step.dependencies:
+                if dep_step_id not in execution.step_results:
+                    raise RuntimeError(f"Dependency {dep_step_id} not satisfied")
+            
+            # Execute step based on type
+            result = await self._execute_step_by_type(step, execution)
+            
+            # Store result
+            execution.step_results[step.step_id] = result
+            
+            if self.event_bus:
+                await self.event_bus.emit(
+                    WorkflowStepCompleted(
+                        execution_id=execution_id,
+                        step_id=step.step_id,
+                        step_name=step.name,
+                        success=True
+                    )
+                )
+            
+            self.logger.debug(f"Step {step.step_id} completed successfully")
+            
+        except Exception as e:
+            execution.step_results[step.step_id] = {"error": str(e)}
+            self.logger.error(f"Step {step.step_id} failed: {e}")
+            raise
+
+    async def _execute_step_by_type(
+        self,
+        step: WorkflowStep,
+        execution: WorkflowExecution
+    ) -> Dict[str, Any]:
+        """Execute a step based on its type."""
+        # Stub implementation for different step types
+        if step.step_type == "skill":
+            return await self._execute_skill_step(step, execution)
+        elif step.step_type == "nlp":
+            return await self._execute_nlp_step(step, execution)
+        elif step.step_type == "api_call":
+            return await self._execute_api_step(step, execution)
+        else:
+            return {"result": f"Executed {step.step_type} step", "success": True}
+
+    async def _execute_skill_step(
+        self,
+        step: WorkflowStep,
+        execution: WorkflowExecution
+    ) -> Dict[str, Any]:
+        """Execute a skill step."""
+        # Stub implementation
+        skill_name = step.parameters.get("skill_name", "unknown")
+        await asyncio.sleep(0.1)  # Simulate processing
+        return {
+            "skill": skill_name,
+            "result": f"Executed skill {skill_name}",
+            "success": True
+        }
+
+    async def _execute_nlp_step(
+        self,
+        step: WorkflowStep,
+        execution: WorkflowExecution
+    ) -> Dict[str, Any]:
+        """Execute an NLP step."""
+        # Stub implementation
+        await asyncio.sleep(0.1)  # Simulate processing
+        return {
+            "parsed_intent": "task_creation",
+            "entities": {"task": "example task"},
+            "success": True
+        }
+
+    async def _execute_api_step(
+        self,
+        step: WorkflowStep,
+        execution: WorkflowExecution
+    ) -> Dict[str, Any]:
+        """Execute an API call step."""
+        # Stub implementation
+        await asyncio.sleep(0.1)  # Simulate API call
+        return {
+            "api_response": {"status": "success"},
+            "success": True
+        }
+
+    async def get_execution_status(self, execution_id: str) -> Dict[str, Any]:
+        """Get workflow execution status."""
+        execution = self.executions.get(execution_id)
+        if not execution:
+            return {"error": "Execution not found"}
+        
+        return {
+            "execution_id": execution_id,
+            "workflow_id": execution.workflow_id,
+            "status": execution.status.value,
+            "started_at": execution.started_at.isoformat() if execution.started_at else None,
+            "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+            "step_results": execution.step_results,
+            "output_data": execution.output_data,
+            "error_message": execution.error_message
+        }
+
+    def list_workflows(self) -> List[str]:
+        """List available workflows."""
+        return list(self.workflows.keys())
+
+    def get_active_executions(self) -> List[str]:
+        """Get list of active execution IDs."""
+        return list(self.active_executions)
     
     async def _perform_health_check(self) -> Dict[str, Any]:
         """Perform health check on all components."""
@@ -1654,17 +2117,89 @@ Please provide a helpful and contextual response in {context.language_preference
         return health_status
     
     async def get_status(self) -> Dict[str, Any]:
-        """Get current status of the assistant engine."""
+        """Get comprehensive status of the enhanced assistant engine."""
         return {
+            # Core Engine Status
             "state": self.state.value,
+            "engine_state": self.engine_state.value,
+            
+            # Session Management
             "active_sessions": len(self.active_contexts),
+            "total_sessions": len(self.sessions),
+            "session_statistics": self.get_session_statistics(),
+            
+            # Processing Metrics
             "total_requests": self.request_count,
             "average_processing_time": (
                 self.total_processing_time / self.request_count 
                 if self.request_count > 0 else 0
             ),
+            
+            # Component Management
+            "components": {
+                "total_components": len(self.components),
+                "running_components": sum(
+                    1 for c in self.components.values() 
+                    if c.status == ComponentStatus.RUNNING
+                ),
+                "component_details": {
+                    name: {
+                        "status": info.status.value,
+                        "health_score": info.health_score
+                    } 
+                    for name, info in self.components.items()
+                }
+            },
+            
+            # Interaction Management
+            "active_interactions": len(self.active_interactions),
+            "interaction_modes": list(set(
+                info.mode.value for info in self.active_interactions.values()
+            )),
+            
+            # Plugin System
+            "plugins": {
+                "total_plugins": len(self.plugins),
+                "enabled_plugins": len(self.enabled_plugins),
+                "plugin_details": {
+                    plugin_id: {
+                        "name": plugin.name,
+                        "status": plugin.status.value,
+                        "version": plugin.version
+                    }
+                    for plugin_id, plugin in self.plugins.items()
+                }
+            },
+            
+            # Workflow System
+            "workflows": {
+                "total_workflows": len(self.workflows),
+                "active_executions": len(self.active_executions),
+                "workflow_list": list(self.workflows.keys()),
+                "execution_details": {
+                    exec_id: execution.status.value
+                    for exec_id, execution in self.executions.items()
+                    if execution.status in [WorkflowStatus.RUNNING, WorkflowStatus.PENDING]
+                }
+            },
+            
+            # Skill Execution Stats
             "skill_stats": self.skill_execution_stats,
-            "health": await self._perform_health_check()
+            
+            # Health Check
+            "health": await self._perform_health_check(),
+            
+            # Capabilities Summary
+            "capabilities": [
+                "multimodal_processing",
+                "session_management", 
+                "component_lifecycle",
+                "plugin_system",
+                "workflow_orchestration",
+                "interaction_handling",
+                "real_time_processing",
+                "streaming_support"
+            ]
         }
     
     # Event handlers
@@ -1685,14 +2220,53 @@ Please provide a helpful and contextual response in {context.language_preference
         self.logger.debug(f"Skill executed: {event.skill_id}")
     
     async def shutdown(self) -> None:
-        """Shutdown the assistant engine gracefully."""
-        self.logger.info("Shutting down Core Assistant Engine")
+        """Shutdown the enhanced assistant engine gracefully."""
+        self.logger.info("Shutting down Enhanced Core Assistant Engine")
         self.state = AssistantState.SHUTTING_DOWN
+        self.engine_state = EngineState.SHUTDOWN
+        
+        # Cancel active workflow executions
+        for execution_id in list(self.active_executions):
+            execution = self.executions.get(execution_id)
+            if execution:
+                execution.status = WorkflowStatus.CANCELLED
+        self.active_executions.clear()
+        
+        # End all active interactions
+        interaction_ids = list(self.active_interactions.keys())
+        for interaction_id in interaction_ids:
+            await self.end_interaction(interaction_id)
+        
+        # Disable all enabled plugins
+        enabled_plugins = list(self.enabled_plugins)
+        for plugin_id in enabled_plugins:
+            plugin = self.plugins.get(plugin_id)
+            if plugin:
+                plugin.status = PluginStatus.DISABLED
+                self.enabled_plugins.discard(plugin_id)
+        
+        # Cancel session cleanup task
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
         
         # End all active sessions
         session_ids = list(self.active_contexts.keys())
         for session_id in session_ids:
             await self.end_session(session_id)
+        
+        # Shutdown managed components
+        for component_name, component_info in self.components.items():
+            try:
+                if hasattr(component_info.instance, 'shutdown'):
+                    await component_info.instance.shutdown()
+                component_info.status = ComponentStatus.STOPPED
+                self.logger.info(f"Shut down component: {component_name}")
+            except Exception as e:
+                self.logger.error(f"Error shutting down {component_name}: {e}")
         
         # Shutdown subsystems
         for component in [
@@ -1704,5 +2278,41 @@ Please provide a helpful and contextual response in {context.language_preference
             if component and hasattr(component, 'shutdown'):
                 await component.shutdown()
         
+        # Clear processing queue
+        while not self.processing_queue.empty():
+            try:
+                self.processing_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        
+        # Clear all data structures
+        self.active_sessions.clear()
+        self.components.clear()
+        self.plugins.clear()
+        self.enabled_plugins.clear()
+        self.workflows.clear()
+        self.executions.clear()
+        self.active_executions.clear()
+        self.active_interactions.clear()
+        self.sessions.clear()
+        self.user_sessions.clear()
+        
         self.state = AssistantState.SHUTDOWN
-        self.logger.info("Core Assistant Engine shutdown complete")
+        self.logger.info("Enhanced Core Assistant Engine shutdown complete")
+
+
+# Mock Component Class for testing
+class MockComponent:
+    """Mock component for testing purposes."""
+    
+    def __init__(self, name: str):
+        self.name = name
+        self.initialized = False
+    
+    async def initialize(self):
+        """Initialize the mock component."""
+        self.initialized = True
+        
+    async def shutdown(self):
+        """Shutdown the mock component."""
+        self.initialized = False
