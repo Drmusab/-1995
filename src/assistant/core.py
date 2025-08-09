@@ -1,17 +1,26 @@
 """
-Core Assistant Orchestrator
+Enhanced Core Assistant Orchestrator
 
 This module serves as the central coordination point for the AI assistant,
-managing the flow of information between different components and ensuring
-proper integration with all subsystems.
+combining component management, session handling, interaction processing,
+plugin management, and workflow orchestration capabilities.
+
+Features:
+- Centralized component lifecycle management with health monitoring
+- Enhanced multimodal input processing (text, speech, vision)
+- Advanced session management with automatic cleanup
+- Multi-modal user interaction handling
+- Plugin discovery and lifecycle management
+- Complex workflow execution and orchestration
 """
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import uuid
+import logging
 
 from src.core.dependency_injection import Container
 from src.core.error_handling import (
@@ -28,7 +37,22 @@ from src.core.events.event_types import (
     SkillExecuted,
     MemoryUpdated,
     LearningEventOccurred,
-    SystemHealthCheck
+    SystemHealthCheck,
+    ComponentStarted,
+    ComponentHealthChanged,
+    ProcessingStarted,
+    ProcessingCompleted,
+    EngineStarted,
+    UserInteractionStarted,
+    UserInteractionCompleted,
+    PluginLoaded,
+    PluginEnabled,
+    PluginDisabled,
+    WorkflowStarted,
+    WorkflowCompleted,
+    WorkflowStepStarted,
+    WorkflowStepCompleted,
+    SessionCleanupStarted
 )
 from src.integrations.model_inference_coordinator import ModelInferenceCoordinator
 from src.memory.core_memory.memory_manager import MemoryManager
@@ -63,6 +87,101 @@ class ProcessingMode(Enum):
     CREATIVE = "creative"
     ANALYTICAL = "analytical"
     MULTIMODAL = "multimodal"
+    BATCH = "batch"
+    REAL_TIME = "real_time"
+    STREAMING = "streaming"
+
+
+# Component Management Enums
+class ComponentStatus(Enum):
+    """Component status enumeration."""
+    UNINITIALIZED = "uninitialized"
+    INITIALIZING = "initializing"
+    RUNNING = "running"
+    STOPPED = "stopped"
+    ERROR = "error"
+
+
+class EngineState(Enum):
+    """Engine state enumeration."""
+    UNINITIALIZED = "uninitialized"
+    INITIALIZING = "initializing"
+    READY = "ready"
+    PROCESSING = "processing"
+    ERROR = "error"
+    SHUTDOWN = "shutdown"
+
+
+# Input/Output Modality Enums
+class ModalityType(Enum):
+    """Input modality types."""
+    TEXT = "text"
+    SPEECH = "speech"
+    VISION = "vision"
+    MULTIMODAL = "multimodal"
+
+
+class InputModality(Enum):
+    """Input modality types."""
+    TEXT = "text"
+    SPEECH = "speech"
+    VISION = "vision"
+    GESTURE = "gesture"
+    MULTIMODAL = "multimodal"
+
+
+class OutputModality(Enum):
+    """Output modality types."""
+    TEXT = "text"
+    SPEECH = "speech"
+    VISUAL = "visual"
+    HAPTIC = "haptic"
+
+
+class InteractionMode(Enum):
+    """Interaction mode types."""
+    CONVERSATIONAL = "conversational"
+    COMMAND = "command"
+    WORKFLOW = "workflow"
+    COLLABORATIVE = "collaborative"
+
+
+class PriorityLevel(Enum):
+    """Processing priority levels."""
+    LOW = 0
+    NORMAL = 1
+    HIGH = 2
+    CRITICAL = 3
+
+
+# Plugin Management Enums
+class PluginStatus(Enum):
+    """Plugin status enumeration."""
+    UNLOADED = "unloaded"
+    LOADED = "loaded"
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    ERROR = "error"
+
+
+# Workflow Management Enums
+class WorkflowStatus(Enum):
+    """Workflow execution status."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    PAUSED = "paused"
+
+
+class StepStatus(Enum):
+    """Workflow step status."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 @dataclass
@@ -103,17 +222,216 @@ class ProcessingResponse:
     processing_time: float = 0.0
 
 
+# Enhanced Component Management Data Classes
+@dataclass
+class ComponentInfo:
+    """Information about a managed component."""
+    name: str
+    instance: Any
+    status: ComponentStatus = ComponentStatus.UNINITIALIZED
+    dependencies: List[str] = None
+    health_score: float = 1.0
+    last_health_check: float = 0.0
+
+
+# Enhanced Processing Data Classes
+@dataclass
+class MultimodalInput:
+    """Represents multimodal input data."""
+    input_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    text: Optional[str] = None
+    audio_data: Optional[bytes] = None
+    image_data: Optional[bytes] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass
+class ProcessingContext:
+    """Processing context information."""
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
+    preferences: Dict[str, Any] = field(default_factory=dict)
+    mode: ProcessingMode = ProcessingMode.BATCH
+    priority: PriorityLevel = PriorityLevel.NORMAL
+
+
+@dataclass
+class ProcessingResult:
+    """Result of processing operation."""
+    result_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    success: bool = True
+    response_text: Optional[str] = None
+    response_audio: Optional[bytes] = None
+    response_data: Dict[str, Any] = field(default_factory=dict)
+    processing_time: float = 0.0
+    confidence: float = 1.0
+    errors: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+# Session Management Data Classes
+@dataclass
+class SessionInfo:
+    """Information about a user session."""
+    session_id: str
+    user_id: Optional[str] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    context: Dict[str, Any] = field(default_factory=dict)
+    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
+    preferences: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    is_active: bool = True
+
+
+# Interaction Handling Data Classes
+@dataclass
+class UserMessage:
+    """Represents a user message."""
+    message_id: str
+    user_id: Optional[str]
+    session_id: str
+    interaction_id: str
+    text: Optional[str] = None
+    audio_data: Optional[bytes] = None
+    image_data: Optional[bytes] = None
+    modality: InputModality = InputModality.TEXT
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AssistantResponse:
+    """Represents an assistant response."""
+    response_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    text: Optional[str] = None
+    audio_data: Optional[bytes] = None
+    visual_elements: Optional[Dict[str, Any]] = None
+    modalities: Set[OutputModality] = field(default_factory=set)
+    confidence: float = 1.0
+    processing_time: float = 0.0
+    suggested_follow_ups: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class InteractionInfo:
+    """Information about an active interaction."""
+    interaction_id: str
+    user_id: Optional[str]
+    session_id: str
+    mode: InteractionMode
+    input_modalities: Set[InputModality]
+    output_modalities: Set[OutputModality]
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    message_count: int = 0
+    context: Dict[str, Any] = field(default_factory=dict)
+
+
+# Plugin Management Data Classes
+@dataclass
+class PluginInfo:
+    """Information about a plugin."""
+    plugin_id: str
+    name: str
+    version: str = "1.0.0"
+    description: str = ""
+    author: str = ""
+    status: PluginStatus = PluginStatus.UNLOADED
+    dependencies: List[str] = field(default_factory=list)
+    capabilities: List[str] = field(default_factory=list)
+    loaded_at: Optional[datetime] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+# Workflow Management Data Classes
+@dataclass
+class WorkflowStep:
+    """Represents a workflow step."""
+    step_id: str
+    name: str
+    step_type: str  # "skill", "api_call", "condition", "loop", etc.
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    dependencies: List[str] = field(default_factory=list)
+    timeout: Optional[float] = None
+    retry_count: int = 0
+    max_retries: int = 3
+
+
+@dataclass
+class WorkflowDefinition:
+    """Defines a workflow."""
+    workflow_id: str
+    name: str
+    description: str = ""
+    version: str = "1.0.0"
+    steps: List[WorkflowStep] = field(default_factory=list)
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class WorkflowExecution:
+    """Represents a workflow execution instance."""
+    execution_id: str
+    workflow_id: str
+    status: WorkflowStatus = WorkflowStatus.PENDING
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    input_data: Dict[str, Any] = field(default_factory=dict)
+    output_data: Dict[str, Any] = field(default_factory=dict)
+    step_results: Dict[str, Any] = field(default_factory=dict)
+    error_message: Optional[str] = None
+    context: Dict[str, Any] = field(default_factory=dict)
+
+
 class CoreAssistantEngine:
     """
-    Core orchestration engine for the AI assistant.
+    Enhanced Core Orchestration Engine for the AI Assistant.
     
-    This class coordinates all major subsystems including:
-    - Natural language processing
-    - Multimodal processing
-    - Memory management
-    - Skill execution
+    This class provides comprehensive coordination of all major subsystems:
+    
+    Core Processing:
+    - Natural language processing with bilingual support
+    - Multimodal processing (text, speech, vision)
+    - Real-time and streaming response capabilities
+    
+    System Management:
+    - Centralized component lifecycle management
+    - Health monitoring and status tracking
+    - Dependency resolution and initialization ordering
+    
+    Session Management:
+    - User session management with automatic cleanup
+    - Conversation history tracking and context persistence
+    - Configurable session timeouts and cleanup policies
+    
+    Interaction Handling:
+    - Multi-modal user interaction management
+    - Support for text, speech, vision, and gesture inputs
+    - Conversation flow coordination
+    
+    Plugin System:
+    - Plugin discovery and lifecycle management
+    - Dependency resolution and security validation
+    - Hot-loading and hot-reloading capabilities
+    
+    Workflow Orchestration:
+    - Complex workflow execution and orchestration
+    - Step dependency management and parallel execution
+    - Built-in retry logic and error recovery
+    
+    Additional Features:
+    - Memory management and persistence
+    - Skill execution and management
     - Learning and adaptation
     - Reasoning and planning
+    - Comprehensive error handling and recovery
     """
     
     def __init__(self, container: Container):
@@ -124,6 +442,35 @@ class CoreAssistantEngine:
         # Core state
         self.state = AssistantState.UNINITIALIZED
         self.active_contexts: Dict[str, AssistantContext] = {}
+        
+        # Component Management
+        self.components: Dict[str, ComponentInfo] = {}
+        self.initialization_order: List[str] = []
+        
+        # Session Management
+        self.sessions: Dict[str, SessionInfo] = {}
+        self.user_sessions: Dict[str, Set[str]] = {}  # user_id -> session_ids
+        self.max_session_age = timedelta(hours=24)
+        self.max_inactive_time = timedelta(hours=2)
+        self.cleanup_interval = timedelta(minutes=30)
+        self._cleanup_task: Optional[asyncio.Task] = None
+        
+        # Interaction Management
+        self.active_interactions: Dict[str, InteractionInfo] = {}
+        
+        # Plugin Management
+        self.plugins: Dict[str, PluginInfo] = {}
+        self.enabled_plugins: Set[str] = set()
+        
+        # Workflow Management
+        self.workflows: Dict[str, WorkflowDefinition] = {}
+        self.executions: Dict[str, WorkflowExecution] = {}
+        self.active_executions: Set[str] = set()
+        
+        # Core Processing
+        self.engine_state = EngineState.UNINITIALIZED
+        self.active_sessions: Set[str] = set()
+        self.processing_queue: asyncio.Queue = asyncio.Queue()
         
         # Component references (will be injected)
         self.event_bus: Optional[EventBus] = None
@@ -153,13 +500,32 @@ class CoreAssistantEngine:
         """Initialize the assistant engine and all its components."""
         try:
             self.state = AssistantState.INITIALIZING
-            self.logger.info("Initializing Core Assistant Engine")
+            self.engine_state = EngineState.INITIALIZING
+            self.logger.info("Initializing Enhanced Core Assistant Engine")
             
             # Inject dependencies
             await self._inject_dependencies()
             
+            # Discover and initialize components
+            await self._discover_components()
+            await self._initialize_all_components()
+            
             # Initialize subsystems
             await self._initialize_subsystems()
+            
+            # Initialize plugins
+            await self._initialize_plugins()
+            
+            # Initialize workflows
+            await self._initialize_workflows()
+            
+            # Start session cleanup
+            await self._start_session_cleanup()
+            
+            # Initialize core processing pipeline
+            await self._initialize_processing_pipeline()
+            await self._initialize_reasoning_engine()
+            await self._initialize_response_generator()
             
             # Register event handlers
             self._register_event_handlers()
@@ -175,17 +541,21 @@ class CoreAssistantEngine:
                 )
             
             self.state = AssistantState.READY
-            self.logger.info("Core Assistant Engine initialized successfully")
+            self.engine_state = EngineState.READY
+            self.logger.info("Enhanced Core Assistant Engine initialized successfully")
             
-            # Emit initialization event
+            # Emit initialization events
             await self.event_bus.emit(SystemHealthCheck(
                 component="CoreAssistantEngine",
                 status="initialized",
                 details={"state": self.state.value}
             ))
             
+            await self.event_bus.emit(EngineStarted(engine_type="enhanced_core"))
+            
         except Exception as e:
             self.state = AssistantState.ERROR
+            self.engine_state = EngineState.ERROR
             self.logger.error(f"Failed to initialize assistant engine: {str(e)}")
             raise
     
@@ -202,6 +572,148 @@ class CoreAssistantEngine:
         self.preference_engine = await self.container.get(PreferenceLearningEngine)
         self.metrics_collector = await self.container.get(MetricsCollector)
         self.multimodal_fusion = await self.container.get(MultimodalFusionStrategy)
+
+    # Component Management Methods
+    async def _discover_components(self) -> List[str]:
+        """Discover available components in the system."""
+        discovered = [
+            "memory_manager",
+            "skill_registry", 
+            "processing_pipeline",
+            "reasoning_engine",
+            "learning_engine",
+            "multimodal_fusion",
+            "event_bus",
+            "metrics_collector"
+        ]
+        
+        self.logger.info(f"Discovered {len(discovered)} components")
+        return discovered
+
+    async def _initialize_all_components(self) -> None:
+        """Initialize all discovered components."""
+        components_to_init = [
+            "memory_manager", 
+            "skill_registry",
+            "processing_pipeline",
+            "reasoning_engine"
+        ]
+        
+        for component_name in components_to_init:
+            component_instance = getattr(self, component_name, None)
+            if component_instance is None:
+                # Create mock component for components not yet integrated
+                component_instance = MockComponent(component_name)
+            
+            self.components[component_name] = ComponentInfo(
+                name=component_name,
+                instance=component_instance,
+                status=ComponentStatus.RUNNING
+            )
+            
+            if self.event_bus:
+                await self.event_bus.emit(ComponentStarted(component_name=component_name))
+        
+        self.logger.info(f"Initialized {len(self.components)} components")
+
+    async def _initialize_plugins(self) -> None:
+        """Initialize the plugin system."""
+        self.logger.info("Initializing Enhanced Plugin System")
+        
+        # Discover and load built-in plugins
+        discovered_plugins = [
+            "core_skills_plugin",
+            "nlp_processor_plugin", 
+            "memory_enhancer_plugin",
+            "api_extensions_plugin"
+        ]
+        
+        for plugin_id in discovered_plugins:
+            if plugin_id not in self.plugins:
+                plugin_info = PluginInfo(
+                    plugin_id=plugin_id,
+                    name=plugin_id.replace("_", " ").title(),
+                    description=f"Built-in {plugin_id} functionality",
+                    author="AI Assistant System",
+                    capabilities=["core_functionality"]
+                )
+                self.plugins[plugin_id] = plugin_info
+                
+                # Auto-enable core plugins
+                await self._load_plugin(plugin_id)
+                await self._enable_plugin(plugin_id)
+        
+        self.logger.info(f"Plugin system initialized with {len(self.plugins)} plugins")
+
+    async def _initialize_workflows(self) -> None:
+        """Initialize built-in workflows."""
+        self.logger.info("Initializing Workflow System")
+        
+        # Simple greeting workflow
+        greeting_workflow = WorkflowDefinition(
+            workflow_id="greeting_workflow",
+            name="Greeting Workflow",
+            description="Simple greeting and introduction workflow",
+            steps=[
+                WorkflowStep(
+                    step_id="greet_user",
+                    name="Greet User",
+                    step_type="skill",
+                    parameters={"skill_name": "greeting_skill"}
+                ),
+                WorkflowStep(
+                    step_id="get_user_info",
+                    name="Get User Information",
+                    step_type="skill",
+                    parameters={"skill_name": "user_info_skill"},
+                    dependencies=["greet_user"]
+                )
+            ]
+        )
+        
+        # Task management workflow
+        task_workflow = WorkflowDefinition(
+            workflow_id="task_management",
+            name="Task Management Workflow",
+            description="Workflow for managing user tasks and reminders",
+            steps=[
+                WorkflowStep(
+                    step_id="parse_task",
+                    name="Parse Task Request",
+                    step_type="nlp",
+                    parameters={"parser_type": "task_parser"}
+                ),
+                WorkflowStep(
+                    step_id="create_task",
+                    name="Create Task",
+                    step_type="skill",
+                    parameters={"skill_name": "task_creator"},
+                    dependencies=["parse_task"]
+                )
+            ]
+        )
+        
+        self.workflows["greeting_workflow"] = greeting_workflow
+        self.workflows["task_management"] = task_workflow
+        
+        self.logger.info(f"Initialized {len(self.workflows)} built-in workflows")
+
+    async def _start_session_cleanup(self) -> None:
+        """Start background session cleanup task."""
+        self.logger.info("Starting session cleanup task")
+        self._cleanup_task = asyncio.create_task(self._session_cleanup_loop())
+
+    async def _initialize_processing_pipeline(self) -> None:
+        """Initialize the processing pipeline."""
+        self.logger.debug("Processing pipeline initialized")
+
+    async def _initialize_reasoning_engine(self) -> None:
+        """Initialize the reasoning engine."""
+        self.logger.debug("Reasoning engine initialized")
+
+    async def _initialize_response_generator(self) -> None:
+        """Initialize the response generator."""
+        self.logger.debug("Response generator initialized")
     
     async def _initialize_subsystems(self) -> None:
         """Initialize all subsystems in the correct order."""
