@@ -8,8 +8,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from src.assistant.core_engine import EnhancedCoreEngine, MultimodalInput, ProcessingContext
-from src.assistant.session_manager import EnhancedSessionManager, SessionType
+from src.assistant.core import CoreAssistantEngine, MultimodalInput, ProcessingContext
+from src.assistant.core import EnhancedSessionManager, SessionType
 from src.assistant.session_memory_integrator import SessionMemoryIntegrator
 from src.core.config.loader import ConfigLoader
 from src.core.dependency_injection import Container
@@ -218,7 +218,7 @@ class APIEndpoints:
         # Components (will be available after initialization)
         self.session_manager: Optional[EnhancedSessionManager] = None
         self.memory_integrator: Optional[SessionMemoryIntegrator] = None
-        self.core_engine: Optional[EnhancedCoreEngine] = None
+        self.core_engine: Optional[CoreAssistantEngine] = None
         self.note_taker_skill: Optional[NoteTakerSkill] = None
 
         # Create router
@@ -230,7 +230,7 @@ class APIEndpoints:
         try:
             self.session_manager = self.container.get(EnhancedSessionManager)
             self.memory_integrator = self.container.get(SessionMemoryIntegrator)
-            self.core_engine = self.container.get(EnhancedCoreEngine)
+            self.core_engine = self.container.get(CoreAssistantEngine)
             self.note_taker_skill = NoteTakerSkill(self.container)
 
             self.logger.info("API endpoints initialized with core components")

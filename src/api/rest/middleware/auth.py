@@ -35,13 +35,13 @@ import jwt
 import pyotp
 import qrcode
 
-from src.assistant.component_manager import ComponentManager, ComponentPriority
-from src.assistant.interaction_handler import InteractionHandler, InteractionPriority
-from src.assistant.plugin_manager import PluginManager
+from src.assistant.core import ComponentManager, ComponentPriority
+from src.assistant.core import InteractionHandler, InteractionPriority
+from src.assistant.core import PluginManager
 
 # Assistant components
-from src.assistant.session_manager import SessionConfiguration, SessionManager, SessionType
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator, WorkflowPriority
+from src.assistant.core import SessionConfiguration, SessionManager, SessionType
+from src.assistant.core import WorkflowOrchestrator, WorkflowPriority
 
 # Core imports
 from src.core.config.loader import ConfigLoader

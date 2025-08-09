@@ -32,9 +32,9 @@ from dateutil.parser import parse as parse_date
 from dateutil.rrule import DAILY, HOURLY, MONTHLY, WEEKLY, YEARLY, rrule
 
 # Assistant components
-from src.assistant.component_manager import ComponentManager
-from src.assistant.session_manager import SessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import ComponentManager
+from src.assistant.core import SessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader

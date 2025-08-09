@@ -32,13 +32,13 @@ from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Tup
 import asyncio
 import numpy as np
 
-from src.assistant.component_manager import ComponentManager
+from src.assistant.core import ComponentManager
 
 # Assistant components
-from src.assistant.core_engine import EnhancedCoreEngine
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.session_manager import SessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import CoreAssistantEngine
+from src.assistant.core import InteractionHandler
+from src.assistant.core import SessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader
@@ -854,7 +854,7 @@ class GoalDecomposer:
         self.task_planner = container.get(TaskPlanner)
 
         # Assistant components
-        self.core_engine = container.get(EnhancedCoreEngine)
+        self.core_engine = container.get(CoreAssistantEngine)
         self.component_manager = container.get(ComponentManager)
         self.workflow_orchestrator = container.get(WorkflowOrchestrator)
         self.session_manager = container.get(SessionManager)

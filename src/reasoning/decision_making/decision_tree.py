@@ -44,7 +44,7 @@ import asyncio
 import numpy as np
 
 # Assistant components (for integration)
-from src.assistant.session_manager import SessionManager
+from src.assistant.core import SessionManager
 
 # Core imports
 from src.core.config.loader import ConfigLoader

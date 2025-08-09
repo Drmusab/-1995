@@ -56,14 +56,14 @@ try:
 except ImportError:
     Template = Environment = FileSystemLoader = markdown = None
 
-from src.assistant.component_manager import EnhancedComponentManager
+from src.assistant.core import EnhancedComponentManager
 
 # Assistant components
-from src.assistant.core_engine import EnhancedCoreEngine
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.plugin_manager import EnhancedPluginManager
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import CoreAssistantEngine
+from src.assistant.core import InteractionHandler
+from src.assistant.core import EnhancedPluginManager
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader
@@ -702,7 +702,7 @@ class EnhancedDashboardManager:
         self.health_check = container.get(HealthCheck)
 
         # Assistant components
-        self.core_engine = container.get(EnhancedCoreEngine)
+        self.core_engine = container.get(CoreAssistantEngine)
         self.component_manager = container.get(EnhancedComponentManager)
         self.workflow_orchestrator = container.get(WorkflowOrchestrator)
         self.interaction_handler = container.get(InteractionHandler)

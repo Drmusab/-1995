@@ -28,10 +28,10 @@ import tiktoken
 import torch
 from transformers import AutoModel, AutoTokenizer
 
-from src.assistant.interaction_handler import InteractionContext, UserProfile
+from src.assistant.core import InteractionContext, UserProfile
 
 # Assistant core
-from src.assistant.session_manager import SessionManager
+from src.assistant.core import SessionManager
 
 # Core imports
 from src.core.config.loader import ConfigLoader

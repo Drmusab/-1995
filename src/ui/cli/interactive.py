@@ -38,8 +38,8 @@ from rich.table import Table
 from rich.text import Text
 
 # Assistant imports
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.session_manager import SessionManager
+from src.assistant.core import InteractionHandler
+from src.assistant.core import SessionManager
 from src.core.config.loader import ConfigLoader
 
 # Core imports

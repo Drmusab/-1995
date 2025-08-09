@@ -48,9 +48,9 @@ from sympy import And, Implies, Not, Or, satisfiable, symbols
 from sympy.logic.boolalg import BooleanFunction
 
 # Assistant components
-from src.assistant.component_manager import EnhancedComponentManager
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import EnhancedComponentManager
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader

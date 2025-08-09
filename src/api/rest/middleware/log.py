@@ -33,7 +33,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 # Assistant components
-from src.assistant.session_manager import EnhancedSessionManager
+from src.assistant.core import EnhancedSessionManager
 
 # Core imports
 from src.core.config.loader import ConfigLoader

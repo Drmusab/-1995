@@ -37,15 +37,15 @@ except ImportError:
     HAS_BS4 = False
 
 # Assistant components
-from src.assistant.component_manager import (
+from src.assistant.core import (
     ComponentInterface,
     ComponentMetadata,
     ComponentPriority,
     EnhancedComponentManager,
 )
-from src.assistant.core_engine import EnhancedCoreEngine, ProcessingContext
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import StepExecutor, WorkflowOrchestrator, WorkflowStep
+from src.assistant.core import CoreAssistantEngine, ProcessingContext
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import StepExecutor, WorkflowOrchestrator, WorkflowStep
 
 # Core imports
 from src.core.config.loader import ConfigLoader

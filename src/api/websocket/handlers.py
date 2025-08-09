@@ -44,14 +44,14 @@ from typing import (
 
 import asyncio
 
-from src.assistant.component_manager import EnhancedComponentManager
+from src.assistant.core import EnhancedComponentManager
 
 # Assistant components
-from src.assistant.core_engine import EnhancedCoreEngine, MultimodalInput, ProcessingResult
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.plugin_manager import EnhancedPluginManager
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import CoreAssistantEngine, MultimodalInput, ProcessingResult
+from src.assistant.core import InteractionHandler
+from src.assistant.core import EnhancedPluginManager
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader
@@ -810,7 +810,7 @@ class MultimodalHandler(BaseHandler):
         super().__init__(metadata)
 
         # Core processing components
-        self.core_engine = container.get(EnhancedCoreEngine)
+        self.core_engine = container.get(CoreAssistantEngine)
         self.intent_manager = container.get(IntentManager)
         self.audio_pipeline = container.get(EnhancedAudioPipeline)
         self.vision_processor = container.get(VisionProcessor)

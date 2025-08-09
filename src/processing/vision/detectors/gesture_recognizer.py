@@ -34,14 +34,14 @@ from scipy.signal import savgol_filter
 from scipy.spatial.distance import euclidean
 
 # Assistant components
-from src.assistant.component_manager import (
+from src.assistant.core import (
     ComponentMetadata,
     ComponentPriority,
     EnhancedComponentManager,
 )
-from src.assistant.interaction_handler import InteractionHandler
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import WorkflowDefinition, WorkflowOrchestrator
+from src.assistant.core import InteractionHandler
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import WorkflowDefinition, WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader

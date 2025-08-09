@@ -22,12 +22,12 @@ import grpc
 import numpy as np
 from grpc import aio
 
-from src.assistant.component_manager import ComponentInfo, ComponentState, EnhancedComponentManager
+from src.assistant.core import ComponentInfo, ComponentState, EnhancedComponentManager
 
 # Assistant components
-from src.assistant.core_engine import (
+from src.assistant.core import (
     EngineState,
-    EnhancedCoreEngine,
+    CoreAssistantEngine,
     ModalityType,
     MultimodalInput,
     PriorityLevel,
@@ -35,7 +35,7 @@ from src.assistant.core_engine import (
     ProcessingMode,
     ProcessingResult,
 )
-from src.assistant.interaction_handler import (
+from src.assistant.core import (
     AssistantResponse,
     InputModality,
     InteractionContext,
@@ -45,14 +45,14 @@ from src.assistant.interaction_handler import (
     OutputModality,
     UserMessage,
 )
-from src.assistant.plugin_manager import EnhancedPluginManager, PluginInfo, PluginState
-from src.assistant.session_manager import (
+from src.assistant.core import EnhancedPluginManager, PluginInfo, PluginState
+from src.assistant.core import (
     EnhancedSessionManager,
     SessionConfiguration,
     SessionInfo,
     SessionState,
 )
-from src.assistant.workflow_orchestrator import (
+from src.assistant.core import (
     WorkflowDefinition,
     WorkflowExecution,
     WorkflowOrchestrator,
@@ -237,7 +237,7 @@ class CoreEngineService(assistant_pb2_grpc.CoreEngineServiceServicer):
 
     def __init__(self, container: Container):
         self.container = container
-        self.core_engine = container.get(EnhancedCoreEngine)
+        self.core_engine = container.get(CoreAssistantEngine)
         self.logger = get_logger(__name__)
         self.metrics = container.get(MetricsCollector)
         self.tracer = container.get(TraceManager)

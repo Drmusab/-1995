@@ -47,12 +47,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from src.assistant.component_manager import EnhancedComponentManager
+from src.assistant.core import EnhancedComponentManager
 
 # Assistant components
-from src.assistant.core_engine import EnhancedCoreEngine
-from src.assistant.session_manager import EnhancedSessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import CoreAssistantEngine
+from src.assistant.core import EnhancedSessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader
@@ -784,7 +784,7 @@ class ModelAdaptationManager:
         self.health_check = container.get(HealthCheck)
 
         # Assistant components
-        self.core_engine = container.get(EnhancedCoreEngine)
+        self.core_engine = container.get(CoreAssistantEngine)
         self.component_manager = container.get(EnhancedComponentManager)
         self.session_manager = container.get(EnhancedSessionManager)
         self.workflow_orchestrator = container.get(WorkflowOrchestrator)

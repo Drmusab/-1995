@@ -56,22 +56,22 @@ from src.api.graphql.schema import WorkflowExecution as WorkflowExecutionType
 from src.api.graphql.schema import (
     WorkflowStateEnum,
 )
-from src.assistant.component_manager import (
+from src.assistant.core import (
     ComponentMetadata,
     ComponentPriority,
     EnhancedComponentManager,
 )
 
 # Assistant components
-from src.assistant.core_engine import (
-    EnhancedCoreEngine,
+from src.assistant.core import (
+    CoreAssistantEngine,
     ModalityType,
     MultimodalInput,
     PriorityLevel,
     ProcessingContext,
     ProcessingMode,
 )
-from src.assistant.interaction_handler import (
+from src.assistant.core import (
     InputModality,
     InteractionHandler,
     InteractionMode,
@@ -80,19 +80,19 @@ from src.assistant.interaction_handler import (
     UserMessage,
     UserProfile,
 )
-from src.assistant.plugin_manager import (
+from src.assistant.core import (
     EnhancedPluginManager,
     PluginLoadMode,
     PluginType,
     SecurityLevel,
 )
-from src.assistant.session_manager import (
+from src.assistant.core import (
     EnhancedSessionManager,
     SessionConfiguration,
     SessionPriority,
     SessionType,
 )
-from src.assistant.workflow_orchestrator import (
+from src.assistant.core import (
     ExecutionMode,
     StepType,
     WorkflowBuilder,
@@ -361,7 +361,7 @@ class Mutation:
 
     def __init__(self):
         self.container: Optional[Container] = None
-        self.core_engine: Optional[EnhancedCoreEngine] = None
+        self.core_engine: Optional[CoreAssistantEngine] = None
         self.component_manager: Optional[EnhancedComponentManager] = None
         self.workflow_orchestrator: Optional[WorkflowOrchestrator] = None
         self.interaction_handler: Optional[InteractionHandler] = None
@@ -385,7 +385,7 @@ class Mutation:
                 raise RuntimeError("Dependency injection container not available")
 
             # Initialize components
-            self.core_engine = self.container.get(EnhancedCoreEngine)
+            self.core_engine = self.container.get(CoreAssistantEngine)
             self.component_manager = self.container.get(EnhancedComponentManager)
             self.workflow_orchestrator = self.container.get(WorkflowOrchestrator)
             self.interaction_handler = self.container.get(InteractionHandler)
@@ -509,7 +509,7 @@ class Mutation:
             dependencies = []
             if component_input.dependencies:
                 for dep_id in component_input.dependencies:
-                    from src.assistant.component_manager import ComponentDependency, DependencyType
+                    from src.assistant.core import ComponentDependency, DependencyType
 
                     dependencies.append(
                         ComponentDependency(
@@ -623,7 +623,7 @@ class Mutation:
 
             # Add steps
             for step_input in workflow_input.steps:
-                from src.assistant.workflow_orchestrator import WorkflowStep
+                from src.assistant.core import WorkflowStep
 
                 step = WorkflowStep(
                     step_id=step_input.step_id,

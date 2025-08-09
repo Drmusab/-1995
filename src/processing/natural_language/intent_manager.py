@@ -30,8 +30,8 @@ import numpy as np
 import torch
 
 # Session and workflow
-from src.assistant.session_manager import SessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator
+from src.assistant.core import SessionManager
+from src.assistant.core import WorkflowOrchestrator
 
 # Core imports
 from src.core.config.loader import ConfigLoader

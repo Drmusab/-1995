@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from src.core.config.loader import ConfigLoader
 from src.core.dependency_injection import Container
-from src.assistant.session_manager import EnhancedSessionManager
+from src.assistant.core import EnhancedSessionManager
 from src.memory.core_memory.memory_manager import MemoryManager
 from src.learning.memory_learning_bridge import MemoryLearningBridge
 from src.observability.logging.config import get_logger, setup_logging

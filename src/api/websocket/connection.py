@@ -31,12 +31,12 @@ import websockets
 from websockets.exceptions import ConnectionClosed, WebSocketException
 from websockets.server import WebSocketServerProtocol
 
-from src.assistant.component_manager import ComponentManager
+from src.assistant.core import ComponentManager
 
 # Assistant components
-from src.assistant.core_engine import (
+from src.assistant.core import (
     EngineState,
-    EnhancedCoreEngine,
+    CoreAssistantEngine,
     ModalityType,
     MultimodalInput,
     PriorityLevel,
@@ -44,7 +44,7 @@ from src.assistant.core_engine import (
     ProcessingMode,
     ProcessingResult,
 )
-from src.assistant.interaction_handler import (
+from src.assistant.core import (
     AssistantResponse,
     InputModality,
     InteractionContext,
@@ -54,9 +54,9 @@ from src.assistant.interaction_handler import (
     OutputModality,
     UserMessage,
 )
-from src.assistant.plugin_manager import PluginManager
-from src.assistant.session_manager import SessionManager
-from src.assistant.workflow_orchestrator import WorkflowOrchestrator, WorkflowPriority
+from src.assistant.core import PluginManager
+from src.assistant.core import SessionManager
+from src.assistant.core import WorkflowOrchestrator, WorkflowPriority
 
 # Core imports
 from src.core.config.loader import ConfigLoader
@@ -524,7 +524,7 @@ class ConnectionManager:
         self.health_check = container.get(HealthCheck)
 
         # Assistant components
-        self.core_engine = container.get(EnhancedCoreEngine)
+        self.core_engine = container.get(CoreAssistantEngine)
         self.component_manager = container.get(ComponentManager)
         self.workflow_orchestrator = container.get(WorkflowOrchestrator)
         self.session_manager = container.get(SessionManager)
