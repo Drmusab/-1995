@@ -86,6 +86,13 @@ categories:
     always_available: false
     requires_authentication: true
     internal: false
+    
+  meta_cognitive:
+    description: "Meta-cognitive and self-awareness capabilities"
+    priority: 3
+    always_available: true
+    requires_authentication: true
+    internal: false
 
 # Core skills
 core_skills:
@@ -1009,6 +1016,68 @@ system_skills:
     timeout: 30
     requires_permission: "admin"
 
+# Meta-cognitive skills
+meta_cognitive_skills:
+  thought_reflector:
+    id: "meta_cognitive.thought_reflector"
+    name: "Thought Reflector"
+    description: "Meta-cognitive skill for analyzing thought patterns and generating reflective insights"
+    category: "meta_cognitive"
+    version: "1.0.0"
+    entrypoint: "src.skills.builtin.thought_reflector.ThoughtReflectorSkill"
+    triggers:
+      - "weekly summary"
+      - "thought patterns"
+      - "reflection"
+      - "problem solving style"
+      - "journaling prompt"
+      - "affirmation"
+      - "reframe"
+      - "deeper inquiry"
+      - "meta cognition"
+      - "self awareness"
+    parameters:
+      action:
+        type: "string"
+        required: false
+        description: "Type of reflection to generate"
+        allowed_values: ["weekly_summary", "problem_solving_style", "journaling_prompt", "affirmation", "reframing_exercise", "deeper_inquiry"]
+        default: "weekly_summary"
+      time_window:
+        type: "integer"
+        required: false
+        description: "Number of days to analyze (for pattern detection)"
+        default: 7
+        min_value: 1
+        max_value: 30
+      include_examples:
+        type: "boolean"
+        required: false
+        description: "Whether to include examples in pattern analysis"
+        default: true
+    examples:
+      - "Give me a weekly summary of my thought patterns"
+      - "What's my problem-solving style?"
+      - "Generate a journaling prompt for me"
+      - "I need an affirmation based on my recent thoughts"
+      - "Help me reframe this challenging situation"
+      - "Give me some deeper questions to reflect on"
+    requires_context: true
+    caching_enabled: false
+    timeout: 30
+    persists_data: true
+    models:
+      - "language_models.openai.gpt-4"
+      - "language_models.openai.gpt-3.5-turbo"
+    configuration:
+      analysis_window_days: 7
+      min_interactions: 5
+      confidence_threshold: 0.6
+      enable_weekly_summaries: true
+      enable_style_analysis: true
+      enable_affirmations: true
+      storage_directory: "${DATA_DIR:-/data/ai_assistant}/thought_reflections"
+
 # Meta skills (skills that work with other skills)
 meta_skills:
   skill_installer:
@@ -1253,6 +1322,7 @@ permission_levels:
       - "productivity"
       - "creative"
       - "analytical"
+      - "meta_cognitive"
     denied_skills:
       - "system.admin"
       - "system.diagnostic"
@@ -1267,6 +1337,7 @@ permission_levels:
       - "productivity"
       - "creative"
       - "analytical"
+      - "meta_cognitive"
       - "custom"
     denied_skills:
       - "system.admin"
