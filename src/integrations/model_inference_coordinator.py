@@ -23,17 +23,31 @@ import asyncio
 from src.core.config.loader import ConfigLoader
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
-from src.core.events.event_types import (
-    ComponentHealthChanged,
-    InferenceCompleted,
-    InferenceFailed,
-    InferenceStarted,
-    ModelRequestCompleted,
-    ModelRequestFailed,
-    ModelRequestStarted,
-    ModelRouteSelected,
-    PerformanceThresholdExceeded,
-)
+# Try to import event types, but make them optional for basic functionality
+try:
+    from src.core.events.event_types import (
+        ComponentHealthChanged,
+        InferenceCompleted,
+        InferenceFailed,
+        InferenceStarted,
+        ModelRequestCompleted,
+        ModelRequestFailed,
+        ModelRequestStarted,
+        ModelRouteSelected,
+        PerformanceThresholdExceeded,
+    )
+except ImportError:
+    # Fallback event types - use base events if specific ones don't exist
+    from src.core.events.event_types import BaseEvent
+    ComponentHealthChanged = BaseEvent
+    InferenceCompleted = BaseEvent
+    InferenceFailed = BaseEvent
+    InferenceStarted = BaseEvent
+    ModelRequestCompleted = BaseEvent
+    ModelRequestFailed = BaseEvent
+    ModelRequestStarted = BaseEvent
+    ModelRouteSelected = BaseEvent
+    PerformanceThresholdExceeded = BaseEvent
 from src.observability.logging.config import get_logger
 
 

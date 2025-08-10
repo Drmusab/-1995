@@ -58,11 +58,14 @@ from src.core.events.event_types import (
     SystemStarted,
 )
 from src.core.health_check import HealthCheck
-from src.observability.logging.config import get_logger, setup_logging
+from src.observability.logging.config import get_logger, configure_logging
 
 # Observability
 from src.observability.monitoring.metrics import MetricsCollector
-from src.observability.monitoring.tracing import TraceManager
+try:
+    from src.observability.monitoring.tracing import TraceManager
+except ImportError:
+    TraceManager = None
 
 # Security components (optional based on availability)
 try:
@@ -119,7 +122,7 @@ class AIAssistant:
             config_path: Path to configuration file
         """
         # Setup initial logging
-        setup_logging()
+        configure_logging()
         self.logger = get_logger(__name__)
         self.logger.info("Initializing AI Assistant")
 

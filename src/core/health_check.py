@@ -56,9 +56,16 @@ from src.core.events.event_types import (
 )
 from src.observability.logging.config import get_logger
 
-# Observability
-from src.observability.monitoring.metrics import MetricsCollector
-from src.observability.monitoring.tracing import TraceManager
+# Observability - conditional imports to avoid circular dependencies
+try:
+    from src.observability.monitoring.metrics import MetricsCollector
+except ImportError:
+    MetricsCollector = None
+
+try:
+    from src.observability.monitoring.tracing import TraceManager
+except ImportError:
+    TraceManager = None
 
 # Type definitions
 T = TypeVar("T")
