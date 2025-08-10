@@ -1,0 +1,633 @@
+# AI Assistant - Base Configuration
+# Author: Drmusab
+# This file consolidates all core application configuration settings
+# Environment-specific overrides are in config.dev.yaml and config.prod.yaml
+
+# Application Information
+app:
+  name: "AI Assistant"
+  version: "1.0.0"
+  description: "Advanced AI Assistant with Multimodal Capabilities"
+  environment: "development"  # default, overridden by environment files
+
+# Core System Configuration
+core:
+  # Engine Configuration
+  engine:
+    processing_mode: "asynchronous"
+    max_concurrent_requests: 10
+    default_timeout_seconds: 30.0
+    enable_real_time_processing: true
+    enable_adaptive_quality: true
+    enable_speech_processing: true
+    enable_vision_processing: true
+    enable_multimodal_fusion: true
+    enable_reasoning: true
+    enable_learning: true
+    default_quality_level: "balanced"
+    quality_monitoring: true
+    enable_performance_monitoring: true
+    enable_profiling: false
+    gc_interval_seconds: 300
+
+  # Component Manager Configuration  
+  component_manager:
+    auto_discovery: true
+    parallel_initialization: true
+    health_monitoring: true
+    auto_restart: true
+    restart_max_attempts: 5
+    restart_backoff_factor: 1.5
+    shutdown_timeout: 30.0
+    initialization_timeout: 60.0
+    hot_reload_enabled: false
+    dependency_injection: true
+    component_isolation: true
+
+  # Workflow Orchestrator Configuration
+  workflow:
+    max_execution_time: 300.0
+    max_step_retries: 3
+    enable_adaptive_workflows: true
+    enable_workflow_learning: true
+    max_concurrent_workflows: 10
+    step_timeout_default: 60.0
+    enable_workflow_caching: true
+    workflow_persistence: true
+    enable_workflow_debugging: false
+    workflow_visualization: false
+
+  # Session Manager Configuration
+  sessions:
+    storage_type: "database"
+    node_id: "default_node"
+    enable_clustering: true
+    max_idle_time: 1800.0  # 30 minutes
+    max_session_time: 86400.0  # 24 hours
+    cleanup_on_expire: true
+    persist_context: true
+    auto_save_interval: 300.0  # 5 minutes
+    encryption_enabled: true
+    audit_logging: true
+    session_debugging: false
+    context_versioning: true
+
+  # Interaction Handler Configuration
+  interactions:
+    max_duration: 3600.0  # 1 hour
+    default_timeout: 180.0  # 3 minutes
+    enable_real_time: true
+    enable_streaming: true
+    max_history: 100
+    context_adaptation: true
+    user_modeling: true
+    preference_learning: true
+    feedback_collection: true
+    interaction_debugging: false
+
+  # Plugin Manager Configuration
+  plugins:
+    directories:
+      - "plugins/"
+      - "src/plugins/"
+      - "data/plugins/"
+    auto_discovery: true
+    hot_reload: false
+    security_validation: true
+    enable_clustering: true
+    max_sessions_per_node: 1000
+    plugin_timeout: 30.0
+    enable_plugin_debugging: false
+    allow_unsafe_plugins: false
+    max_plugins: 100
+    sandbox_enabled: true
+
+# Memory System Configuration
+memory:
+  # Working Memory
+  working_memory:
+    capacity: 1000
+    cleanup_interval: 300  # 5 minutes
+    persistence: true
+    compression: true
+    ttl_seconds: 3600
+
+  # Episodic Memory
+  episodic_memory:
+    storage_backend: "database"
+    max_episodes: 10000
+    retention_days: 365
+    indexing: true
+    auto_summarization: true
+    consolidation_interval: 3600
+
+  # Semantic Memory
+  semantic_memory:
+    storage_backend: "vector_store"
+    embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+    vector_dimension: 384
+    similarity_threshold: 0.8
+    max_memories: 100000
+
+  # Vector Store Configuration
+  vector_store:
+    backend: "faiss"
+    index_type: "IVFFlat"
+    nlist: 100
+    persistence_path: "data/memory/vectors/"
+    backup_enabled: true
+
+  # Context Management
+  context:
+    max_context_size: 4096
+    context_window_overlap: 512
+    auto_summarization: true
+    context_versioning: true
+
+# Learning System Configuration
+learning:
+  # Continual Learning
+  continual_learning:
+    enabled: true
+    learning_rate: 0.001
+    update_frequency: "on_feedback"
+    memory_replay: true
+    catastrophic_forgetting_prevention: true
+    model_checkpointing: true
+    checkpoint_frequency: "daily"
+
+  # Preference Learning
+  preference_learning:
+    enabled: true
+    implicit_feedback: true
+    explicit_feedback: true
+    preference_decay: 0.95
+    update_threshold: 5
+
+  # Feedback Processing
+  feedback_processing:
+    enabled: true
+    real_time_processing: true
+    sentiment_analysis: true
+    feedback_validation: true
+    auto_labeling: true
+
+  # Model Adaptation
+  model_adaptation:
+    enabled: true
+    adaptation_frequency: "weekly"
+    validation_split: 0.2
+    early_stopping: true
+    hyperparameter_tuning: true
+
+# Processing Pipelines Configuration
+processing:
+  # Speech Processing
+  speech:
+    whisper_model: "base"
+    device: "auto"
+    compute_type: "float16"
+    language: "auto"
+    task: "transcribe"
+    vad_enabled: true
+    noise_reduction: true
+    emotion_detection: true
+    speaker_recognition: false
+    diarization_enabled: false
+
+  # Vision Processing  
+  vision:
+    models:
+      object_detection: "yolov5s"
+      face_recognition: "mtcnn"
+      ocr: "easyocr"
+      pose_estimation: "mediapipe"
+    device: "auto"
+    batch_size: 4
+    image_preprocessing: true
+    quality_optimization: true
+
+  # Natural Language Processing
+  nlp:
+    models:
+      intent_detection: "distilbert-base-uncased"
+      sentiment_analysis: "cardiffnlp/twitter-roberta-base-sentiment"
+      entity_extraction: "dbmdz/bert-large-cased-finetuned-conll03-english"
+      language_detection: "langdetect"
+    device: "auto"
+    max_length: 512
+    batch_size: 4
+    caching: true
+
+  # Multimodal Processing
+  multimodal:
+    fusion_strategy: "late_fusion"
+    alignment_method: "attention"
+    feature_extraction: true
+    cross_modal_attention: true
+    temporal_modeling: true
+
+# Skills Management Configuration
+skills:
+  auto_discovery: true
+  skill_validation: true
+  hot_reload: false
+  skill_caching: true
+  execution_timeout: 60.0
+  max_concurrent_skills: 10
+  skill_debugging: false
+  performance_monitoring: true
+
+  # Built-in Skills
+  builtin_skills:
+    enabled: true
+    auto_register: true
+    categories:
+      - "core_skills"
+      - "productivity_skills"
+      - "creative_skills"
+      - "analytical_skills"
+
+  # Custom Skills
+  custom_skills:
+    enabled: true
+    directories:
+      - "src/skills/custom/"
+      - "data/skills/user/"
+    validation: true
+    sandboxing: true
+
+# External Integrations Configuration
+integrations:
+  # LLM Integrations
+  llm:
+    default_provider: "openai"
+    providers:
+      openai:
+        api_key: "${env:OPENAI_API_KEY}"
+        models:
+          default: "gpt-3.5-turbo"
+          fast: "gpt-3.5-turbo"
+          quality: "gpt-4"
+        timeout: 30.0
+        max_tokens: 2048
+        temperature: 0.7
+        enabled: true
+      
+      anthropic:
+        api_key: "${env:ANTHROPIC_API_KEY}"
+        models:
+          default: "claude-3-haiku"
+          quality: "claude-3-opus"
+        timeout: 30.0
+        enabled: false
+      
+      ollama:
+        base_url: "http://localhost:11434"
+        models:
+          default: "llama2:7b"
+          fast: "llama2:7b"
+          quality: "llama2:13b"
+        timeout: 60.0
+        enabled: false
+
+    fallback_chain: ["openai", "anthropic", "ollama"]
+    load_balancing: false
+    caching: true
+    cache_ttl: 3600
+
+  # Storage Integrations
+  storage:
+    database:
+      backend: "postgresql"
+      url: "${env:DATABASE_URL:sqlite:///data/assistant.db}"
+      pool_size: 10
+      max_overflow: 20
+      echo: false
+      auto_migrate: false
+
+    file_storage:
+      backend: "local"
+      base_path: "data/files/"
+      max_file_size: "100MB"
+      allowed_extensions: [".txt", ".pdf", ".doc", ".docx", ".md"]
+
+    blob_storage:
+      backend: "local"
+      base_path: "data/blobs/"
+      compression: true
+      encryption: false
+
+  # Cache Integrations
+  cache:
+    backend: "redis"
+    redis:
+      enabled: true
+      host: "localhost"
+      port: 6379
+      db: 0
+      password: "${env:REDIS_PASSWORD:}"
+      ssl: false
+      max_connections: 10
+      socket_timeout: 5.0
+      socket_connect_timeout: 5.0
+      retry_on_timeout: true
+      health_check_interval: 30.0
+    
+    local:
+      max_size_mb: 256
+      ttl_seconds: 3600
+      cleanup_interval: 300
+
+    default_ttl: 3600
+    enabled: true
+
+  # External APIs
+  external_apis:
+    web_search:
+      provider: "duckduckgo"
+      enabled: true
+      timeout: 10.0
+      api_key: "${env:WEB_SEARCH_API_KEY:}"
+
+    weather:
+      provider: "openweathermap"
+      enabled: true
+      timeout: 5.0
+      api_key: "${env:WEATHER_API_KEY:}"
+
+    calendar:
+      provider: "google"
+      enabled: false
+      timeout: 5.0
+      credentials: "${env:GOOGLE_CALENDAR_CREDENTIALS:}"
+
+    notifications:
+      provider: "console"
+      enabled: true
+
+# API Configuration
+api:
+  # REST API
+  rest:
+    host: "0.0.0.0"
+    port: 8000
+    debug: false
+    reload: false
+    workers: 4
+    timeout: 60.0
+    max_request_size: "50MB"
+
+    # CORS settings
+    cors:
+      enabled: true
+      allow_origins: ["*"]
+      allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+      allow_headers: ["*"]
+      allow_credentials: false
+
+    # Rate limiting
+    rate_limiting:
+      enabled: true
+      requests_per_minute: 100
+      burst_limit: 20
+
+    # Authentication
+    authentication:
+      enabled: true
+      jwt_secret: "${env:JWT_SECRET:}"
+      token_expiry: 86400  # 24 hours
+
+  # WebSocket API
+  websocket:
+    host: "0.0.0.0"
+    port: 8001
+    max_connections: 100
+    heartbeat_interval: 30.0
+    message_queue_size: 1000
+    compression: true
+    authentication: true
+
+  # GraphQL API
+  graphql:
+    enabled: true
+    playground: false
+    introspection: false
+    debug: false
+    max_query_depth: 10
+    max_query_complexity: 1000
+
+  # gRPC API
+  grpc:
+    enabled: false
+    host: "0.0.0.0"
+    port: 50051
+    max_workers: 4
+    reflection: false
+
+# Security Configuration
+security:
+  # Authentication
+  authentication:
+    enabled: true
+    provider: "jwt"
+    session_timeout: 3600
+    max_login_attempts: 5
+    lockout_duration: 300
+
+  # Authorization
+  authorization:
+    enabled: true
+    rbac_enabled: true
+    default_permissions: ["read"]
+    admin_users: []
+
+  # Encryption
+  encryption:
+    enabled: true
+    algorithm: "AES-256-GCM"
+    key_rotation: true
+    key_derivation: "PBKDF2"
+
+  # Sanitization
+  sanitization:
+    enabled: true
+    input_validation: true
+    output_encoding: true
+    sql_injection_protection: true
+    xss_protection: true
+
+  # Audit
+  audit:
+    enabled: true
+    log_all_requests: false
+    log_authentication: true
+    log_authorization: true
+    retention_days: 90
+
+# Observability Configuration
+observability:
+  # Logging
+  logging:
+    level: "INFO"
+    format: "structured"
+    handlers: ["console", "file"]
+    file_rotation: true
+    max_file_size: "100MB"
+    backup_count: 5
+    structured_logging: true
+    request_logging: true
+    performance_logging: true
+
+    # Component-specific logging
+    component_levels:
+      core_engine: "INFO"
+      workflow_orchestrator: "INFO"
+      session_manager: "INFO"
+      interaction_handler: "INFO"
+      plugin_manager: "INFO"
+      memory_manager: "INFO"
+      skill_factory: "INFO"
+      api: "INFO"
+      integrations: "INFO"
+
+  # Metrics
+  metrics:
+    enabled: true
+    provider: "prometheus"
+    port: 9090
+    path: "/metrics"
+    collection_interval: 15
+    retention_hours: 168  # 1 week
+    custom_metrics: true
+    component_metrics: true
+    performance_metrics: true
+
+  # Tracing
+  tracing:
+    enabled: true
+    provider: "jaeger"
+    agent_host: "localhost"
+    agent_port: 6831
+    sampling_rate: 0.1
+    service_name: "ai-assistant"
+    trace_context: true
+    span_attributes: true
+
+  # Profiling
+  profiling:
+    enabled: false
+    cpu_profiling: false
+    memory_profiling: false
+    profile_duration: 60
+    output_path: "data/profiles/"
+    flamegraphs: false
+
+  # Health checks
+  health_checks:
+    enabled: true
+    interval: 30
+    timeout: 10
+    endpoints:
+      liveness: "/health/live"
+      readiness: "/health/ready"
+      components: "/health/components"
+    detailed_responses: false
+
+# Infrastructure Configuration
+infrastructure:
+  # Deployment
+  deployment:
+    platform: "docker"
+    replicas: 1
+    resource_limits:
+      cpu: "1000m"
+      memory: "2Gi"
+    resource_requests:
+      cpu: "500m"
+      memory: "1Gi"
+
+  # Load Balancing
+  load_balancer:
+    enabled: false
+    algorithm: "round_robin"
+    health_check_path: "/health"
+    sticky_sessions: false
+
+  # Auto Scaling
+  auto_scaling:
+    enabled: false
+    min_replicas: 1
+    max_replicas: 10
+    target_cpu_utilization: 70
+    target_memory_utilization: 80
+
+# Performance Configuration
+performance:
+  # Resource Limits
+  max_memory_usage_gb: 4.0
+  max_cpu_usage_percent: 80.0
+  max_concurrent_requests: 50
+  max_concurrent_workflows: 20
+  max_concurrent_sessions: 500
+
+  # Threading and Async
+  thread_pool_size: 10
+  async_pool_size: 50
+  io_thread_pool_size: 5
+
+  # Timeouts
+  component_timeout_seconds: 30.0
+  skill_execution_timeout: 60.0
+  workflow_timeout_seconds: 300.0
+  session_cleanup_interval: 300
+
+  # Memory Management
+  memory_cleanup_enabled: true
+  memory_cleanup_interval: 600
+  garbage_collection_enabled: true
+  gc_threshold: [700, 10, 10]
+
+  # Caching Performance
+  cache_warmup_enabled: false
+  cache_preload_common_responses: false
+  vector_cache_size: 5000
+  response_cache_size: 2000
+
+# Backup Configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention_days: 30
+  compression: true
+  encryption: true
+
+  # Database Backup
+  database:
+    enabled: true
+    method: "pg_dump"
+    parallel_jobs: 2
+
+  # File System Backup
+  filesystem:
+    enabled: true
+    directories:
+      - "data/models"
+      - "data/user_data"
+      - "configs"
+
+  # Backup Storage
+  storage:
+    type: "local"
+    path: "data/backups/"
+
+# File Paths Configuration
+paths:
+  base_dir: "."
+  data_dir: "data/"
+  logs_dir: "data/logs/"
+  cache_dir: "data/cache/"
+  models_dir: "data/models/"
+  plugins_dir: "plugins/"
+  configs_dir: "configs/"
+  temp_dir: "data/temp/"

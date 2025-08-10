@@ -1,0 +1,341 @@
+# AI Assistant - Development Environment Configuration
+# Author: Drmusab
+# This file overrides base configuration settings for development environment
+
+# Application settings for development
+app:
+  environment: "development"
+
+# Core system overrides for development
+core:
+  engine:
+    max_concurrent_requests: 5  # Lower for development
+    default_timeout_seconds: 60.0  # Higher for debugging
+    enable_profiling: true
+    gc_interval_seconds: 60  # More frequent for development
+
+  component_manager:
+    shutdown_timeout: 10.0  # Faster shutdown for development
+    hot_reload_enabled: true
+    component_isolation: false  # Disabled for easier debugging
+
+  workflow:
+    max_execution_time: 120.0  # 2 minutes for development
+    max_step_retries: 2  # Fewer retries for faster feedback
+    max_concurrent_workflows: 3  # Lower for development
+    enable_workflow_debugging: true
+    workflow_visualization: true
+
+  sessions:
+    storage_type: "memory"  # Use memory for development
+    node_id: "dev_node_${pid}"
+    enable_clustering: false  # Disabled for development
+    max_idle_time: 3600.0  # 1 hour
+    max_session_time: 14400.0  # 4 hours
+    auto_save_interval: 120.0  # 2 minutes
+    encryption_enabled: false  # Disabled for development
+    session_debugging: true
+
+  interactions:
+    max_history: 50  # Smaller for development
+    interaction_debugging: true
+
+  plugins:
+    directories:
+      - "plugins/"
+      - "src/plugins/"
+      - "data/plugins/"
+      - "tests/fixtures/plugins/"  # Test plugins
+    hot_reload: true
+    security_validation: false  # Disabled for development
+    enable_clustering: false
+    allow_unsafe_plugins: true  # Only for development!
+    enable_plugin_debugging: true
+
+# Memory system overrides for development
+memory:
+  working_memory:
+    capacity: 500  # Smaller for development
+    persistence: false  # Memory only for development
+    compression: false
+
+  episodic_memory:
+    storage_backend: "local_file"
+    auto_summarization: false  # Disabled for development
+
+  semantic_memory:
+    max_memories: 50000
+
+  vector_store:
+    backend: "faiss"  # Local FAISS for development
+    persistence_path: "data/memory/vectors/"
+    backup_enabled: false
+
+  context:
+    max_context_size: 2048  # Smaller for development
+
+# Learning system overrides for development
+learning:
+  continual_learning:
+    checkpoint_frequency: "hourly"
+
+  feedback_processing:
+    feedback_validation: false  # Disabled for development
+
+  model_adaptation:
+    adaptation_frequency: "daily"
+    hyperparameter_tuning: false  # Disabled for development
+
+# Processing overrides for development
+processing:
+  speech:
+    whisper_model: "base"  # Faster model for development
+    device: "cpu"  # Use CPU for development compatibility
+    speaker_recognition: false  # Disabled for development
+
+  vision:
+    models:
+      object_detection: "yolov5s"  # Faster model
+    device: "cpu"
+    batch_size: 1
+    quality_optimization: false
+
+  nlp:
+    device: "cpu"
+    batch_size: 1
+
+  multimodal:
+    temporal_modeling: false  # Disabled for development
+
+# Skills overrides for development
+skills:
+  skill_validation: false  # Disabled for development
+  hot_reload: true
+  execution_timeout: 30.0
+  max_concurrent_skills: 5
+  skill_debugging: true
+
+  custom_skills:
+    directories:
+      - "src/skills/custom/"
+      - "data/skills/user/"
+      - "tests/fixtures/skills/"
+    validation: false  # Disabled for development
+    sandboxing: false  # Disabled for development
+
+# Integration overrides for development
+integrations:
+  llm:
+    default_provider: "ollama"
+    providers:
+      ollama:
+        enabled: true
+      openai:
+        enabled: "${env:OPENAI_API_KEY:false}"  # Only if API key is set
+      mock:  # Mock provider for testing
+        enabled: true
+        response_delay: 1.0
+        error_rate: 0.01
+
+  storage:
+    database:
+      url: "sqlite:///data/development.db"
+      pool_size: 5
+      echo: true  # SQL logging for development
+      auto_migrate: true
+
+    file_storage:
+      max_file_size: "10MB"  # Smaller for development
+
+  cache:
+    redis:
+      enabled: false  # Disabled by default for development
+    
+    local:
+      max_size_mb: 128
+
+  external_apis:
+    web_search:
+      provider: "mock"  # Use mock for development
+    weather:
+      provider: "mock"
+    calendar:
+      provider: "mock"
+    notifications:
+      provider: "console"  # Console notifications for development
+
+# API overrides for development
+api:
+  rest:
+    host: "localhost"
+    port: 8000
+    debug: true
+    reload: true  # Auto-reload on code changes
+    workers: 1  # Single worker for development
+
+    cors:
+      allow_origins: ["*"]  # Allow all origins for development
+
+    rate_limiting:
+      enabled: false  # Disabled for development
+
+    authentication:
+      enabled: false  # Disabled for development
+      jwt_secret: "dev-secret-key"
+
+  websocket:
+    host: "localhost"
+    port: 8001
+    authentication: false  # Disabled for development
+
+  graphql:
+    playground: true  # Enable GraphQL playground
+    introspection: true  # Enable introspection
+    debug: true
+
+  grpc:
+    enabled: false  # Disabled by default for development
+    reflection: true  # Enable reflection for development
+
+# Security overrides for development (relaxed)
+security:
+  authentication:
+    enabled: false  # Disabled for development
+    provider: "mock"
+    max_login_attempts: 10
+    lockout_duration: 300  # 5 minutes
+
+  authorization:
+    enabled: false  # Disabled for development
+    rbac_enabled: false
+    default_permissions: ["read", "write", "execute"]
+    admin_users: ["dev", "admin"]
+
+  encryption:
+    enabled: false  # Disabled for development
+    key_rotation: false
+
+  sanitization:
+    enabled: true  # Keep enabled for safety
+
+  audit:
+    log_all_requests: true
+    retention_days: 30
+
+# Observability overrides for development
+observability:
+  logging:
+    level: "DEBUG"
+    format: "console"  # Verbose format for development
+    file_rotation: false
+    max_file_size: "10MB"
+    backup_count: 3
+
+    component_levels:
+      core_engine: "DEBUG"
+      workflow_orchestrator: "DEBUG"
+      session_manager: "DEBUG"
+      interaction_handler: "DEBUG"
+      plugin_manager: "DEBUG"
+      memory_manager: "DEBUG"
+      skill_factory: "DEBUG"
+
+  metrics:
+    collection_interval: 15  # 15 seconds
+    retention_hours: 24
+
+  tracing:
+    sampling_rate: 1.0  # 100% sampling for development
+    service_name: "ai-assistant-dev"
+
+  profiling:
+    enabled: true
+    cpu_profiling: true
+    memory_profiling: true
+    flamegraphs: true
+
+  health_checks:
+    detailed_responses: true
+
+# Performance overrides for development
+performance:
+  max_memory_usage_gb: 2.0
+  max_concurrent_requests: 10
+  max_concurrent_workflows: 5
+  max_concurrent_sessions: 100
+
+  thread_pool_size: 5
+  async_pool_size: 20
+  io_thread_pool_size: 3
+
+  cache_warmup_enabled: false
+  cache_preload_common_responses: false
+  vector_cache_size: 1000
+  response_cache_size: 500
+
+# Development-specific features
+development:
+  # Hot reloading
+  hot_reload:
+    enabled: true
+    watch_directories:
+      - "src/"
+      - "configs/"
+    ignore_patterns:
+      - "*.pyc"
+      - "__pycache__"
+      - "*.log"
+      - ".git"
+      - "data/cache/"
+      - "data/logs/"
+    restart_delay: 2.0
+    max_restart_attempts: 5
+
+  # Mock services
+  mock_services:
+    enabled: true
+    external_apis: true
+    llm_providers: true
+    storage_backends: false
+    cache_backends: false
+    response_delays:
+      min: 0.1
+      max: 2.0
+    error_simulation:
+      enabled: true
+      error_rate: 0.01  # 1% error rate
+
+  # Testing helpers
+  testing:
+    auto_test_discovery: true
+    test_data_generation: true
+    mock_user_sessions: true
+    synthetic_workloads: true
+    performance_testing: false
+    load_testing: false
+
+  # Debugging
+  debugging:
+    interactive_debugger: true
+    breakpoint_injection: true
+    variable_inspection: true
+    execution_tracing: true
+    memory_debugging: true
+    workflow_visualization: true
+    component_introspection: true
+
+  # Code quality
+  code_quality:
+    linting: true
+    type_checking: true
+    code_formatting: true
+    import_sorting: true
+    complexity_analysis: false
+    security_scanning: false
+
+# File paths for development
+paths:
+  dev_data_dir: "data/development/"
+  test_data_dir: "tests/fixtures/"
+  profiles_dir: "data/profiles/"
+  debug_dir: "data/debug/"

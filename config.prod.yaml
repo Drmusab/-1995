@@ -1,0 +1,451 @@
+# AI Assistant - Production Environment Configuration
+# Author: Drmusab  
+# This file overrides base configuration settings for production environment
+
+# Application settings for production
+app:
+  environment: "production"
+
+# Core system overrides for production
+core:
+  engine:
+    max_concurrent_requests: 100
+    default_timeout_seconds: 30.0
+    enable_profiling: false  # Disabled in production
+    gc_interval_seconds: 300
+
+  component_manager:
+    hot_reload_enabled: false  # Disabled in production
+    component_isolation: true
+
+  workflow:
+    max_execution_time: 300.0
+    max_step_retries: 3
+    max_concurrent_workflows: 50
+    enable_workflow_debugging: false  # Disabled in production
+    workflow_visualization: false  # Disabled in production
+
+  sessions:
+    storage_type: "database"
+    enable_clustering: true
+    max_idle_time: 1800.0  # 30 minutes
+    max_session_time: 86400.0  # 24 hours
+    auto_save_interval: 300.0  # 5 minutes
+    encryption_enabled: true
+    session_debugging: false  # Disabled in production
+
+  interactions:
+    max_history: 100
+    interaction_debugging: false  # Disabled in production
+
+  plugins:
+    hot_reload: false  # Disabled in production
+    security_validation: true
+    allow_unsafe_plugins: false
+    enable_plugin_debugging: false  # Disabled in production
+
+# Memory system overrides for production
+memory:
+  working_memory:
+    capacity: 2000
+    persistence: true
+    compression: true
+
+  episodic_memory:
+    auto_summarization: true
+
+  semantic_memory:
+    max_memories: 200000
+    similarity_threshold: 0.85
+
+  vector_store:
+    backend: "pinecone"  # Production vector store
+    index_name: "ai-assistant-prod"
+    backup_enabled: true
+
+  context:
+    max_context_size: 8192
+
+# Learning system overrides for production
+learning:
+  continual_learning:
+    checkpoint_frequency: "weekly"
+
+  feedback_processing:
+    feedback_validation: true
+
+  model_adaptation:
+    adaptation_frequency: "weekly"
+    hyperparameter_tuning: true
+
+# Processing overrides for production
+processing:
+  speech:
+    whisper_model: "large-v3"  # High quality model
+    device: "auto"
+    compute_type: "float16"
+    speaker_recognition: true
+    diarization_enabled: true
+
+  vision:
+    models:
+      object_detection: "yolov8l"  # High quality model
+    device: "auto"
+    batch_size: 8
+    quality_optimization: true
+
+  nlp:
+    device: "auto"
+    batch_size: 8
+
+  multimodal:
+    temporal_modeling: true
+
+# Skills overrides for production
+skills:
+  skill_validation: true
+  hot_reload: false  # Disabled in production
+  execution_timeout: 60.0
+  max_concurrent_skills: 20
+  skill_debugging: false  # Disabled in production
+
+  custom_skills:
+    validation: true
+    sandboxing: true
+
+# Integration overrides for production
+integrations:
+  llm:
+    default_provider: "openai"
+    providers:
+      openai:
+        models:
+          default: "gpt-4-turbo"
+          fast: "gpt-3.5-turbo"
+          quality: "gpt-4"
+        timeout: 120.0
+        enabled: true
+      
+      anthropic:
+        models:
+          default: "claude-3-sonnet"
+          quality: "claude-3-opus"
+        enabled: true
+      
+      ollama:
+        enabled: false  # Disabled in production
+
+    fallback_chain: ["openai", "anthropic"]
+    load_balancing: true
+    cache_ttl: 7200  # 2 hours
+
+  storage:
+    database:
+      backend: "postgresql"
+      url: "${env:DATABASE_URL}"
+      pool_size: 20
+      max_overflow: 30
+      echo: false  # Disabled in production
+      auto_migrate: false  # Manual migrations in production
+
+    file_storage:
+      backend: "s3"
+      bucket: "${env:S3_BUCKET}"
+      max_file_size: "100MB"
+
+    blob_storage:
+      backend: "s3"
+      bucket: "${env:S3_BUCKET}"
+      compression: true
+      encryption: true
+
+  cache:
+    redis:
+      enabled: true
+      host: "${env:REDIS_HOST:localhost}"
+      port: "${env:REDIS_PORT:6379}"
+      password: "${env:REDIS_PASSWORD}"
+      ssl: true
+      max_connections: 100
+      cluster_enabled: true
+      cluster_nodes: "${env:REDIS_CLUSTER_NODES}"
+
+    local:
+      max_size_mb: 512
+
+  external_apis:
+    web_search:
+      provider: "bing"
+      api_key: "${env:BING_SEARCH_API_KEY}"
+    
+    weather:
+      provider: "openweathermap"
+      api_key: "${env:OPENWEATHER_API_KEY}"
+    
+    calendar:
+      provider: "google"
+      enabled: true
+      credentials: "${env:GOOGLE_CALENDAR_CREDENTIALS}"
+    
+    notifications:
+      provider: "slack"
+      webhook_url: "${env:SLACK_WEBHOOK_URL}"
+
+# API overrides for production
+api:
+  rest:
+    host: "0.0.0.0"
+    port: "${env:PORT:8000}"
+    debug: false  # Disabled in production
+    reload: false  # Disabled in production
+    workers: "${env:WORKERS:4}"
+    timeout: 30.0
+
+    cors:
+      allow_origins:
+        - "https://assistant.yourdomain.com"
+        - "https://api.yourdomain.com"
+      allow_credentials: true
+
+    rate_limiting:
+      enabled: true
+      requests_per_minute: 1000
+      burst_limit: 100
+
+    authentication:
+      enabled: true
+      jwt_secret: "${env:JWT_SECRET}"
+      token_expiry: 3600  # 1 hour
+
+  websocket:
+    host: "0.0.0.0"
+    port: "${env:WS_PORT:8001}"
+    max_connections: 1000
+    authentication: true
+
+  graphql:
+    playground: false  # Disabled in production
+    introspection: false  # Disabled in production
+    debug: false  # Disabled in production
+
+  grpc:
+    enabled: true
+    host: "0.0.0.0"
+    port: "${env:GRPC_PORT:50051}"
+    max_workers: 8
+    reflection: false  # Disabled in production
+
+# Security overrides for production (hardened)
+security:
+  authentication:
+    enabled: true
+    provider: "oauth2"
+    session_timeout: 3600
+    max_login_attempts: 3
+    lockout_duration: 900  # 15 minutes
+
+  authorization:
+    enabled: true
+    rbac_enabled: true
+    default_permissions: ["read"]
+
+  encryption:
+    enabled: true
+    key_rotation: true
+
+  sanitization:
+    enabled: true
+
+  audit:
+    log_all_requests: false  # Too verbose for production
+    retention_days: 365
+
+# Observability overrides for production
+observability:
+  logging:
+    level: "INFO"
+    format: "json"
+    handlers: ["file", "elasticsearch"]
+    
+    component_levels:
+      # Keep most at INFO level for production
+      core_engine: "INFO"
+      workflow_orchestrator: "INFO"
+      session_manager: "INFO"
+      interaction_handler: "INFO"
+      plugin_manager: "INFO"
+      memory_manager: "INFO"
+      skill_factory: "INFO"
+
+  metrics:
+    collection_interval: 30  # 30 seconds
+    retention_hours: 168  # 1 week
+
+  tracing:
+    sampling_rate: 0.1  # 10% sampling in production
+    service_name: "ai-assistant"
+    jaeger_endpoint: "${env:JAEGER_ENDPOINT}"
+
+  profiling:
+    enabled: false  # Disabled in production
+    cpu_profiling: false
+    memory_profiling: false
+    flamegraphs: false
+
+  health_checks:
+    detailed_responses: false  # Security consideration
+
+# Performance overrides for production
+performance:
+  max_memory_usage_gb: 8.0
+  max_cpu_usage_percent: 80.0
+  max_concurrent_requests: 100
+  max_concurrent_workflows: 50
+  max_concurrent_sessions: 1000
+
+  thread_pool_size: 20
+  async_pool_size: 100
+  io_thread_pool_size: 10
+
+  cache_warmup_enabled: true
+  cache_preload_common_responses: true
+  vector_cache_size: 10000
+  response_cache_size: 5000
+
+# Infrastructure overrides for production
+infrastructure:
+  deployment:
+    platform: "kubernetes"
+    replicas: 3
+    resource_limits:
+      cpu: "2000m"
+      memory: "8Gi"
+    resource_requests:
+      cpu: "1000m"
+      memory: "4Gi"
+
+  load_balancer:
+    enabled: true
+    algorithm: "least_connections"
+    health_check_path: "/health"
+    sticky_sessions: true
+
+  auto_scaling:
+    enabled: true
+    min_replicas: 3
+    max_replicas: 20
+    target_cpu_utilization: 70
+    target_memory_utilization: 80
+
+# Backup overrides for production
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM UTC
+  retention_days: 30
+  compression: true
+  encryption: true
+
+  database:
+    enabled: true
+    method: "pg_dump"
+    parallel_jobs: 4
+
+  filesystem:
+    enabled: true
+    directories:
+      - "data/models"
+      - "data/user_data"
+      - "data/knowledge_base"
+      - "configs"
+
+  storage:
+    type: "s3"
+    bucket: "${env:BACKUP_S3_BUCKET}"
+    path: "/backups/ai-assistant"
+
+# SSL/TLS Configuration for production
+ssl:
+  enabled: true
+  cert_path: "${env:SSL_CERT_PATH:/etc/ssl/certs/assistant.pem}"
+  key_path: "${env:SSL_KEY_PATH:/etc/ssl/private/assistant.key}"
+  ca_path: "${env:SSL_CA_PATH:}"
+  protocol: "TLSv1.2"
+  ciphers: "ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS"
+
+# Monitoring and Alerting for production
+monitoring:
+  alerting:
+    enabled: true
+    webhook_url: "${env:ALERT_WEBHOOK_URL}"
+    channels: ["slack", "email", "pagerduty"]
+    
+  elasticsearch:
+    enabled: true
+    url: "${env:ELASTICSEARCH_URL}"
+    index: "ai-assistant-logs"
+    
+  apm:
+    enabled: true
+    service_name: "ai-assistant"
+    environment: "production"
+    server_url: "${env:APM_SERVER_URL}"
+
+# Production-specific security headers
+security_headers:
+  X-Content-Type-Options: "nosniff"
+  X-Frame-Options: "DENY"
+  X-XSS-Protection: "1; mode=block"
+  Strict-Transport-Security: "max-age=31536000; includeSubDomains; preload"
+  Content-Security-Policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+  Referrer-Policy: "strict-origin-when-cross-origin"
+
+# Rate limiting for production
+rate_limiting:
+  api_rate_limit_per_hour: 10000
+  api_rate_limit_per_day: 100000
+  api_burst_limit: 100
+  storage: "redis"
+
+# Database configuration for production
+database:
+  pool_timeout: 30
+  pool_recycle: 3600
+  connect_timeout: 10
+  command_timeout: 30
+  ssl_mode: "require"
+  ssl_cert: "${env:DB_SSL_CERT}"
+  ssl_key: "${env:DB_SSL_KEY}"
+  ssl_ca: "${env:DB_SSL_CA}"
+
+  # Read replicas
+  read_replicas:
+    - "${env:READ_REPLICA_1_URL}"
+    - "${env:READ_REPLICA_2_URL}"
+
+# Redis configuration for production
+redis:
+  cluster_enabled: true
+  ssl_enabled: true
+  ssl_cert_reqs: "required"
+  ssl_ca_certs: "${env:REDIS_SSL_CA}"
+  ssl_certfile: "${env:REDIS_SSL_CERT}"
+  ssl_keyfile: "${env:REDIS_SSL_KEY}"
+  maxmemory_policy: "allkeys-lru"
+  max_memory: "4gb"
+
+# Cloud provider configuration
+cloud:
+  provider: "${env:CLOUD_PROVIDER:aws}"
+  region: "${env:CLOUD_REGION:us-east-1}"
+  
+  aws:
+    access_key_id: "${env:AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${env:AWS_SECRET_ACCESS_KEY}"
+    session_token: "${env:AWS_SESSION_TOKEN}"
+    s3_bucket: "${env:AWS_S3_BUCKET}"
+    s3_region: "${env:AWS_S3_REGION:us-east-1}"
+
+  kubernetes:
+    enabled: true
+    namespace: "${env:KUBERNETES_NAMESPACE:ai-assistant}"
+    service_account: "ai-assistant-service"
