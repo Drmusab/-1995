@@ -16,9 +16,9 @@ sys.path.insert(0, str(project_root))
 # Test imports
 try:
     from src.core.config.unified_config import UnifiedConfigManager, get_unified_config
-    from src.config_settings import BaseSettings, get_settings
-    from src.di_config import ComponentConfiguration, create_configured_container
-    from src.core.performance_config import get_default_performance_config
+    from src.core.config.config_settings import BaseSettings, get_settings
+    from src.core.config.di_config import ComponentConfiguration, create_configured_container
+    from src.core.config.performance_config import get_default_performance_config
     print("✓ All imports successful")
 except ImportError as e:
     print(f"✗ Import error: {e}")

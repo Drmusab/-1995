@@ -45,14 +45,14 @@ from .validators.simple_validator import (
 )
 
 # Configuration types and enums for backward compatibility
-from src.config_settings import (
+from .config_settings import (
     Environment,
     LogLevel,
     ComponentLifecycle,
     BaseSettings,
 )
 
-from src.core.performance_config import (
+from .performance_config import (
     PerformanceConfiguration,
     PerformanceThresholds,
     OptimizationSettings,
@@ -60,7 +60,7 @@ from src.core.performance_config import (
     get_performance_recommendations,
 )
 
-from src.di_config import (
+from .di_config import (
     ComponentConfiguration,
     create_configured_container,
 )

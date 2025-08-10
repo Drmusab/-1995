@@ -131,18 +131,18 @@ def test_backward_compatibility():
     
     try:
         # Test legacy config_settings still works
-        from src.config_settings import get_settings, Environment
+        from src.core.config.config_settings import get_settings, Environment
         settings = get_settings("development")
         assert settings.app_name == "AI Assistant"
         print("✓ Legacy config_settings still working")
         
         # Test legacy di_config still works
-        from src.di_config import ComponentConfiguration
+        from src.core.config.di_config import ComponentConfiguration
         component_config = ComponentConfiguration()
         print("✓ Legacy di_config still working")
         
         # Test legacy performance_config still works  
-        from src.core.performance_config import get_default_performance_config
+        from src.core.config.performance_config import get_default_performance_config
         perf_config = get_default_performance_config()
         assert perf_config.monitoring_enabled == True
         print("✓ Legacy performance_config still working")
