@@ -2,7 +2,6 @@
 Consolidated Core Assistant System
 
 This module contains all the core components of the AI assistant system,
-consolidated into a single file for simplified management and deployment.
 It includes:
 - Component lifecycle management
 - Multimodal input processing (text, speech, vision)
