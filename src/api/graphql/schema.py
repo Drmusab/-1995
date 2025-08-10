@@ -11,20 +11,16 @@ internal communications.
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, ForwardRef, List, Literal, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set
 
 import strawberry
 from pydantic import (
     UUID4,
     BaseModel,
-    ConfigDict,
     EmailStr,
     Field,
     HttpUrl,
-    Json,
     SecretStr,
-    root_validator,
     validator,
 )
 from pydantic.types import NonNegativeFloat, NonNegativeInt, PositiveFloat, PositiveInt

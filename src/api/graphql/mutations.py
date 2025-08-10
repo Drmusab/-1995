@@ -8,115 +8,83 @@ enabling client applications to interact with all core system components
 through a unified GraphQL interface with type safety and validation.
 """
 
-import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import List, Optional
 
-import asyncio
 import strawberry
 from strawberry.scalars import JSON
 from strawberry.types import Info
 
 # Schema imports
-from src.api.graphql.schema import ComponentInfo as ComponentInfoType
 from src.api.graphql.schema import (
     ComponentPriorityEnum,
-    ErrorResponse,
     ExecutionModeEnum,
     InteractionContextSchema,
     InteractionModeEnum,
     ModalityEnum,
     MultimodalInputSchema,
-)
-from src.api.graphql.schema import PluginInfo as PluginInfoType
-from src.api.graphql.schema import (
     PluginMetadataSchema,
     PluginTypeEnum,
     PriorityEnum,
     ProcessingContextSchema,
     ProcessingModeEnum,
-)
-from src.api.graphql.schema import (
-    ProcessingResult as ProcessingResultType,  # Core types; Schema classes for validation; Enums
-)
-from src.api.graphql.schema import (
+    ProcessingResult as ProcessingResultType,
     SecurityLevelEnum,
     SessionConfigurationSchema,
-)
-from src.api.graphql.schema import SessionInfo as SessionInfoType
-from src.api.graphql.schema import (
+    SessionInfo as SessionInfoType,
     SessionTypeEnum,
     StepTypeEnum,
     SuccessResponse,
     UserProfileSchema,
     WorkflowDefinitionSchema,
-)
-from src.api.graphql.schema import WorkflowExecution as WorkflowExecutionType
-from src.api.graphql.schema import (
+    WorkflowExecution as WorkflowExecutionType,
     WorkflowStateEnum,
 )
 from src.assistant.core import (
+    ComponentDependency,
     ComponentMetadata,
     ComponentPriority,
-    EnhancedComponentManager,
-)
-
-# Assistant components
-from src.assistant.core import (
     CoreAssistantEngine,
-    ModalityType,
-    MultimodalInput,
-    PriorityLevel,
-    ProcessingContext,
-    ProcessingMode,
-)
-from src.assistant.core import (
+    DependencyType,
+    EnhancedComponentManager,
+    EnhancedPluginManager,
+    EnhancedSessionManager,
+    ExecutionMode,
     InputModality,
     InteractionHandler,
     InteractionMode,
     InteractionPriority,
+    ModalityType,
+    MultimodalInput,
     OutputModality,
-    UserMessage,
-    UserProfile,
-)
-from src.assistant.core import (
-    EnhancedPluginManager,
     PluginLoadMode,
     PluginType,
+    PriorityLevel,
+    ProcessingContext,
+    ProcessingMode,
     SecurityLevel,
-)
-from src.assistant.core import (
-    EnhancedSessionManager,
     SessionConfiguration,
     SessionPriority,
     SessionType,
-)
-from src.assistant.core import (
-    ExecutionMode,
     StepType,
+    UserMessage,
+    UserProfile,
     WorkflowBuilder,
     WorkflowCondition,
     WorkflowDefinition,
     WorkflowOrchestrator,
     WorkflowPriority,
+    WorkflowStep,
 )
 
-# Core imports
-from src.core.config.loader import ConfigLoader
 from src.core.dependency_injection import Container
-from src.core.error_handling import ErrorHandler, handle_exceptions
-from src.core.events.event_bus import EventBus
 from src.core.security.authentication import AuthenticationManager
 from src.core.security.authorization import AuthorizationManager
 from src.core.security.sanitization import InputSanitizer
 from src.learning.preference_learning import PreferenceLearner
 from src.memory.core_memory.memory_manager import MemoryManager
-
-# Observability
 from src.observability.logging.config import get_logger
-
-# Skills and memory
 from src.skills.skill_factory import SkillFactory
 from src.skills.skill_registry import SkillRegistry
 
@@ -509,8 +477,6 @@ class Mutation:
             dependencies = []
             if component_input.dependencies:
                 for dep_id in component_input.dependencies:
-                    from src.assistant.core import ComponentDependency, DependencyType
-
                     dependencies.append(
                         ComponentDependency(
                             component_id=dep_id, dependency_type=DependencyType.REQUIRED
@@ -623,8 +589,6 @@ class Mutation:
 
             # Add steps
             for step_input in workflow_input.steps:
-                from src.assistant.core import WorkflowStep
-
                 step = WorkflowStep(
                     step_id=step_input.step_id,
                     step_type=StepType[step_input.step_type.upper()],
