@@ -18,7 +18,6 @@ import secrets
 import threading
 import time
 import uuid
-import weakref
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -26,13 +25,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
-from urllib.parse import parse_qs, urlencode
+from typing import Any, Callable, Dict, List, Optional, Set, Type, Union
+from urllib.parse import urlencode
 
 import aiohttp
 import asyncio
-import bcrypt
-import jwt
 import pyotp
 import qrcode
 
@@ -42,31 +39,22 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EnhancedEventBus
 from src.core.events.event_types import (
-    AuthenticationConfigChanged,
-    AuthenticationTokenGenerated,
     AuthenticationTokenRevoked,
     ComponentHealthChanged,
     ErrorOccurred,
     MultiFactorAuthCompleted,
-    MultiFactorAuthRequired,
-    PasswordResetCompleted,
-    PasswordResetRequested,
     SecurityViolationDetected,
     SystemStateChanged,
-    UserAccountLocked,
-    UserAccountUnlocked,
     UserAuthenticated,
     UserLoggedOut,
     UserLoginFailed,
     UserRegistered,
-    UserSessionEnded,
-    UserSessionStarted,
 )
 from src.core.health_check import HealthCheck
 from src.core.security.encryption import EncryptionManager
 
 # Security interfaces
-from src.core.security.interfaces import ISessionProvider, IUserProvider
+from src.core.security.interfaces import ISessionProvider
 from src.core.security.sanitization import SecuritySanitizer
 from src.integrations.cache.redis_cache import RedisCache
 

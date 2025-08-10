@@ -16,7 +16,6 @@ import re
 import threading
 import time
 import uuid
-import weakref
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
@@ -25,7 +24,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
 
 import asyncio
 
@@ -36,24 +35,16 @@ from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EnhancedEventBus
 from src.core.events.event_types import (
     AuditLogCreated,
-    ComponentSecurityCheck,
     ErrorOccurred,
     PermissionGranted,
     PermissionRevoked,
-    PluginSecurityCheck,
     PolicyCreated,
-    PolicyDeleted,
-    PolicyUpdated,
-    ResourceAccessDenied,
-    ResourceAccessGranted,
     RoleAssigned,
     RoleRevoked,
     SecurityViolation,
-    SessionSecurityCheck,
     UserAuthenticated,
     UserAuthorizationFailed,
     UserAuthorized,
-    WorkflowSecurityCheck,
 )
 from src.core.health_check import HealthCheck
 from src.core.security.authentication import AuthenticationManager
