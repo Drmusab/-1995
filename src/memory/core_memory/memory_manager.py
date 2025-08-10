@@ -108,7 +108,6 @@ from src.memory.core_memory.memory_types import (
     LongTermMemory,
     ProceduralMemory,
     SemanticMemory,
-    SensoryMemory,
     ShortTermMemory,
     WorkingMemory,
 )
@@ -329,7 +328,7 @@ class MemoryManager(AbstractMemoryManager):
             self.episodic_memory = self.container.get(EpisodicMemory)
             self.semantic_memory = self.container.get(SemanticMemory)
             self.procedural_memory = self.container.get(ProceduralMemory)
-            self.sensory_memory = self.container.get(SensoryMemory)
+            # self.sensory_memory = self.container.get(SensoryMemory)  # SensoryMemory class not implemented
             self.short_term_memory = self.container.get(ShortTermMemory)
             self.long_term_memory = self.container.get(LongTermMemory)
 
@@ -339,7 +338,7 @@ class MemoryManager(AbstractMemoryManager):
                 MemoryType.EPISODIC: self.episodic_memory,
                 MemoryType.SEMANTIC: self.semantic_memory,
                 MemoryType.PROCEDURAL: self.procedural_memory,
-                MemoryType.SENSORY: self.sensory_memory,
+                # MemoryType.SENSORY: self.sensory_memory,  # SensoryMemory class not implemented
                 MemoryType.SHORT_TERM: self.short_term_memory,
                 MemoryType.LONG_TERM: self.long_term_memory,
             }
