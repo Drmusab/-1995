@@ -1,8 +1,15 @@
+"""
+Memory Storage Module
+Author: Drmusab
 
-# Compatibility shim for storage module
-import warnings
-warnings.warn("Importing from memory.storage is deprecated. Use memory directly.", DeprecationWarning)
+This module exports all memory storage classes.
+"""
 
-from ..simple_vector_store import VectorStore, VectorMemoryStore
+from .memory_graph import MemoryGraph, MemoryGraphStore
+from .vector_store import VectorMemoryStore
 
-__all__ = ['VectorStore', 'VectorMemoryStore']
+__all__ = [
+    'MemoryGraph',
+    'MemoryGraphStore',
+    'VectorMemoryStore',
+]

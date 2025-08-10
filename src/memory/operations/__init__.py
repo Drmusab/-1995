@@ -1,11 +1,16 @@
+"""
+Memory Operations Module
+Author: Drmusab
 
-# Compatibility shim for operations module
-import warnings
-warnings.warn("Importing from memory.operations is deprecated. Use memory directly.", DeprecationWarning)
+This module exports all memory operation classes.
+"""
 
-from ..simple_operations import MemoryConsolidator, MemoryContextManager, EnhancedRetrieval, ContextManager
+from .consolidation import MemoryConsolidation
+from .context_manager import ContextManager
+from .retrieval import EnhancedRetrieval
 
-# Legacy aliases
-MemoryConsolidation = MemoryConsolidator
-
-__all__ = ['MemoryConsolidator', 'MemoryContextManager', 'EnhancedRetrieval', 'ContextManager', 'MemoryConsolidation']
+__all__ = [
+    'MemoryConsolidation',
+    'ContextManager', 
+    'EnhancedRetrieval',
+]
