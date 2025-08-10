@@ -156,7 +156,7 @@ class LifeOrganizerSkill(SkillInterface):
             if request_type == "goal_decomposition":
                 return await self._handle_goal_decomposition(request, language)
             elif request_type == "mood_tracking":
-                return await self._handle_mood_tracking(request, language)
+                return await self._handle_mood_tracking(request, language, context)
             elif request_type == "voice_kanban":
                 return await self._handle_voice_kanban(request, language)
             elif request_type == "adaptive_scheduling":
@@ -164,7 +164,7 @@ class LifeOrganizerSkill(SkillInterface):
             elif request_type == "daily_plan":
                 return await self._handle_daily_planning(request, language)
             elif request_type == "voice_command":
-                return await self._handle_voice_command(request, language)
+                return await self._handle_voice_command(request, language, context)
             else:
                 # General request - determine intent
                 return await self._handle_general_request(request, language)
@@ -239,7 +239,7 @@ class LifeOrganizerSkill(SkillInterface):
             "suggested_next_action": "add_to_kanban"
         }
 
-    async def _handle_mood_tracking(self, request: Dict[str, Any], language: str) -> Dict[str, Any]:
+    async def _handle_mood_tracking(self, request: Dict[str, Any], language: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Handle mood and energy tracking request."""
         
         voice_text = request.get("voice_text")
@@ -247,12 +247,18 @@ class LifeOrganizerSkill(SkillInterface):
         manual_mood = request.get("manual_mood")
         manual_energy = request.get("manual_energy")
         
+        # Extract user_id from context if available
+        user_id = None
+        if context:
+            user_id = context.get("user_id") or context.get("session", {}).get("user_id")
+        
         # Update mood/energy state
         state = await self.mood_tracker.update_state(
             voice_text=voice_text,
             image_data=image_data,
             manual_mood=MoodLevel(manual_mood) if manual_mood else None,
-            manual_energy=EnergyLevel(manual_energy) if manual_energy else None
+            manual_energy=EnergyLevel(manual_energy) if manual_energy else None,
+            user_id=user_id
         )
         
         # Get recommendations
@@ -444,7 +450,7 @@ class LifeOrganizerSkill(SkillInterface):
             "suggested_next_action": "start_day"
         }
 
-    async def _handle_voice_command(self, request: Dict[str, Any], language: str) -> Dict[str, Any]:
+    async def _handle_voice_command(self, request: Dict[str, Any], language: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Handle general voice command."""
         voice_text = request.get("voice_text", "")
         
@@ -456,7 +462,7 @@ class LifeOrganizerSkill(SkillInterface):
         if intent in ["kanban", "task_management"]:
             return await self._handle_voice_kanban({"voice_command": voice_text}, language)
         elif intent in ["mood", "energy", "feeling"]:
-            return await self._handle_mood_tracking({"voice_text": voice_text}, language)
+            return await self._handle_mood_tracking({"voice_text": voice_text}, language, context)
         elif intent in ["goal", "planning"]:
             return await self._handle_goal_decomposition({"goal": voice_text}, language)
         elif intent in ["schedule", "time_management"]:
