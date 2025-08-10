@@ -41,19 +41,8 @@ try:
 except ImportError:
     COLORAMA_AVAILABLE = False
 
-try:
-    import structlog
-
-    STRUCTLOG_AVAILABLE = True
-except ImportError:
-    STRUCTLOG_AVAILABLE = False
-
-try:
-    import uvloop
-
-    UVLOOP_AVAILABLE = True
-except ImportError:
-    UVLOOP_AVAILABLE = False
+# Optional dependencies that are actually used
+# (structlog and uvloop imports removed as they were unused)
 
 
 class LogLevel(Enum):
