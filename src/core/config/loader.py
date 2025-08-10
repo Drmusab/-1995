@@ -32,17 +32,22 @@ from pathlib import Path
 from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
 
 import asyncio
-import jsonschema
-import toml
+# Note: Removed toml import as we're now YAML-first
+# # import toml  # Removed for YAML-first approach
 
-# External imports
+# External imports with fallbacks
 import yaml
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+try:
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
+    WATCHDOG_AVAILABLE = True
+except ImportError:
+    WATCHDOG_AVAILABLE = False
+    FileSystemEventHandler = None
+    Observer = None
 
 try:
     import aiofiles
-
     AIOFILES_AVAILABLE = True
 except ImportError:
     AIOFILES_AVAILABLE = False
@@ -50,11 +55,17 @@ except ImportError:
 
 try:
     import aiohttp
-
     AIOHTTP_AVAILABLE = True
 except ImportError:
     AIOHTTP_AVAILABLE = False
     aiohttp = None
+
+try:
+    import jsonschema
+    JSONSCHEMA_AVAILABLE = True
+except ImportError:
+    JSONSCHEMA_AVAILABLE = False
+    jsonschema = None
 
 # Core imports (will be available when integrated)
 from src.core.events.event_bus import EventBus
@@ -291,7 +302,7 @@ class FileConfigProvider(ConfigurationProvider):
             elif source_info.format == ConfigFormat.JSON:
                 config = json.loads(content)
             elif source_info.format == ConfigFormat.TOML:
-                config = toml.loads(content)
+                raise ConfigError("TOML format no longer supported - please use YAML", source_info.source_id)
             else:
                 raise ConfigError(
                     f"Unsupported format: {source_info.format}", source_info.source_id
@@ -309,6 +320,10 @@ class FileConfigProvider(ConfigurationProvider):
     ) -> None:
         """Watch file for changes."""
         if source_info.reload_strategy != ReloadStrategy.FILE_WATCH:
+            return
+            
+        if not WATCHDOG_AVAILABLE:
+            self.logger.warning("Watchdog not available - file watching disabled")
             return
 
         file_path = Path(source_info.location)
@@ -397,14 +412,17 @@ class RemoteConfigProvider(ConfigurationProvider):
 
     def __init__(self, logger):
         self.logger = logger
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session = None
 
     def can_handle(self, source_type: ConfigSource) -> bool:
         """Check if this provider handles remote sources."""
-        return source_type == ConfigSource.REMOTE
+        return source_type == ConfigSource.REMOTE and AIOHTTP_AVAILABLE
 
-    async def _get_session(self) -> aiohttp.ClientSession:
+    async def _get_session(self):
         """Get or create HTTP session."""
+        if not AIOHTTP_AVAILABLE:
+            raise ConfigError("aiohttp not available for remote configuration")
+            
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession()
         return self._session
@@ -425,7 +443,7 @@ class RemoteConfigProvider(ConfigurationProvider):
             elif source_info.format == ConfigFormat.JSON:
                 config = json.loads(content)
             elif source_info.format == ConfigFormat.TOML:
-                config = toml.loads(content)
+                raise ConfigError("TOML format no longer supported - please use YAML", source_info.source_id)
             else:
                 raise ConfigError(
                     f"Unsupported format: {source_info.format}", source_info.source_id
@@ -479,8 +497,9 @@ class ConfigValidator:
     def register_schema(self, schema_id: str, schema: Dict[str, Any]) -> None:
         """Register a validation schema."""
         try:
-            # Validate the schema itself
-            jsonschema.Draft7Validator.check_schema(schema)
+            # Validate the schema itself if jsonschema is available
+            if JSONSCHEMA_AVAILABLE and jsonschema:
+                jsonschema.Draft7Validator.check_schema(schema)
             self._schemas[schema_id] = schema
             self.logger.debug(f"Registered validation schema: {schema_id}")
         except Exception as e:
@@ -503,10 +522,12 @@ class ConfigValidator:
             elif schema_id and schema_id in self._schemas:
                 validation_schema = self._schemas[schema_id]
 
-            if validation_schema:
+            if validation_schema and JSONSCHEMA_AVAILABLE and jsonschema:
                 validator = jsonschema.Draft7Validator(validation_schema)
                 for error in validator.iter_errors(config):
                     errors.append(f"{'.'.join(str(p) for p in error.path)}: {error.message}")
+            elif validation_schema:
+                self.logger.warning("jsonschema not available - skipping validation")
 
         except Exception as e:
             errors.append(f"Validation error: {str(e)}")
