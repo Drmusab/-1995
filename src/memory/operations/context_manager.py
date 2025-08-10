@@ -3,4 +3,4 @@
 import warnings
 warnings.warn("Importing from memory.operations.context_manager is deprecated. Use memory.simple_operations.", DeprecationWarning)
 
-from ..simple_operations import MemoryContextManager
+from ..simple_operations import MemoryContextManager, ContextManager
