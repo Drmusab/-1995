@@ -2,80 +2,66 @@
 Memory Module
 Author: Drmusab
 
-This module provides comprehensive memory management for the AI assistant,
-including different memory types, storage, operations, and caching.
+Simplified memory management for the AI assistant with essential functionality
+and minimal dependencies.
 """
 
-# Import only core memory classes to avoid import issues in other modules
-from .core_memory import (
+# Import simplified memory components
+from .simple_memory import (
     BaseMemory,
     MemoryItem,
     MemoryType,
     MemoryQuery,
-    EpisodicMemory,
-    LongTermMemory,
-    ProceduralMemory,
-    SemanticMemory,
-    ShortTermMemory,
-    WorkingMemory,
+    MemoryAccess,
+    MemorySensitivity,
+    MemoryMetadata,
+    SimpleMemory,
 )
 
-# Conditional imports to avoid breaking dependencies
-try:
-    from .cache_manager import MemoryCacheManager
-except ImportError:
-    # MemoryCacheManager has dependency issues, skip for now
-    MemoryCacheManager = None
+from .simple_manager import MemoryManager
+from .simple_working_memory import WorkingMemory
+from .simple_vector_store import VectorStore, VectorMemoryStore
+from .simple_operations import (
+    MemoryConsolidator,
+    MemoryContextManager,
+    EnhancedRetrieval,
+    ContextManager,
+)
 
-try:
-    from .core_memory import MemoryManager
-except ImportError:
-    # MemoryManager has dependency issues, skip for now  
-    MemoryManager = None
+# Create aliases for backward compatibility
+LongTermMemory = SimpleMemory
+ShortTermMemory = SimpleMemory
+EpisodicMemory = SimpleMemory
+SemanticMemory = SimpleMemory
+ProceduralMemory = SimpleMemory
 
-try:
-    from .operations import (
-        MemoryConsolidation,
-        ContextManager,
-        EnhancedRetrieval,
-    )
-except ImportError:
-    # Operations have dependency issues, skip for now
-    MemoryConsolidation = None
-    ContextManager = None
-    EnhancedRetrieval = None
-
-try:
-    from .storage import (
-        MemoryGraph,
-        MemoryGraphStore,
-        VectorMemoryStore,
-    )
-except ImportError:
-    # Storage has dependency issues, skip for now
-    MemoryGraph = None
-    MemoryGraphStore = None
-    VectorMemoryStore = None
+# Legacy aliases
+MemoryConsolidation = MemoryConsolidator
 
 __all__ = [
-    # Core Memory (always available)
+    # Core Memory Components
     'BaseMemory',
     'MemoryItem',
-    'MemoryType', 
+    'MemoryType',
     'MemoryQuery',
-    'EpisodicMemory',
-    'LongTermMemory',
-    'ProceduralMemory',
-    'SemanticMemory',
-    'ShortTermMemory',
-    'WorkingMemory',
-    # Optional components (may be None if dependencies missing)
-    'MemoryCacheManager',
+    'MemoryAccess',
+    'MemorySensitivity',
+    'MemoryMetadata',
+    'SimpleMemory',
     'MemoryManager',
-    'MemoryConsolidation',
-    'ContextManager',
-    'EnhancedRetrieval',
-    'MemoryGraph',
-    'MemoryGraphStore',
+    'WorkingMemory',
+    'VectorStore',
     'VectorMemoryStore',
+    # Operations
+    'MemoryConsolidator',
+    'MemoryContextManager',
+    'EnhancedRetrieval',
+    'ContextManager',
+    # Backward compatibility aliases
+    'LongTermMemory',
+    'ShortTermMemory',
+    'EpisodicMemory',
+    'SemanticMemory',
+    'ProceduralMemory',
+    'MemoryConsolidation',
 ]
