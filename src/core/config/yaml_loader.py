@@ -59,15 +59,32 @@ class YamlConfigLoader:
             return self._config
             
         try:
-            # Load base configuration
+            # Load base configuration - check both new and old locations for compatibility
             base_config = self._load_yaml_file("config.yaml")
+            if not base_config:
+                # Try legacy location in root for backward compatibility
+                base_config = self._load_yaml_file("../../../config.yaml")
             if not base_config:
                 raise FileNotFoundError("Base configuration file config.yaml not found")
                 
-            # Load environment-specific overrides
-            env_config = self._load_yaml_file(f"config.{self.environment}.yaml")
+            # Load environment-specific overrides - check organized location first
+            env_config = self._load_yaml_file(f"environments/config.{self.environment}.yaml")
             
-            # Also try common abbreviations
+            # Also try common abbreviations in organized location
+            if not env_config:
+                env_abbreviations = {
+                    "development": "dev",
+                    "production": "prod", 
+                    "testing": "test"
+                }
+                
+                if self.environment in env_abbreviations:
+                    env_config = self._load_yaml_file(f"environments/config.{env_abbreviations[self.environment]}.yaml")
+            
+            # Fallback to legacy locations for backward compatibility
+            if not env_config:
+                env_config = self._load_yaml_file(f"config.{self.environment}.yaml")
+            
             if not env_config:
                 env_abbreviations = {
                     "development": "dev",
@@ -270,21 +287,31 @@ class YamlConfigLoader:
 _config_loader: Optional[YamlConfigLoader] = None
 
 
-def get_config_loader(environment: Optional[str] = None, config_dir: str = ".") -> YamlConfigLoader:
+def get_config_loader(environment: Optional[str] = None, config_dir: Optional[str] = None) -> YamlConfigLoader:
     """
     Get the global configuration loader instance.
     
     Args:
         environment: Environment name
-        config_dir: Configuration directory
+        config_dir: Configuration directory (defaults to core/config)
         
     Returns:
         Configuration loader instance
     """
     global _config_loader
     
-    if _config_loader is None:
-        _config_loader = YamlConfigLoader(environment, config_dir)
+    # Default environment
+    env = environment or os.getenv("ENVIRONMENT", "development")
+    
+    # Check if we need a new loader (different environment or first time)
+    if _config_loader is None or _config_loader.environment != env:
+        # Default to the organized config directory structure
+        if config_dir is None:
+            # Get the path to the core/config directory relative to this file
+            current_dir = Path(__file__).parent
+            config_dir = str(current_dir)
+        
+        _config_loader = YamlConfigLoader(env, config_dir)
         
     return _config_loader
 
