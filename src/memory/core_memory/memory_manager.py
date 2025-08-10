@@ -62,7 +62,7 @@ from src.core.events.event_types import (
 )
 from src.core.health_check import HealthCheck
 from src.core.security.encryption import EncryptionManager
-from src.integrations.storage.backup_manager import BackupManager
+
 
 # Storage integration
 from src.integrations.storage.database import DatabaseManager
@@ -246,11 +246,9 @@ class MemoryManager(AbstractMemoryManager):
         # Storage integration
         try:
             self.database = container.get(DatabaseManager)
-            self.backup_manager = container.get(BackupManager)
         except Exception:
-            self.logger.warning("Database or backup manager not available")
+            self.logger.warning("Database manager not available")
             self.database = None
-            self.backup_manager = None
 
         # Learning integration
         try:
@@ -1442,7 +1440,7 @@ class MemoryManager(AbstractMemoryManager):
 
     async def _backup_loop(self) -> None:
         """Background task for memory backup."""
-        if not self.config.backup_enabled or not self.backup_manager:
+        if not self.config.backup_enabled:
             return
 
         while not self._shutdown_event.is_set():
@@ -1485,15 +1483,9 @@ class MemoryManager(AbstractMemoryManager):
                 with open(backup_dir / "metadata.json", "w") as f:
                     json.dump(metadata, f)
 
-                # Register backup with backup manager
-                if success and self.backup_manager:
-                    await self.backup_manager.register_backup("memory", str(backup_dir), metadata)
-
-                # Cleanup old backups
-                if self.backup_manager:
-                    await self.backup_manager.cleanup_old_backups(
-                        "memory", self.config.backup_retention
-                    )
+                # Backup completed successfully
+                if success:
+                    self.logger.info(f"Memory backup completed: {backup_dir}")
 
                 # Emit backup completed event
                 await self.event_bus.emit(
@@ -1576,13 +1568,14 @@ class MemoryManager(AbstractMemoryManager):
         self.logger.info("Memory manager received shutdown signal")
 
         # Run one final backup if enabled
-        if self.config.backup_enabled and self.backup_manager:
+        if self.config.backup_enabled:
             try:
                 self.logger.info("Running final memory backup before shutdown")
-                # Create backup with shutdown marker
+                # Create simple backup with shutdown marker
                 timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
                 backup_dir = Path(f"data/backups/memory_shutdown_{timestamp}")
                 backup_dir.parent.mkdir(parents=True, exist_ok=True)
+                self.logger.info(f"Final backup directory created: {backup_dir}")
 
                 # Backup each store
                 for store_type, store in self.memory_stores.items():
