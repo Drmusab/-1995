@@ -31,53 +31,69 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import asyncio
-import numpy as np
 
-# Try to import rich for enhanced terminal output
+# Import performance optimization modules
+from src.core.lazy_imports import lazy_import, lazy_import_decorator
+from src.core.performance_utils import (
+    PerformantStringBuilder, 
+    get_status_formatter,
+    FastIterationHelpers
+)
+from src.core.enhanced_cache import memory_cache
+
+# Lazy imports for heavy dependencies
+numpy = lazy_import('numpy')
+
+# Try to import rich for enhanced terminal output - lazy loaded
+RICH_AVAILABLE = True
 try:
-    from rich import print as rich_print
-    from rich.console import Console
-    from rich.markdown import Markdown
-    from rich.panel import Panel
-    from rich.progress import Progress, SpinnerColumn, TextColumn
-    from rich.prompt import Confirm, Prompt
-    from rich.syntax import Syntax
-    from rich.table import Table
-
-    RICH_AVAILABLE = True
+    rich_print = lazy_import('rich', 'print')
+    Console = lazy_import('rich.console', 'Console')
+    Markdown = lazy_import('rich.markdown', 'Markdown')
+    Panel = lazy_import('rich.panel', 'Panel')
+    Progress = lazy_import('rich.progress', 'Progress')
+    SpinnerColumn = lazy_import('rich.progress', 'SpinnerColumn')
+    TextColumn = lazy_import('rich.progress', 'TextColumn')
+    Confirm = lazy_import('rich.prompt', 'Confirm')
+    Prompt = lazy_import('rich.prompt', 'Prompt')
+    Syntax = lazy_import('rich.syntax', 'Syntax')
+    Table = lazy_import('rich.table', 'Table')
 except ImportError:
     RICH_AVAILABLE = False
+    # Create dummy objects for fallback
+    rich_print = print
+    Console = lambda: None
 
-from src.assistant.core import EnhancedComponentManager
+# Lazy import assistant components
+EnhancedComponentManager = lazy_import('src.assistant.core', 'EnhancedComponentManager')
 
-# Assistant components
-from src.assistant.core import (
-    InputModality,
-    InteractionHandler,
-    InteractionMode,
-    OutputModality,
-    UserMessage,
-)
-from src.assistant.core import EnhancedPluginManager
-from src.assistant.core import EnhancedSessionManager
-from src.assistant.core import WorkflowOrchestrator
+# Assistant core components - lazy loaded for faster startup
+InputModality = lazy_import('src.assistant.core', 'InputModality')
+InteractionHandler = lazy_import('src.assistant.core', 'InteractionHandler')
+InteractionMode = lazy_import('src.assistant.core', 'InteractionMode')
+OutputModality = lazy_import('src.assistant.core', 'OutputModality')
+UserMessage = lazy_import('src.assistant.core', 'UserMessage')
 
-# Core imports
+EnhancedPluginManager = lazy_import('src.assistant.core', 'EnhancedPluginManager')
+EnhancedSessionManager = lazy_import('src.assistant.core', 'EnhancedSessionManager')
+WorkflowOrchestrator = lazy_import('src.assistant.core', 'WorkflowOrchestrator')
+
+# Core imports (always needed)
 from src.core.config.loader import ConfigLoader
 from src.core.dependency_injection import Container
 from src.core.events.event_bus import EventBus
-from src.core.events.event_types import (
-    PluginLoaded,
-    PluginUnloaded,
-    SessionEnded,
-    SessionStarted,
-    SystemShutdownStarted,
-    SystemStarted,
-    UserInteractionCompleted,
-    UserInteractionStarted,
-    WorkflowCompleted,
-    WorkflowStarted,
-)
+
+# Lazy import event types
+PluginLoaded = lazy_import('src.core.events.event_types', 'PluginLoaded')
+PluginUnloaded = lazy_import('src.core.events.event_types', 'PluginUnloaded')
+SessionEnded = lazy_import('src.core.events.event_types', 'SessionEnded')
+SessionStarted = lazy_import('src.core.events.event_types', 'SessionStarted')
+SystemShutdownStarted = lazy_import('src.core.events.event_types', 'SystemShutdownStarted')
+SystemStarted = lazy_import('src.core.events.event_types', 'SystemStarted')
+UserInteractionCompleted = lazy_import('src.core.events.event_types', 'UserInteractionCompleted')
+UserInteractionStarted = lazy_import('src.core.events.event_types', 'UserInteractionStarted')
+WorkflowCompleted = lazy_import('src.core.events.event_types', 'WorkflowCompleted')
+WorkflowStarted = lazy_import('src.core.events.event_types', 'WorkflowStarted')
 
 # Import from main application entry point
 from src.main import AIAssistant
@@ -87,13 +103,14 @@ from src.observability.logging.config import get_logger, configure_logging
 
 # Import UI-specific components - make optional to avoid blocking
 try:
-    from src.ui.cli.commands_simple import Command, CommandRegistry
+    Command = lazy_import('src.ui.cli.commands_simple', 'Command')
+    CommandRegistry = lazy_import('src.ui.cli.commands_simple', 'CommandRegistry')
 except ImportError:
     Command = None
     CommandRegistry = None
 
 try:
-    from src.ui.cli.interactive import InteractiveSession
+    InteractiveSession = lazy_import('src.ui.cli.interactive', 'InteractiveSession')
 except ImportError:
     InteractiveSession = None
 
@@ -859,12 +876,14 @@ class AssistantCLI:
                 "Available modes: interactive, command, repl, script, monitor"
             )
 
+    @memory_cache(ttl=5.0)  # Cache for 5 seconds to avoid repeated expensive calls
     def _cmd_status(self):
-        """Show system status information."""
+        """Show system status information (optimized with caching)."""
         status = self.assistant.get_status()
 
         if RICH_AVAILABLE:
-            table = Table(title="System Status")
+            table_class = Table._resolve()
+            table = table_class(title="System Status")
             table.add_column("Component", style="cyan")
             table.add_column("Status", style="green")
             table.add_column("Details", style="yellow")
@@ -877,42 +896,35 @@ class AssistantCLI:
                 f"Uptime: {status.get('uptime_seconds', 0):.1f}s",
             )
 
-            # Component statuses
+            # Component statuses - use efficient batch processing
             components = status.get("components", {})
+            component_rows = []
+            
             for component_name, component_status in components.items():
                 if component_status is None:
                     continue
 
                 if isinstance(component_status, dict):
-                    # Format details based on component type
-                    details = ""
-                    if component_name == "component_manager":
-                        total = component_status.get("total_components", 0)
-                        running = component_status.get("running_components", 0)
-                        details = f"{running}/{total} components running"
-                    elif component_name == "session_manager":
-                        details = (
-                            f"{component_status.get('total_active_sessions', 0)} active sessions"
-                        )
-                    elif component_name == "workflow_orchestrator":
-                        details = f"{component_status.get('active_executions', 0)} active workflows"
-                    elif component_name == "plugin_manager":
-                        total = component_status.get("total_plugins", 0)
-                        enabled = component_status.get("enabled_plugins", 0)
-                        details = f"{enabled}/{total} plugins enabled"
-
-                    table.add_row(component_name, "active", details)
+                    # Format details based on component type using helper
+                    details = self._format_component_details(component_name, component_status)
+                    component_rows.append((component_name, "active", details))
                 else:
-                    table.add_row(component_name, "unknown", "")
+                    component_rows.append((component_name, "unknown", ""))
+
+            # Add all rows at once for better performance
+            for row in component_rows:
+                table.add_row(*row)
 
             self.console.print(table)
         else:
-            print("=== System Status ===")
-            print(f"Status: {status.get('status', 'unknown')}")
-            print(f"Version: {status.get('version', 'unknown')}")
-            print(f"Uptime: {status.get('uptime_seconds', 0):.1f}s")
-            print()
-            print("Components:")
+            # Use string builder for efficient text formatting
+            builder = PerformantStringBuilder()
+            builder.append_line("=== System Status ===")
+            builder.append_format("Status: {}\n", status.get("status", "unknown"))
+            builder.append_format("Version: {}\n", status.get("version", "unknown"))
+            builder.append_format("Uptime: {:.1f}s\n", status.get("uptime_seconds", 0))
+            builder.append_line()
+            builder.append_line("Components:")
 
             components = status.get("components", {})
             for component_name, component_status in components.items():
@@ -920,26 +932,29 @@ class AssistantCLI:
                     continue
 
                 if isinstance(component_status, dict):
-                    if component_name == "component_manager":
-                        total = component_status.get("total_components", 0)
-                        running = component_status.get("running_components", 0)
-                        print(f"- {component_name}: {running}/{total} components running")
-                    elif component_name == "session_manager":
-                        print(
-                            f"- {component_name}: {component_status.get('total_active_sessions', 0)} active sessions"
-                        )
-                    elif component_name == "workflow_orchestrator":
-                        print(
-                            f"- {component_name}: {component_status.get('active_executions', 0)} active workflows"
-                        )
-                    elif component_name == "plugin_manager":
-                        total = component_status.get("total_plugins", 0)
-                        enabled = component_status.get("enabled_plugins", 0)
-                        print(f"- {component_name}: {enabled}/{total} plugins enabled")
-                    else:
-                        print(f"- {component_name}: active")
+                    details = self._format_component_details(component_name, component_status)
+                    builder.append_format("- {}: {}\n", component_name, details)
                 else:
-                    print(f"- {component_name}: unknown")
+                    builder.append_format("- {}: unknown\n", component_name)
+
+            print(builder.build())
+    
+    def _format_component_details(self, component_name: str, component_status: Dict[str, Any]) -> str:
+        """Format component details efficiently."""
+        if component_name == "component_manager":
+            total = component_status.get("total_components", 0)
+            running = component_status.get("running_components", 0)
+            return f"{running}/{total} components running"
+        elif component_name == "session_manager":
+            return f"{component_status.get('total_active_sessions', 0)} active sessions"
+        elif component_name == "workflow_orchestrator":
+            return f"{component_status.get('active_executions', 0)} active workflows"
+        elif component_name == "plugin_manager":
+            total = component_status.get("total_plugins", 0)
+            enabled = component_status.get("enabled_plugins", 0)
+            return f"{enabled}/{total} plugins enabled"
+        else:
+            return "active"
 
     async def _cmd_session(self, action: str = "list", session_id: str = None):
         """
@@ -1820,25 +1835,27 @@ class AssistantCLI:
     # ----- Utility Methods -----
 
     def print_system_message(self, message: str):
-        """Print a system message with appropriate formatting."""
+        """Print a system message with appropriate formatting (optimized)."""
+        formatter = get_status_formatter()
         if RICH_AVAILABLE:
-            self.console.print(
-                f"[{self.settings['system_color']}]System: {message}[/{self.settings['system_color']}]"
-            )
+            formatted_msg = formatter.format_system_message(message, use_color=True)
+            self.console.print(formatted_msg)
         else:
-            print(f"System: {message}")
+            formatted_msg = formatter.format_system_message(message, use_color=False)
+            print(formatted_msg)
 
     def print_error(self, message: str):
-        """Print an error message with appropriate formatting."""
+        """Print an error message with appropriate formatting (optimized)."""
+        formatter = get_status_formatter()
         if RICH_AVAILABLE:
-            self.console.print(
-                f"[{self.settings['error_color']}]Error: {message}[/{self.settings['error_color']}]"
-            )
+            formatted_msg = formatter.format_error_message(message, use_color=True)
+            self.console.print(formatted_msg)
         else:
-            print(f"Error: {message}")
+            formatted_msg = formatter.format_error_message(message, use_color=False)
+            print(formatted_msg)
 
     def print_user_message(self, message: str):
-        """Print a user message with appropriate formatting."""
+        """Print a user message with appropriate formatting (optimized)."""
         if RICH_AVAILABLE:
             self.console.print(
                 f"[{self.settings['user_color']}]User: {message}[/{self.settings['user_color']}]"
@@ -1847,10 +1864,11 @@ class AssistantCLI:
             print(f"User: {message}")
 
     def print_assistant_message(self, message: str):
-        """Print an assistant message with appropriate formatting."""
+        """Print an assistant message with appropriate formatting (optimized)."""
         if RICH_AVAILABLE:
             if self.settings["use_markdown"]:
-                self.console.print(Markdown(message))
+                markdown_obj = Markdown._resolve()
+                self.console.print(markdown_obj(message))
             else:
                 self.console.print(
                     f"[{self.settings['assistant_color']}]Assistant: {message}[/{self.settings['assistant_color']}]"
