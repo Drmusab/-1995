@@ -11,9 +11,7 @@ import hashlib
 import json
 import logging
 import re
-import threading
 import time
-import traceback
 import uuid
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
@@ -22,14 +20,13 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, TypeVar, Union
 from urllib.parse import quote, urlencode
 
 import aiohttp
 import asyncio
 
 try:
-    import lxml
     from bs4 import BeautifulSoup
 
     HAS_BS4 = True
@@ -43,7 +40,6 @@ from src.assistant.core import (
     ComponentPriority,
     EnhancedComponentManager,
 )
-from src.assistant.core import CoreAssistantEngine, ProcessingContext
 from src.assistant.core import EnhancedSessionManager
 from src.assistant.core import StepExecutor, WorkflowOrchestrator, WorkflowStep
 
@@ -55,12 +51,9 @@ from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
     ComponentHealthChanged,
     ComponentInitialized,
-    ComponentRegistered,
-    ErrorOccurred,
     ProcessingCompleted,
     ProcessingError,
     ProcessingStarted,
-    SystemStateChanged,
 )
 from src.core.health_check import HealthCheck
 

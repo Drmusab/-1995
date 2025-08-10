@@ -15,7 +15,6 @@ import pickle
 import threading
 import time
 import uuid
-import weakref
 import zlib
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
@@ -33,7 +32,6 @@ from typing import (
     Optional,
     Set,
     Tuple,
-    Type,
     TypeVar,
     Union,
 )
@@ -43,21 +41,12 @@ import numpy as np
 
 # Redis imports
 try:
-    import redis.asyncio as redis
     from redis.asyncio import ConnectionPool, Redis, RedisCluster
-    from redis.exceptions import (
-        AuthenticationError,
-        ClusterError,
-        ConnectionError,
-        RedisError,
-        ResponseError,
-        TimeoutError,
-    )
+    from redis.exceptions import TimeoutError
 
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
-    redis = None
     Redis = None
     ConnectionPool = None
     RedisCluster = None
@@ -74,11 +63,6 @@ from src.core.events.event_types import (
     CacheHit,
     CacheMiss,
     ComponentHealthChanged,
-    ErrorOccurred,
-    MemoryOperationCompleted,
-    SessionStateChanged,
-    SystemStateChanged,
-    WorkflowCompleted,
 )
 from src.core.health_check import HealthCheck
 from src.observability.logging.config import get_logger

@@ -9,36 +9,28 @@ and seamless integration with all core system components.
 """
 
 import hashlib
-import inspect
 import json
 import logging
 import threading
 import time
 import uuid
-import weakref
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
 
 import aiosqlite
 import asyncio
 
 # Database libraries
 import asyncpg
-import sqlalchemy
-from alembic import command
-from alembic.config import Config
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy import JSON
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.sql import text
 
 # Core imports
 from src.core.config.loader import ConfigLoader
@@ -46,18 +38,11 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    ComponentHealthChanged,
     DatabaseConnectionEstablished,
-    DatabaseConnectionLost,
-    DatabaseHealthCheckFailed,
-    DatabaseMigrationCompleted,
-    DatabaseMigrationStarted,
-    DatabasePerformanceWarning,
     DatabaseQueryExecuted,
     DatabaseTransactionCommitted,
     DatabaseTransactionRolledBack,
     DatabaseTransactionStarted,
-    ErrorOccurred,
 )
 from src.core.health_check import HealthCheck
 from src.core.security.encryption import EncryptionManager
@@ -268,7 +253,7 @@ class DatabaseTransaction(ABC):
         pass
 
     @abstractmethod
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, _exc_val, _exc_tb):
         """Exit transaction context."""
         pass
 
@@ -510,7 +495,7 @@ class PostgreSQLTransaction(DatabaseTransaction):
         self.logger.debug(f"Transaction started: {self.transaction_id}")
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, _exc_val, _exc_tb):
         """Exit transaction context."""
         if exc_type:
             await self.rollback()
@@ -746,7 +731,7 @@ class SQLiteTransaction(DatabaseTransaction):
         self.logger.debug(f"Transaction started: {self.transaction_id}")
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, _exc_val, _exc_tb):
         """Exit transaction context."""
         if exc_type:
             await self.rollback()

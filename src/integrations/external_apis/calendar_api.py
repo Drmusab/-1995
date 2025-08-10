@@ -22,14 +22,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Type, Union
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Union
 from urllib.parse import quote, urlencode
 
 import aiohttp
 import asyncio
-import pytz
 from dateutil.parser import parse as parse_date
-from dateutil.rrule import DAILY, HOURLY, MONTHLY, WEEKLY, YEARLY, rrule
+from dateutil.rrule import DAILY, MONTHLY, WEEKLY, YEARLY, rrule
 
 # Assistant components
 from src.assistant.core import ComponentManager
@@ -46,11 +45,7 @@ from src.core.events.event_types import (
     CalendarConnected,
     CalendarError,
     CalendarEventCreated,
-    CalendarEventDeleted,
-    CalendarEventUpdated,
-    CalendarSynced,
     ComponentHealthChanged,
-    ErrorOccurred,
 )
 from src.core.health_check import HealthCheck
 from src.core.security.authentication import AuthenticationManager
@@ -1489,7 +1484,6 @@ class EnhancedCalendarAPI:
         event: CalendarEvent,
         provider: CalendarProvider = CalendarProvider.GOOGLE,
         session_id: Optional[str] = None,
-        send_notifications: bool = True,
     ) -> CalendarEvent:
         """
         Create a calendar event.
@@ -1500,7 +1494,6 @@ class EnhancedCalendarAPI:
             event: Event to create
             provider: Calendar provider
             session_id: Optional session ID
-            send_notifications: Whether to send notifications to attendees
 
         Returns:
             Created event

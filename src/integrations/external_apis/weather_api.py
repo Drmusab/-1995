@@ -9,14 +9,7 @@ and seamless integration with all core system components.
 """
 
 import hashlib
-import inspect
-import json
-import logging
-import math
-import threading
-import time
 import uuid
-import weakref
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -24,8 +17,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
-from urllib.parse import quote, urljoin
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, TypeVar, Union
+from urllib.parse import quote
 
 import aiohttp
 import asyncio
@@ -45,13 +38,10 @@ from src.core.events.event_types import (
     ComponentHealthChanged,
     DataCacheHit,
     DataCacheMiss,
-    DataUpdated,
-    ErrorOccurred,
     ExternalAPICallCompleted,
     ExternalAPICallStarted,
     ProcessingCompleted,
     ProcessingStarted,
-    SystemStateChanged,
 )
 from src.core.health_check import HealthCheck
 from src.core.security.sanitization import InputSanitizer
