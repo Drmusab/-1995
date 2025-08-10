@@ -2,7 +2,6 @@
 
 from typing import Any, Optional
 
-import asyncio
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

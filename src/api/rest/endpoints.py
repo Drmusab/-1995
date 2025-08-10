@@ -3,12 +3,11 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import asyncio
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from src.assistant.core import CoreAssistantEngine, MultimodalInput, ProcessingContext
+from src.assistant.core import CoreAssistantEngine, MultimodalInput
 from src.assistant.core import EnhancedSessionManager, SessionType
 from src.assistant.session_memory_integrator import SessionMemoryIntegrator
 from src.core.config.loader import ConfigLoader
