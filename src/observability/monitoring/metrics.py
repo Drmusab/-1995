@@ -54,7 +54,11 @@ from src.core.events.event_types import (
     WorkflowCompleted,
     WorkflowStarted,
 )
-from src.core.health_check import HealthCheck
+# Core imports - conditional to avoid circular dependencies
+try:
+    from src.core.health_check import HealthCheck
+except ImportError:
+    HealthCheck = None
 
 # Observability
 from src.observability.logging.config import get_logger

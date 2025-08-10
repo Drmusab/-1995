@@ -39,7 +39,7 @@ from rich.text import Text
 
 # Assistant imports
 from src.assistant.core import InteractionHandler
-from src.assistant.core import SessionManager
+from src.assistant.core import EnhancedSessionManager as SessionManager
 from src.core.config.loader import ConfigLoader
 
 # Core imports

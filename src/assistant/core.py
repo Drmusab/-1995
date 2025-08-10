@@ -23,10 +23,10 @@ import uuid
 
 from src.core.dependency_injection import Container
 from src.core.error_handling import (
-    AIAssistantError,
+    BaseAssistantError,
     ErrorCategory,
     ErrorSeverity,
-    error_handler
+    handle_exceptions
 )
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
@@ -53,17 +53,57 @@ from src.core.events.event_types import (
     WorkflowStepStarted,
     WorkflowStepCompleted
 )
-from src.integrations.model_inference_coordinator import ModelInferenceCoordinator
-from src.memory.core_memory.memory_manager import MemoryManager
-from src.processing.natural_language.bilingual_manager import BilingualManager, Language
-from src.processing.multimodal.fusion_strategies import MultimodalFusionStrategy
-from src.reasoning.logic_engine import LogicEngine
-from src.reasoning.planning.task_planner import TaskPlanner
-from src.skills.skill_registry import SkillRegistry
-from src.learning.continual_learning import ContinualLearningEngine
-from src.learning.preference_learning import PreferenceLearningEngine
-from src.observability.logging import get_logger
-from src.observability.monitoring.metrics import MetricsCollector
+# Optional imports - only import if available to prevent blocking issues
+try:
+    from src.integrations.model_inference_coordinator import ModelInferenceCoordinator
+except ImportError:
+    ModelInferenceCoordinator = None
+
+try:
+    from src.memory.core_memory.memory_manager import MemoryManager
+except ImportError:
+    MemoryManager = None
+
+try:
+    from src.processing.natural_language.bilingual_manager import BilingualManager, Language
+except ImportError:
+    BilingualManager = None
+    Language = None
+
+try:
+    from src.processing.multimodal.fusion_strategies import MultimodalFusionStrategy
+except ImportError:
+    MultimodalFusionStrategy = None
+
+try:
+    from src.reasoning.logic_engine import LogicEngine
+except ImportError:
+    LogicEngine = None
+
+try:
+    from src.reasoning.planning.task_planner import TaskPlanner
+except ImportError:
+    TaskPlanner = None
+
+try:
+    from src.skills.skill_registry import SkillRegistry
+except ImportError:
+    SkillRegistry = None
+
+try:
+    from src.learning.continual_learning import ContinualLearningEngine
+except ImportError:
+    ContinualLearningEngine = None
+
+try:
+    from src.learning.preference_learning import PreferenceLearningEngine
+except ImportError:
+    PreferenceLearningEngine = None
+from src.observability.logging.config import get_logger
+try:
+    from src.observability.monitoring.metrics import MetricsCollector
+except ImportError:
+    MetricsCollector = None
 
 
 # =============================================================================
@@ -1477,7 +1517,7 @@ class CoreAssistantEngine:
             # Perform health check
             health_status = await self._perform_health_check()
             if not health_status["healthy"]:
-                raise AIAssistantError(
+                raise BaseAssistantError(
                     "Health check failed during initialization",
                     ErrorCategory.SYSTEM,
                     ErrorSeverity.HIGH,

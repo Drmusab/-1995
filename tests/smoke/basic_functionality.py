@@ -31,9 +31,11 @@ def test_core_components_available():
 def test_assistant_components_available():
     """Test that assistant components are available."""
     try:
-        from src.assistant import core_engine
-        from src.assistant import component_manager
-        from src.assistant import session_manager
+        from src.assistant import core
+        # Test that the core module has key classes
+        assert hasattr(core, 'EnhancedComponentManager')
+        assert hasattr(core, 'CoreAssistantEngine')
+        assert hasattr(core, 'InteractionHandler')
         assert True
     except ImportError as e:
         pytest.fail(f"Failed to import assistant components: {e}")

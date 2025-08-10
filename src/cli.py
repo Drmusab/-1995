@@ -83,11 +83,19 @@ from src.core.events.event_types import (
 from src.main import AIAssistant
 
 # Observability
-from src.observability.logging.config import get_logger, setup_logging
+from src.observability.logging.config import get_logger, configure_logging
 
-# Import UI-specific components
-from src.ui.cli.commands import Command, CommandRegistry
-from src.ui.cli.interactive import InteractiveSession
+# Import UI-specific components - make optional to avoid blocking
+try:
+    from src.ui.cli.commands_simple import Command, CommandRegistry
+except ImportError:
+    Command = None
+    CommandRegistry = None
+
+try:
+    from src.ui.cli.interactive import InteractiveSession
+except ImportError:
+    InteractiveSession = None
 
 
 class CLIMode(Enum):
@@ -139,7 +147,7 @@ class AssistantCLI:
             assistant: Optional existing AIAssistant instance
         """
         # Setup logging
-        setup_logging()
+        configure_logging()
         self.logger = get_logger(__name__)
 
         # Initialize rich console if available
