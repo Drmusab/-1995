@@ -245,7 +245,8 @@ class MoodEnergyTracker:
         voice_text: Optional[str] = None,
         image_data: Optional[Any] = None,
         manual_mood: Optional[MoodLevel] = None,
-        manual_energy: Optional[EnergyLevel] = None
+        manual_energy: Optional[EnergyLevel] = None,
+        user_id: Optional[str] = None
     ) -> MoodEnergyState:
         """Update current mood/energy state from available inputs."""
         
@@ -321,7 +322,7 @@ class MoodEnergyTracker:
         
         # Emit event
         await self.event_bus.emit(MoodChanged(
-            user_id="current_user",  # TODO: Get from session
+            user_id=user_id or "current_user",  # Use provided user_id or fallback
             mood_level=final_mood.value,
             energy_level=final_energy.value,
             confidence=overall_confidence,

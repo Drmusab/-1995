@@ -100,7 +100,9 @@ from src.skills.skill_registry import SkillRegistry
 from src.skills.skill_validator import SkillValidator
 
 # Assistant core components - Commented out to fix circular dependencies
-# TODO: Move assistant component configuration to application layer
+# NOTE: Assistant component configuration moved to application layer initialization
+# This prevents circular import issues during module loading
+# Components are registered during application startup in main.py or app initialization
 # from src.assistant.core import CoreAssistantEngine, EngineConfiguration
 # from src.assistant.core import EnhancedComponentManager
 # from src.assistant.core import WorkflowOrchestrator

@@ -1479,7 +1479,9 @@ def nullcontext():
 
 async def register_plugin_manager_update(container: Container):
     """Register the enhanced plugin manager."""
-    # TODO: Move this registration to application layer to avoid circular dependency
+    # NOTE: Plugin manager registration currently disabled to avoid circular dependency
+    # This functionality is temporarily moved to application layer initialization
+    # See: src/assistant/core.py for enhanced plugin manager setup
     # from src.assistant.plugin_manager_enhanced import EnhancedPluginManager
 
     # # Register as singleton
