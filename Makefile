@@ -10,6 +10,10 @@ help:
 	@echo "  install-dev  - Install with development dependencies"
 	@echo "  test         - Run tests"
 	@echo "  lint         - Run linting (flake8, mypy)"
+	@echo "  dead-code    - Check for unused code and imports"
+	@echo "  dead-code-report - Generate dead code report file"
+	@echo "  dead-code-analysis - Generate comprehensive dead code analysis"
+	@echo "  dead-code-analysis-html - Generate HTML dead code analysis"
 	@echo "  format       - Format code (black, isort)"
 	@echo "  clean        - Clean build artifacts"
 	@echo "  build        - Build the package"
@@ -45,6 +49,18 @@ test-e2e:
 lint:
 	flake8 src tests
 	mypy src
+
+dead-code:
+	vulture src --config pyproject.toml
+
+dead-code-report:
+	vulture src --config pyproject.toml > dead_code_report.txt && echo "Dead code report saved to dead_code_report.txt" || (cat dead_code_report.txt && rm dead_code_report.txt)
+
+dead-code-analysis:
+	python tools/dead_code_analyzer.py --output dead_code_analysis.txt && echo "Comprehensive dead code analysis saved to dead_code_analysis.txt"
+
+dead-code-analysis-html:
+	python tools/dead_code_analyzer.py --report-format html --output dead_code_analysis.html && echo "HTML dead code analysis saved to dead_code_analysis.html"
 
 format:
 	black src tests

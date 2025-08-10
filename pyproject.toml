@@ -72,6 +72,7 @@ dev = [
     "pytest>=7.3.0",
     "pytest-cov>=4.1.0",
     "pre-commit>=3.3.0",
+    "vulture>=2.0.0",
 ]
 test = [
     "pytest>=7.3.0",
@@ -249,3 +250,37 @@ skip_covered = false
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+[tool.vulture]
+min_confidence = 80
+paths = ["src"]
+exclude = [
+    "migrations",
+    "__pycache__", 
+    ".git",
+    ".pytest_cache",
+    ".mypy_cache"
+]
+ignore_names = [
+    "_*",
+    "test_*", 
+    "Test*",
+    "setUp*",
+    "tearDown*"
+]
+ignore_decorators = [
+    "@app.route",
+    "@app.get",
+    "@app.post",
+    "@app.put", 
+    "@app.delete",
+    "@app.patch",
+    "@pytest.fixture",
+    "@pytest.mark.*",
+    "@click.command",
+    "@click.option", 
+    "@property",
+    "@classmethod",
+    "@staticmethod",
+    "@abc.abstractmethod"
+]

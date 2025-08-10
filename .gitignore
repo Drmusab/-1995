@@ -176,3 +176,8 @@ node_modules/
 *.prof
 *.lprof
 *.nvprof
+
+# Dead code analysis reports
+dead_code_report.txt
+dead_code_analysis.txt
+dead_code_analysis.html
