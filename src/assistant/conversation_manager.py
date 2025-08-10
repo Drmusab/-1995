@@ -12,18 +12,15 @@ from datetime import datetime, timezone
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from dataclasses import dataclass, field
-from collections import deque
 
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import Event, EventType
 from src.core.error_handling import (
-    AIAssistantError,
     ConversationError,
     ValidationError
 )
 from src.core.config.loader import ConfigLoader
 from src.memory.core_memory.memory_manager import MemoryManager
-from src.memory.core_memory.working_memory import WorkingMemory
 from src.processing.natural_language.intent_manager import IntentManager
 from src.integrations.model_inference_coordinator import ModelInferenceCoordinator
 from src.skills.skill_registry import SkillRegistry

@@ -24,8 +24,7 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import (
     BaseAssistantError,
     ErrorCategory,
-    ErrorSeverity,
-    handle_exceptions
+    ErrorSeverity
 )
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
@@ -34,14 +33,9 @@ from src.core.events.event_types import (
     SessionCleanupStarted,
     TaskCompleted,
     SkillExecuted,
-    MemoryUpdated,
     LearningEventOccurred,
     SystemHealthCheck,
     ComponentStarted,
-    ComponentHealthChanged,
-    ProcessingStarted,
-    ProcessingCompleted,
-    EngineStarted,
     UserInteractionStarted,
     UserInteractionCompleted,
     PluginLoaded,
@@ -840,6 +834,10 @@ class InteractionHandler:
             # Update interaction info
             interaction.last_activity = datetime.now(timezone.utc)
             interaction.message_count += 1
+            
+            # Note: real_time and streaming parameters are reserved for future functionality
+            processing_mode = "real_time" if real_time else "standard"
+            response_mode = "streaming" if streaming else "batch"
             
             # Process message (stub implementation)
             response_text = await self._generate_response(message, interaction)

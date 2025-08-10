@@ -21,7 +21,6 @@ import numpy as np
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import Event, EventType
 from src.core.error_handling import (
-    AIAssistantError,
     ValidationError,
     ResponseGenerationError
 )
