@@ -101,6 +101,21 @@ flake8 src tests
 mypy src
 ```
 
+6. Check for dead code:
+```bash
+# Quick check for unused imports and code
+make dead-code
+
+# Generate comprehensive analysis report
+make dead-code-analysis
+
+# Generate HTML analysis report
+make dead-code-analysis-html
+
+# Using the analyzer directly with options
+python tools/dead_code_analyzer.py --confidence 90 --report-format html --output report.html
+```
+
 ### Running in Docker
 
 #### Production Deployment
