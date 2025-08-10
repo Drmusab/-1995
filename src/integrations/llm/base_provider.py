@@ -9,22 +9,17 @@ and seamless integration with core system components.
 """
 
 import hashlib
-import inspect
 import json
 import logging
 import threading
 import time
-import traceback
 import uuid
-import weakref
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from pathlib import Path
 from typing import (
     Any,
     AsyncGenerator,
@@ -32,9 +27,7 @@ from typing import (
     Dict,
     List,
     Optional,
-    Protocol,
     Set,
-    Type,
     TypeVar,
     Union,
 )
@@ -50,7 +43,6 @@ from src.assistant.core import (
 )
 
 # Assistant components
-from src.assistant.core import ProcessingContext, ProcessingResult
 from src.assistant.core import InteractionHandler
 from src.assistant.core import EnhancedSessionManager
 from src.assistant.core import WorkflowOrchestrator
@@ -62,23 +54,18 @@ from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
     ComponentHealthChanged,
-    ErrorOccurred,
     LLMCacheHit,
     LLMCacheMiss,
     LLMContextWindowExceeded,
     LLMCostThresholdExceeded,
     LLMModelLoaded,
-    LLMModelUnloaded,
     LLMPerformanceWarning,
     LLMProviderHealthChanged,
     LLMRequestCompleted,
     LLMRequestFailed,
     LLMRequestStarted,
-    LLMSecurityViolation,
     LLMStreamingCompleted,
     LLMStreamingStarted,
-    LLMTokenLimitExceeded,
-    SystemStateChanged,
 )
 from src.core.health_check import HealthCheck
 from src.core.security.authentication import AuthenticationManager

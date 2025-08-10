@@ -16,9 +16,7 @@ import pickle
 import sys
 import threading
 import time
-import traceback
 import uuid
-import weakref
 from abc import ABC, abstractmethod
 from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -36,7 +34,6 @@ from typing import (
     List,
     Optional,
     Set,
-    Type,
     TypeVar,
     Union,
 )
@@ -61,7 +58,6 @@ from src.core.events.event_types import (
     CacheMiss,
     CacheWarmed,
     ComponentHealthChanged,
-    SystemStateChanged,
 )
 from src.core.health_check import HealthCheck
 from src.observability.logging.config import get_logger

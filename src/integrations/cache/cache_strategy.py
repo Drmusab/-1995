@@ -18,7 +18,6 @@ import sys
 import threading
 import time
 import uuid
-import weakref
 import zlib
 from abc import ABC, abstractmethod
 from collections import OrderedDict, defaultdict, deque
@@ -37,7 +36,6 @@ from typing import (
     Optional,
     Protocol,
     Set,
-    Type,
     TypeVar,
     Union,
 )
@@ -54,19 +52,13 @@ from src.core.events.event_types import (
     CacheCleanup,
     CacheCoherenceEvent,
     CacheEviction,
-    CacheHealthCheck,
     CacheHit,
     CacheInvalidation,
     CacheMiss,
     CacheWarming,
     ComponentHealthChanged,
-    ErrorOccurred,
     MemoryPressureAlert,
     ProcessingCompleted,
-    SessionEnded,
-    SessionStarted,
-    SystemPerformanceEvent,
-    WorkflowCompleted,
 )
 from src.core.health_check import HealthCheck
 from src.integrations.cache.local_cache import LocalCache

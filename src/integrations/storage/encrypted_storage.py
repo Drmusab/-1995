@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import asyncio
 
@@ -23,8 +23,6 @@ from src.core.security.encryption import (
     EncryptionAlgorithm,
     EncryptionContext,
     EncryptionManager,
-    EncryptionResult,
-    KeyType,
     SecurityLevel,
 )
 from src.integrations.storage.database import DatabaseManager
@@ -180,7 +178,7 @@ class EncryptedStorageManager:
             raise
 
     async def retrieve_user_data(
-        self, user_id: str, record_id: str, verify_integrity: bool = True
+        self, user_id: str, record_id: str, _verify_integrity: bool = True
     ) -> Optional[Any]:
         """
         Retrieve and decrypt user data.
@@ -188,7 +186,7 @@ class EncryptedStorageManager:
         Args:
             user_id: User identifier
             record_id: Record identifier
-            verify_integrity: Whether to verify data integrity
+            _verify_integrity: Whether to verify data integrity
 
         Returns:
             Decrypted data or None if not found

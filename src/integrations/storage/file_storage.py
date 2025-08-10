@@ -13,44 +13,31 @@ import json
 import logging
 import mimetypes
 import os
-import shutil
-import tarfile
-import tempfile
 import threading
 import time
 import uuid
-import zipfile
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import (
     Any,
-    AsyncGenerator,
     BinaryIO,
-    Callable,
     Dict,
     List,
     Optional,
     Protocol,
     Set,
-    Type,
     Union,
 )
-from urllib.parse import urlparse
 
 import aiofiles
 import aiofiles.os
 import asyncio
 
 # Assistant components
-from src.assistant.core import (
-    ComponentMetadata,
-    ComponentPriority,
-    EnhancedComponentManager,
-)
+from src.assistant.core import EnhancedComponentManager
 from src.assistant.core import EnhancedSessionManager
 from src.assistant.core import WorkflowOrchestrator
 
@@ -60,23 +47,12 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    BackupCompleted,
-    BackupStarted,
     CacheHit,
     CacheMiss,
-    ComponentHealthChanged,
-    ErrorOccurred,
     FileAccessDenied,
-    FileAccessGranted,
-    FileCopied,
-    FileCorrupted,
     FileDeleted,
     FileDownloaded,
-    FileExpired,
-    FileMoved,
     FileUploaded,
-    StorageHealthChanged,
-    StorageQuotaExceeded,
 )
 from src.core.health_check import HealthCheck
 from src.core.security.authentication import AuthenticationManager
