@@ -49,15 +49,22 @@ class UnifiedConfigManager:
     All configuration is now YAML-first with Python providing the interface.
     """
     
-    def __init__(self, environment: Optional[str] = None, config_dir: str = "."):
+    def __init__(self, environment: Optional[str] = None, config_dir: Optional[str] = None):
         """
         Initialize the unified configuration manager.
         
         Args:
             environment: Environment name (development, production, testing)
-            config_dir: Directory containing configuration files
+            config_dir: Directory containing configuration files (defaults to core/config)
         """
         self.environment = environment or os.getenv("ENVIRONMENT", "development")
+        
+        # Default to the organized config directory structure
+        if config_dir is None:
+            # Get the path to the core/config directory relative to this file
+            current_dir = Path(__file__).parent
+            config_dir = str(current_dir)
+        
         self.config_dir = Path(config_dir)
         
         # Initialize YAML loader
@@ -534,7 +541,7 @@ class UnifiedConfigManager:
 _unified_config: Optional[UnifiedConfigManager] = None
 
 
-def get_unified_config(environment: Optional[str] = None, config_dir: str = ".") -> UnifiedConfigManager:
+def get_unified_config(environment: Optional[str] = None, config_dir: Optional[str] = None) -> UnifiedConfigManager:
     """Get the global unified configuration manager."""
     global _unified_config
     
