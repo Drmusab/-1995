@@ -13,10 +13,7 @@ from .core_memory import (
     MemoryType,
     MemoryQuery,
     EpisodicMemory,
-    LongTermMemory,
-    ProceduralMemory,
     SemanticMemory,
-    ShortTermMemory,
     WorkingMemory,
 )
 
@@ -64,10 +61,7 @@ __all__ = [
     'MemoryType', 
     'MemoryQuery',
     'EpisodicMemory',
-    'LongTermMemory',
-    'ProceduralMemory',
     'SemanticMemory',
-    'ShortTermMemory',
     'WorkingMemory',
     # Optional components (may be None if dependencies missing)
     'MemoryCacheManager',

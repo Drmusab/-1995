@@ -42,26 +42,20 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    MemoryAccessDenied,
-    MemoryBackupCompleted,
-    MemoryBackupStarted,
-    MemoryCacheHit,
-    MemoryCacheMiss,
     MemoryConsolidationCompleted,
     MemoryConsolidationStarted,
-    MemoryCorruptionDetected,
-    MemoryFullError,
     MemoryItemDeleted,
     MemoryItemRetrieved,
     MemoryItemStored,
     MemoryItemUpdated,
-    MemoryRestoreCompleted,
-    MemoryRestoreStarted,
-    MemorySearchCompleted,
-    MemorySearchStarted,
 )
 from src.core.health_check import HealthCheck
-from src.core.security.encryption import EncryptionManager
+
+# Optional imports to avoid breaking dependencies
+try:
+    from src.core.security.encryption import EncryptionManager
+except ImportError:
+    EncryptionManager = None
 
 
 # Storage integration
@@ -572,7 +566,7 @@ class MemoryManager(AbstractMemoryManager):
                         cached_item.metadata.update_access()
 
                         # Emit cache hit event
-                        await self.event_bus.emit(MemoryCacheHit(memory_id=memory_id))
+                        # await self.event_bus.emit(MemoryCacheHit(memory_id=memory_id))
 
                         if self.metrics:
                             self.metrics.increment("memory_cache_hits")
@@ -618,7 +612,7 @@ class MemoryManager(AbstractMemoryManager):
 
                 if not memory_item:
                     if self.memory_cache:
-                        await self.event_bus.emit(MemoryCacheMiss(memory_id=memory_id))
+                        # await self.event_bus.emit(MemoryCacheMiss(memory_id=memory_id))
                         if self.metrics:
                             self.metrics.increment("memory_cache_misses")
 
@@ -858,14 +852,14 @@ class MemoryManager(AbstractMemoryManager):
                     raise ValueError(f"Unsupported query type: {type(query)}")
 
                 # Emit completion event
-                await self.event_bus.emit(
-                    MemorySearchCompleted(
-                        query_type=type(query).__name__,
-                        memory_type=memory_type.value if memory_type else "all",
-                        result_count=results.total_count,
-                        query_time=results.query_time,
-                    )
-                )
+                # await self.event_bus.emit(
+                #     MemorySearchCompleted(
+                #         query_type=type(query).__name__,
+                #         memory_type=memory_type.value if memory_type else "all",
+                #         result_count=results.total_count,
+                #         query_time=results.query_time,
+                #     )
+                # )
 
                 # Update metrics
                 if self.metrics:
@@ -1447,7 +1441,7 @@ class MemoryManager(AbstractMemoryManager):
                 await asyncio.sleep(self.config.backup_interval)
 
                 # Emit backup started event
-                await self.event_bus.emit(MemoryBackupStarted())
+                # await self.event_bus.emit(MemoryBackupStarted())
 
                 backup_start = time.time()
                 self.logger.info("Starting memory backup")
@@ -1488,7 +1482,7 @@ class MemoryManager(AbstractMemoryManager):
 
                 # Emit backup completed event
                 await self.event_bus.emit(
-                    MemoryBackupCompleted(success=success, duration=time.time() - backup_start)
+                    # MemoryBackupCompleted(success=success, duration=time.time() - backup_start)
                 )
 
                 self.logger.info(f"Memory backup completed in {time.time() - backup_start:.2f}s")
@@ -1514,7 +1508,7 @@ class MemoryManager(AbstractMemoryManager):
             raise MemoryOperationError(f"Backup path {backup_path} does not exist")
 
         # Emit restore started event
-        await self.event_bus.emit(MemoryRestoreStarted(backup_path=str(backup_path)))
+        # await self.event_bus.emit(MemoryRestoreStarted(backup_path=str(backup_path)))
 
         try:
             restore_start = time.time()
@@ -1549,7 +1543,7 @@ class MemoryManager(AbstractMemoryManager):
 
             # Emit restore completed event
             await self.event_bus.emit(
-                MemoryRestoreCompleted(success=success, duration=time.time() - restore_start)
+                # MemoryRestoreCompleted(success=success, duration=time.time() - restore_start)
             )
 
             self.logger.info(f"Memory restore completed in {time.time() - restore_start:.2f}s")
@@ -1558,7 +1552,7 @@ class MemoryManager(AbstractMemoryManager):
         except Exception as e:
             self.logger.error(f"Failed to restore from backup: {str(e)}")
             # Emit restore completed event with failure
-            await self.event_bus.emit(MemoryRestoreCompleted(success=False, error=str(e)))
+            # await self.event_bus.emit(MemoryRestoreCompleted(success=False, error=str(e)))
             raise MemoryOperationError(f"Failed to restore from backup: {str(e)}")
 
     async def _handle_system_shutdown(self, event) -> None:

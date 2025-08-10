@@ -9,10 +9,7 @@ from .base_memory import BaseMemory, MemoryItem, MemoryType, MemoryQuery
 from .memory_manager import MemoryManager
 from .memory_types import (
     EpisodicMemory,
-    LongTermMemory,
-    ProceduralMemory,
     SemanticMemory,
-    ShortTermMemory,
     WorkingMemory,
 )
 
@@ -23,9 +20,6 @@ __all__ = [
     'MemoryQuery',
     'MemoryManager',
     'EpisodicMemory',
-    'LongTermMemory',
-    'ProceduralMemory',
     'SemanticMemory',
-    'ShortTermMemory',
     'WorkingMemory',
 ]

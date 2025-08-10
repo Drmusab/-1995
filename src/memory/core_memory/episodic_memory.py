@@ -23,7 +23,6 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    MemoryDecayApplied,
     MemoryItemRetrieved,
     MemoryItemStored,
 )
@@ -548,10 +547,10 @@ class EpisodicMemory(BaseMemory):
 
         # Emit event
         await self.event_bus.emit(
-            MemoryDecayApplied(
-                memory_type=MemoryType.EPISODIC.value,
-                count=affected_count
-            )
+#             MemoryDecayApplied(
+#                 memory_type=MemoryType.EPISODIC.value,
+#                 count=affected_count
+#             )
         )
 
         self.logger.info(f"Applied memory decay to {affected_count} episodic memories")

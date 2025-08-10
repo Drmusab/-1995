@@ -44,30 +44,32 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    MemoryAccessDenied,
-    MemoryBackupCompleted,
-    MemoryBackupStarted,
-    MemoryCacheHit,
-    MemoryCacheMiss,
     MemoryConsolidationCompleted,
     MemoryConsolidationStarted,
-    MemoryCorruptionDetected,
-    MemoryFullError,
     MemoryItemDeleted,
     MemoryItemRetrieved,
     MemoryItemStored,
     MemoryItemUpdated,
-    MemoryRestoreCompleted,
-    MemoryRestoreStarted,
-    MemorySearchCompleted,
-    MemorySearchStarted,
 )
-from src.core.security.encryption import EncryptionManager
+
+# Optional imports to avoid breaking dependencies
+try:
+    from src.core.security.encryption import EncryptionManager
+except ImportError:
+    EncryptionManager = None
+
 from src.observability.logging.config import get_logger
 
-# Observability
-from src.observability.monitoring.metrics import MetricsCollector
-from src.observability.monitoring.tracing import TraceManager
+# Observability (optional imports to avoid breaking dependencies)
+try:
+    from src.observability.monitoring.metrics import MetricsCollector
+except ImportError:
+    MetricsCollector = None
+
+try:
+    from src.observability.monitoring.tracing import TraceManager
+except ImportError:
+    TraceManager = None
 
 # Type definitions
 T = TypeVar("T")
@@ -1072,8 +1074,10 @@ class MemoryUtils:
 
 
 # Define memory-related observability functions
-def register_memory_metrics(metrics: MetricsCollector) -> None:
+def register_memory_metrics(metrics) -> None:
     """Register memory-related metrics."""
+    if metrics is None:
+        return
     metrics.register_counter("memory_operations_total")
     metrics.register_counter("memory_store_operations")
     metrics.register_counter("memory_retrieve_operations")
