@@ -60,9 +60,16 @@ except ImportError:
 
 from src.observability.logging.config import get_logger
 
-# Observability
-from src.observability.monitoring.metrics import MetricsCollector
-from src.observability.monitoring.tracing import TraceManager
+# Observability (optional imports to avoid breaking dependencies)
+try:
+    from src.observability.monitoring.metrics import MetricsCollector
+except ImportError:
+    MetricsCollector = None
+
+try:
+    from src.observability.monitoring.tracing import TraceManager
+except ImportError:
+    TraceManager = None
 
 # Type definitions
 T = TypeVar("T")
@@ -1067,8 +1074,10 @@ class MemoryUtils:
 
 
 # Define memory-related observability functions
-def register_memory_metrics(metrics: MetricsCollector) -> None:
+def register_memory_metrics(metrics) -> None:
     """Register memory-related metrics."""
+    if metrics is None:
+        return
     metrics.register_counter("memory_operations_total")
     metrics.register_counter("memory_store_operations")
     metrics.register_counter("memory_retrieve_operations")

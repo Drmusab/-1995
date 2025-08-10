@@ -50,7 +50,12 @@ from src.core.events.event_types import (
     MemoryItemUpdated,
 )
 from src.core.health_check import HealthCheck
-from src.core.security.encryption import EncryptionManager
+
+# Optional imports to avoid breaking dependencies
+try:
+    from src.core.security.encryption import EncryptionManager
+except ImportError:
+    EncryptionManager = None
 
 
 # Storage integration
@@ -847,14 +852,14 @@ class MemoryManager(AbstractMemoryManager):
                     raise ValueError(f"Unsupported query type: {type(query)}")
 
                 # Emit completion event
-                await self.event_bus.emit(
-                    # MemorySearchCompleted(
-                        query_type=type(query).__name__,
-                        memory_type=memory_type.value if memory_type else "all",
-                        result_count=results.total_count,
-                        query_time=results.query_time,
-                    )
-                )
+                # await self.event_bus.emit(
+                #     MemorySearchCompleted(
+                #         query_type=type(query).__name__,
+                #         memory_type=memory_type.value if memory_type else "all",
+                #         result_count=results.total_count,
+                #         query_time=results.query_time,
+                #     )
+                # )
 
                 # Update metrics
                 if self.metrics:
@@ -1547,7 +1552,7 @@ class MemoryManager(AbstractMemoryManager):
         except Exception as e:
             self.logger.error(f"Failed to restore from backup: {str(e)}")
             # Emit restore completed event with failure
-            await self.event_bus.emit(# MemoryRestoreCompleted(success=False, error=str(e)))
+            # await self.event_bus.emit(MemoryRestoreCompleted(success=False, error=str(e)))
             raise MemoryOperationError(f"Failed to restore from backup: {str(e)}")
 
     async def _handle_system_shutdown(self, event) -> None:
