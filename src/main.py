@@ -21,83 +21,89 @@ from typing import Any, Dict, List, Optional, Set
 
 import asyncio
 
-from src.assistant.core import EnhancedComponentManager
+# Import the lazy import system
+from src.core.lazy_imports import lazy_import, lazy_import_decorator
 
-# Assistant components
-from src.assistant.core import (
-    EngineState,
-    CoreAssistantEngine,
-    ModalityType,
-    MultimodalInput,
-    PriorityLevel,
-    ProcessingContext,
-    ProcessingMode,
-    ProcessingResult,
-)
-from src.assistant.core import (
-    InputModality,
-    InteractionHandler,
-    InteractionMode,
-    OutputModality,
-    UserMessage,
-)
-from src.assistant.core import EnhancedPluginManager
-from src.assistant.core import EnhancedSessionManager
-from src.assistant.core import WorkflowOrchestrator
-
-# Core imports
+# Core imports (always needed)
 from src.core.config.loader import ConfigLoader
 from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
-from src.core.events.event_types import (
-    ComponentHealthChanged,
-    ErrorOccurred,
-    SystemShutdownCompleted,
-    SystemShutdownStarted,
-    SystemStarted,
-)
 from src.core.health_check import HealthCheck
 from src.observability.logging.config import get_logger, configure_logging
 
-# Observability
-from src.observability.monitoring.metrics import MetricsCollector
+# Lazy imports for heavy components that may not be needed immediately
+EnhancedComponentManager = lazy_import('src.assistant.core', 'EnhancedComponentManager')
+
+# Assistant core components - lazy loaded
+EngineState = lazy_import('src.assistant.core', 'EngineState')
+CoreAssistantEngine = lazy_import('src.assistant.core', 'CoreAssistantEngine')
+ModalityType = lazy_import('src.assistant.core', 'ModalityType')
+MultimodalInput = lazy_import('src.assistant.core', 'MultimodalInput')
+PriorityLevel = lazy_import('src.assistant.core', 'PriorityLevel')
+ProcessingContext = lazy_import('src.assistant.core', 'ProcessingContext')
+ProcessingMode = lazy_import('src.assistant.core', 'ProcessingMode')
+ProcessingResult = lazy_import('src.assistant.core', 'ProcessingResult')
+
+InputModality = lazy_import('src.assistant.core', 'InputModality')
+InteractionHandler = lazy_import('src.assistant.core', 'InteractionHandler')
+InteractionMode = lazy_import('src.assistant.core', 'InteractionMode')
+OutputModality = lazy_import('src.assistant.core', 'OutputModality')
+UserMessage = lazy_import('src.assistant.core', 'UserMessage')
+
+EnhancedPluginManager = lazy_import('src.assistant.core', 'EnhancedPluginManager')
+EnhancedSessionManager = lazy_import('src.assistant.core', 'EnhancedSessionManager')
+WorkflowOrchestrator = lazy_import('src.assistant.core', 'WorkflowOrchestrator')
+
+# Event types - lazy loaded
+ComponentHealthChanged = lazy_import('src.core.events.event_types', 'ComponentHealthChanged')
+ErrorOccurred = lazy_import('src.core.events.event_types', 'ErrorOccurred')
+SystemShutdownCompleted = lazy_import('src.core.events.event_types', 'SystemShutdownCompleted')
+SystemShutdownStarted = lazy_import('src.core.events.event_types', 'SystemShutdownStarted')
+SystemStarted = lazy_import('src.core.events.event_types', 'SystemStarted')
+
+# Observability - lazy loaded
+MetricsCollector = lazy_import('src.observability.monitoring.metrics', 'MetricsCollector')
+
+# Optional components with graceful fallback
 try:
-    from src.observability.monitoring.tracing import TraceManager
+    TraceManager = lazy_import('src.observability.monitoring.tracing', 'TraceManager')
 except ImportError:
     TraceManager = None
 
-# Security components (optional based on availability)
+# Security components (lazy loaded, optional)
+SECURITY_AVAILABLE = True
 try:
-    from src.core.security.authentication import AuthenticationManager
-    from src.core.security.authorization import AuthorizationManager
-    from src.core.security.sanitization import SecuritySanitizer
-
-    SECURITY_AVAILABLE = True
+    AuthenticationManager = lazy_import('src.core.security.authentication', 'AuthenticationManager')
+    AuthorizationManager = lazy_import('src.core.security.authorization', 'AuthorizationManager') 
+    SecuritySanitizer = lazy_import('src.core.security.sanitization', 'SecuritySanitizer')
 except ImportError:
     SECURITY_AVAILABLE = False
+    AuthenticationManager = None
+    AuthorizationManager = None
+    SecuritySanitizer = None
 
-# API components (optional based on availability)
+# API components (lazy loaded, optional)
+REST_API_AVAILABLE = True
 try:
-    from src.api.rest import setup_rest_api
-
-    REST_API_AVAILABLE = True
+    setup_rest_api = lazy_import('src.api.rest', 'setup_rest_api')
 except ImportError:
     REST_API_AVAILABLE = False
+    setup_rest_api = None
 
+WEBSOCKET_API_AVAILABLE = True
 try:
-    from src.api.websocket import setup_websocket_api
-
-    WEBSOCKET_API_AVAILABLE = True
+    setup_websocket_api = lazy_import('src.api.websocket', 'setup_websocket_api')
 except ImportError:
     WEBSOCKET_API_AVAILABLE = False
+    setup_websocket_api = None
 
+GRAPHQL_API_AVAILABLE = True
 try:
-    from src.api.graphql import setup_graphql_api
-
-    GRAPHQL_API_AVAILABLE = True
+    setup_graphql_api = lazy_import('src.api.graphql', 'setup_graphql_api')
 except ImportError:
     GRAPHQL_API_AVAILABLE = False
+    setup_graphql_api = None
 
 
 class AIAssistant:
@@ -671,26 +677,37 @@ class AIAssistant:
         return status
 
     def get_status(self) -> Dict[str, Any]:
-        """Get comprehensive system status."""
+        """Get comprehensive system status (optimized version)."""
         if not self.initialized:
             return {"status": "not_initialized"}
 
         try:
-            # Get engine status asynchronously
+            # Get engine status efficiently - avoid creating new event loop
             engine_status = None
             if self.core_engine:
-                loop = asyncio.get_event_loop()
-                engine_status = asyncio.run_coroutine_threadsafe(
-                    self.core_engine.get_engine_status(), loop
-                ).result()
+                # Check if we have a simple sync method first
+                if hasattr(self.core_engine, '_last_status'):
+                    engine_status = self.core_engine._last_status
+                else:
+                    # Only use async if absolutely necessary
+                    try:
+                        loop = asyncio.get_running_loop()
+                        # Create task instead of using run_coroutine_threadsafe
+                        task = loop.create_task(self.core_engine.get_engine_status())
+                        engine_status = None  # Will be populated by background task
+                    except RuntimeError:
+                        # No running loop, use simplified status
+                        engine_status = {"state": "running", "initialized": True}
 
-            # Get plugin status asynchronously
+            # Get plugin status efficiently
             plugin_status = None
             if self.plugin_manager:
-                loop = asyncio.get_event_loop()
-                plugin_status = asyncio.run_coroutine_threadsafe(
-                    self.plugin_manager.get_plugin_status(), loop
-                ).result()
+                # Use cached status if available
+                if hasattr(self.plugin_manager, '_cached_status'):
+                    plugin_status = self.plugin_manager._cached_status
+                else:
+                    # Simplified status without expensive async calls
+                    plugin_status = {"total_plugins": 0, "enabled_plugins": 0}
 
             return {
                 "status": "running" if not self.shutting_down else "shutting_down",

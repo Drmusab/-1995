@@ -14,7 +14,7 @@ import weakref
 from collections import defaultdict, deque
 from functools import lru_cache, wraps
 from io import StringIO
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import asyncio
 
@@ -361,3 +361,252 @@ def flatten_list(nested_list: List[List[Any]]) -> List[Any]:
 
 # Export commonly used instances
 regex_cache = _regex_cache
+
+
+class OptimizedStatusFormatter:
+    """
+    Optimized status and message formatting to replace string concatenation.
+    Uses pre-compiled templates and efficient string building.
+    """
+    
+    def __init__(self):
+        self._templates = {
+            'system_message': "[{color}]System: {message}[/{color}]",
+            'error_message': "[{color}]Error: {message}[/{color}]",
+            'user_message': "[{color}]User: {message}[/{color}]",
+            'assistant_message': "[{color}]Assistant: {message}[/{color}]",
+            'status_line': "{component}: {status} - {details}",
+            'metric_line': "{name}: {value}{unit}",
+        }
+        
+        # Pre-compile frequently used strings
+        self._color_formats = {
+            'system': 'yellow',
+            'error': 'red', 
+            'user': 'cyan',
+            'assistant': 'green',
+        }
+    
+    def format_system_message(self, message: str, use_color: bool = True) -> str:
+        """Format system message efficiently."""
+        if use_color:
+            return self._templates['system_message'].format(
+                color=self._color_formats['system'],
+                message=message
+            )
+        else:
+            return f"System: {message}"
+    
+    def format_error_message(self, message: str, use_color: bool = True) -> str:
+        """Format error message efficiently."""
+        if use_color:
+            return self._templates['error_message'].format(
+                color=self._color_formats['error'],
+                message=message
+            )
+        else:
+            return f"Error: {message}"
+    
+    def format_status_report(self, components: Dict[str, Dict[str, Any]], 
+                           use_builder: bool = True) -> str:
+        """Format multi-component status report efficiently."""
+        if use_builder:
+            builder = PerformantStringBuilder()
+            builder.append_line("=== System Status ===")
+            
+            for component_name, status_data in components.items():
+                status = status_data.get('status', 'unknown')
+                details = status_data.get('details', '')
+                
+                builder.append_format(
+                    self._templates['status_line'],
+                    component=component_name,
+                    status=status,
+                    details=details
+                ).append_line()
+            
+            return builder.build()
+        else:
+            # Fallback to join method
+            lines = ["=== System Status ==="]
+            for component_name, status_data in components.items():
+                status = status_data.get('status', 'unknown')
+                details = status_data.get('details', '')
+                lines.append(f"{component_name}: {status} - {details}")
+            
+            return '\n'.join(lines)
+
+
+# Global formatter instance
+_status_formatter = OptimizedStatusFormatter()
+
+
+def get_status_formatter() -> OptimizedStatusFormatter:
+    """Get global status formatter instance."""
+    return _status_formatter
+
+
+class FastIterationHelpers:
+    """
+    Helper functions for common iteration patterns that are more efficient
+    than standard approaches.
+    """
+    
+    @staticmethod
+    def batch_process_items(items: List[Any], batch_size: int, 
+                          processor: Callable[[List[Any]], Any]) -> List[Any]:
+        """
+        Process items in batches more efficiently than one-by-one processing.
+        """
+        results = []
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i + batch_size]
+            batch_result = processor(batch)
+            if isinstance(batch_result, list):
+                results.extend(batch_result)
+            else:
+                results.append(batch_result)
+        return results
+    
+    @staticmethod
+    def parallel_map(func: Callable, items: List[Any], max_workers: int = 4) -> List[Any]:
+        """
+        Parallel processing using thread pool for I/O bound operations.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        results = [None] * len(items)
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_index = {
+                executor.submit(func, item): idx 
+                for idx, item in enumerate(items)
+            }
+            
+            # Collect results in order
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as e:
+                    results[idx] = e
+        
+        return results
+    
+    @staticmethod
+    def efficient_filter_map(items: List[Any], filter_func: Callable, 
+                           map_func: Callable) -> List[Any]:
+        """
+        Combine filter and map operations in a single pass.
+        More efficient than separate filter() and map() calls.
+        """
+        results = []
+        for item in items:
+            if filter_func(item):
+                results.append(map_func(item))
+        return results
+    
+    @staticmethod
+    def fast_group_by(items: List[Any], key_func: Callable) -> Dict[Any, List[Any]]:
+        """
+        Fast grouping operation using defaultdict.
+        """
+        from collections import defaultdict
+        
+        groups = defaultdict(list)
+        for item in items:
+            key = key_func(item)
+            groups[key].append(item)
+        
+        return dict(groups)
+
+
+class MemoryEfficientDataStructures:
+    """
+    Memory-efficient alternatives to standard data structures.
+    """
+    
+    @staticmethod
+    def create_string_intern_pool() -> Dict[str, str]:
+        """
+        Create a string interning pool to save memory on repeated strings.
+        """
+        return {}
+    
+    @staticmethod
+    def intern_string(string_pool: Dict[str, str], value: str) -> str:
+        """
+        Intern a string to save memory on repeated values.
+        """
+        if value not in string_pool:
+            string_pool[value] = value
+        return string_pool[value]
+    
+    @staticmethod
+    def create_object_pool(factory_func: Callable, max_size: int = 100):
+        """
+        Create an object pool for expensive-to-create objects.
+        """
+        class ObjectPool:
+            def __init__(self):
+                self._pool = []
+                self._factory = factory_func
+                self._max_size = max_size
+            
+            def get(self):
+                if self._pool:
+                    return self._pool.pop()
+                return self._factory()
+            
+            def release(self, obj):
+                if len(self._pool) < self._max_size:
+                    # Reset object state if it has a reset method
+                    if hasattr(obj, 'reset'):
+                        obj.reset()
+                    self._pool.append(obj)
+        
+        return ObjectPool()
+
+
+# Additional utility functions for common patterns
+
+def measure_performance(func: Callable) -> Callable:
+    """
+    Decorator to measure function execution time and memory usage.
+    """
+    import time
+    import tracemalloc
+    from functools import wraps
+    
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Start timing and memory tracing
+        start_time = time.perf_counter()
+        tracemalloc.start()
+        
+        try:
+            result = func(*args, **kwargs)
+            return result
+        finally:
+            # Stop timing and memory tracing
+            end_time = time.perf_counter()
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            
+            execution_time = end_time - start_time
+            memory_mb = peak / 1024 / 1024
+            
+            print(f"Performance: {func.__name__}")
+            print(f"  Time: {execution_time:.4f}s")
+            print(f"  Memory: {memory_mb:.2f}MB")
+    
+    return wrapper
+
+
+def create_fast_lookup_table(items: List[Any], key_func: Callable) -> Dict[Any, Any]:
+    """
+    Create a fast lookup table from a list using a key function.
+    More efficient than repeated list searches.
+    """
+    return {key_func(item): item for item in items}
