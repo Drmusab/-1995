@@ -86,7 +86,7 @@ from src.core.security.encryption import EncryptionManager
 # Integrations
 from src.integrations.cache.cache_strategy import CacheStrategy
 from src.integrations.cache.redis_cache import RedisCache
-from src.integrations.storage.backup_manager import BackupManager
+
 from src.integrations.storage.database import DatabaseManager
 from src.observability.logging.config import get_logger
 
@@ -623,11 +623,9 @@ class FileStorageManager:
         try:
             self.database = container.get(DatabaseManager)
             self.cache = container.get(RedisCache)
-            self.backup_manager = container.get(BackupManager)
         except Exception:
             self.database = None
             self.cache = None
-            self.backup_manager = None
 
         # Observability
         self.metrics = container.get(MetricsCollector)
@@ -764,8 +762,7 @@ class FileStorageManager:
             self.cleanup_task = asyncio.create_task(self._cleanup_loop())
             self.health_monitor_task = asyncio.create_task(self._health_monitor_loop())
 
-            if self.config_data.auto_backup and self.backup_manager:
-                self.backup_task = asyncio.create_task(self._backup_loop())
+            # Auto backup functionality is removed since backup_manager doesn't exist
 
             # Register event handlers
             await self._register_event_handlers()
