@@ -14,14 +14,12 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Set, Tuple, Union, Callable
 from dataclasses import dataclass, field
-from collections import defaultdict, deque
+from collections import defaultdict
 import numpy as np
-from scipy import stats
 
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import Event, EventType
 from src.core.error_handling import (
-    AIAssistantError,
     ValidationError
 )
 from src.core.config.loader import ConfigLoader
@@ -695,6 +693,9 @@ class PersonalityManager:
         
         if not profile:
             return {"modifications": []}
+        
+        # Analyze base response for personality-driven modifications
+        response_length = len(base_response.split())
         
         modifications = []
         
