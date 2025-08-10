@@ -19,8 +19,6 @@ from typing import Any, Dict, List, Optional, Union
 
 # Core imports
 from src.core.config.validators.config_validator import ConfigValidator
-from src.core.security.encryption import EncryptionLevel
-from src.observability.monitoring.metrics import MetricLevel
 
 
 @dataclass

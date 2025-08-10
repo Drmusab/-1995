@@ -17,13 +17,12 @@ import json
 import pickle
 import time
 import threading
-import weakref
 from collections import OrderedDict, defaultdict
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 from src.core.lazy_imports import lazy_import
 from src.observability.logging.config import get_logger

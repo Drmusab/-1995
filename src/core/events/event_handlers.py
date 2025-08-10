@@ -16,7 +16,6 @@ import threading
 import time
 import traceback
 import uuid
-import weakref
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
@@ -27,12 +26,10 @@ from enum import Enum
 from pathlib import Path
 from typing import (
     Any,
-    AsyncGenerator,
     Callable,
     Dict,
     List,
     Optional,
-    Protocol,
     Set,
     Type,
     TypeVar,
@@ -47,7 +44,6 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (  # System events; Component events; Workflow events; Interaction events; Plugin events; Memory events; Learning events; Processing events; Error and performance events
-    AuditEvent,
     ComponentFailed,
     ComponentHealthChanged,
     ComponentInitialized,
@@ -67,8 +63,6 @@ from src.core.events.event_types import (  # System events; Component events; Wo
     LearningEventOccurred,
     MemoryConsolidationCompleted,
     MemoryConsolidationStarted,
-    MemoryCorruption,
-    MemoryLimitReached,
     MemoryOperationCompleted,
     MemoryOperationStarted,
     MessageProcessed,
@@ -77,7 +71,6 @@ from src.core.events.event_types import (  # System events; Component events; Wo
     ModalityDetected,
     ModalityProcessingCompleted,
     ModalityProcessingStarted,
-    ModelAdapted,
     PerformanceThresholdExceeded,
     PluginDisabled,
     PluginEnabled,
@@ -90,8 +83,6 @@ from src.core.events.event_types import (  # System events; Component events; Wo
     ProcessingCompleted,
     ProcessingError,
     ProcessingStarted,
-    ResourceLimitReached,
-    SecurityIncident,
     SessionContextUpdated,
     SessionEnded,
     SessionExpired,
@@ -1064,7 +1055,7 @@ class ComponentEventHandler(BaseEventHandler):
             self.logger.error(f"Error during component recovery: {str(e)}")
 
     async def _trigger_health_recovery(
-        self, component_id: str, health_details: Dict[str, Any]
+        self, component_id: str, _health_details: Dict[str, Any]
     ) -> None:
         """Trigger health recovery procedures."""
         try:

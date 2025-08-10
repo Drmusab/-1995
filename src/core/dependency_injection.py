@@ -16,7 +16,6 @@ import sys
 import threading
 import time
 import uuid
-import weakref
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager, contextmanager
@@ -28,7 +27,6 @@ from typing import (
     Any,
     Callable,
     Dict,
-    ForwardRef,
     Generic,
     List,
     Optional,
@@ -36,10 +34,6 @@ from typing import (
     Type,
     TypeVar,
     Union,
-    cast,
-    get_args,
-    get_origin,
-    get_type_hints,
     overload,
 )
 
@@ -1425,7 +1419,7 @@ class Container:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, _exc_type, _exc_val, _exc_tb):
         """Context manager exit - cleanup resources."""
         self.clear()
 

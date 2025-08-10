@@ -10,9 +10,8 @@ operations, list operations, and caching strategies.
 import re
 import threading
 import time
-import weakref
 from collections import defaultdict, deque
-from functools import lru_cache, wraps
+from functools import wraps
 from io import StringIO
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
@@ -25,7 +24,7 @@ class PerformantStringBuilder:
     Uses StringIO for better performance than repeated string concatenation.
     """
 
-    def __init__(self, initial_capacity: int = 1024):
+    def __init__(self, _initial_capacity: int = 1024):
         self._buffer = StringIO()
         self._length = 0
 
@@ -189,14 +188,14 @@ class PerformanceTimer:
         self.start_time = time.perf_counter()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, _exc_type, _exc_val, _exc_tb):
         self.end_time = time.perf_counter()
 
     async def __aenter__(self):
         self.start_time = time.perf_counter()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, _exc_type, _exc_val, _exc_tb):
         self.end_time = time.perf_counter()
 
     @property

@@ -15,21 +15,18 @@ import json
 import logging
 import os
 import re
-import shutil
-import tempfile
 import threading
 import time
 import uuid
-import weakref
 from abc import ABC, abstractmethod
-from collections import ChainMap, defaultdict
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
 
 import asyncio
 # Note: Removed toml import as we're now YAML-first
@@ -1177,7 +1174,7 @@ class ConfigLoader:
 
         return decrypt_recursive(config)
 
-    async def _handle_source_change(self, source_id: str, new_config: Dict[str, Any]) -> None:
+    async def _handle_source_change(self, source_id: str, _new_config: Dict[str, Any]) -> None:
         """Handle configuration source change."""
         try:
             self.logger.info(f"Configuration change detected in source: {source_id}")
