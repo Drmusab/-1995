@@ -44,25 +44,20 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    MemoryAccessDenied,
-    MemoryBackupCompleted,
-    MemoryBackupStarted,
-    MemoryCacheHit,
-    MemoryCacheMiss,
     MemoryConsolidationCompleted,
     MemoryConsolidationStarted,
-    MemoryCorruptionDetected,
-    MemoryFullError,
     MemoryItemDeleted,
     MemoryItemRetrieved,
     MemoryItemStored,
     MemoryItemUpdated,
-    MemoryRestoreCompleted,
-    MemoryRestoreStarted,
-    MemorySearchCompleted,
-    MemorySearchStarted,
 )
-from src.core.security.encryption import EncryptionManager
+
+# Optional imports to avoid breaking dependencies
+try:
+    from src.core.security.encryption import EncryptionManager
+except ImportError:
+    EncryptionManager = None
+
 from src.observability.logging.config import get_logger
 
 # Observability

@@ -40,11 +40,8 @@ from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
 from src.core.events.event_types import (
-    MemoryCapacityExceeded,
-    MemoryCapacityWarning,
     MemoryConsolidationCompleted,
     MemoryConsolidationStarted,
-    MemoryDecayApplied,
     MemoryItemDeleted,
     MemoryItemRetrieved,
     MemoryItemStored,
@@ -823,12 +820,12 @@ class WorkingMemory(BaseMemory):
         warning_threshold = int(self.config.max_capacity * self.config.consolidation_threshold)
         if item_count >= warning_threshold:
             await self.event_bus.emit(
-                MemoryCapacityWarning(
-                    memory_type=MemoryType.WORKING.value,
-                    current_count=item_count,
-                    capacity=self.config.max_capacity,
-                    session_id=session_id,
-                )
+#                 MemoryCapacityWarning(
+#                     memory_type=MemoryType.WORKING.value,
+#                     current_count=item_count,
+#                     capacity=self.config.max_capacity,
+#                     session_id=session_id,
+#                 )
             )
 
         # Apply forgetting if over capacity
@@ -893,11 +890,11 @@ class WorkingMemory(BaseMemory):
 
         # Emit decay event
         await self.event_bus.emit(
-            MemoryDecayApplied(
-                memory_type=MemoryType.WORKING.value,
-                count=forgotten_count,
-                session_id=session_id,
-            )
+#             MemoryDecayApplied(
+#                 memory_type=MemoryType.WORKING.value,
+#                 count=forgotten_count,
+#                 session_id=session_id,
+#             )
         )
 
         self.logger.debug(
