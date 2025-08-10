@@ -1,9 +1,11 @@
 """
-Performance monitoring configuration for AI Assistant
+Performance Configuration (Legacy Compatibility Layer)
 Author: Drmusab
-Last Modified: 2025-08-01
+Last Modified: 2025-01-13
 
-This module provides performance monitoring configuration and utilities.
+This module provides backward compatibility for performance configuration.
+The actual performance configuration is now handled by the unified YAML-first
+configuration system.
 """
 
 import json
@@ -11,7 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Import the unified configuration system
+from src.core.config.unified_config import get_unified_config
 
+
+# Legacy dataclasses for backward compatibility
 @dataclass
 class PerformanceThresholds:
     """Performance thresholds for monitoring."""
@@ -43,11 +49,11 @@ class OptimizationSettings:
 
     # Lazy loading settings
     enable_lazy_loading: bool = True
-    lazy_load_threshold: int = 50  # Number of imports to trigger lazy loading
+    lazy_load_threshold: int = 50
 
     # Caching settings
     enable_component_caching: bool = True
-    cache_ttl_seconds: int = 3600  # 1 hour
+    cache_ttl_seconds: int = 3600
     max_cache_size: int = 1000
 
     # Batch processing settings
@@ -102,6 +108,13 @@ class PerformanceConfiguration:
             config_dict = json.load(f)
         return cls.from_dict(config_dict)
 
+    @classmethod
+    def from_unified_config(cls) -> "PerformanceConfiguration":
+        """Load configuration from the unified configuration system."""
+        unified_config = get_unified_config()
+        config_dict = unified_config.get_performance_config()
+        return cls.from_dict(config_dict)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -119,73 +132,58 @@ class PerformanceConfiguration:
             json.dump(self.to_dict(), f, indent=2)
 
 
-# Default performance configuration
-DEFAULT_PERFORMANCE_CONFIG = PerformanceConfiguration(
-    thresholds=PerformanceThresholds(), optimizations=OptimizationSettings()
-)
+# Default performance configuration (now loaded from YAML)
+def get_default_performance_config() -> PerformanceConfiguration:
+    """Get default performance configuration from unified config."""
+    return PerformanceConfiguration.from_unified_config()
 
 
-# Performance recommendations based on the analysis
-PERFORMANCE_RECOMMENDATIONS = [
-    {
-        "issue": "Excessive imports",
-        "description": "Files with >50 imports cause slow startup times",
-        "solution": "Implement lazy imports for non-critical components",
-        "files_affected": ["core_engine.py", "config_settings.py"],
-        "priority": "HIGH",
-        "estimated_improvement": "30-50% faster startup",
-    },
-    {
-        "issue": "Nested loops",
-        "description": "O(n³) complexity in graph traversal algorithms",
-        "solution": "Use batch operations and pre-built lookup tables",
-        "files_affected": ["memory_graph.py"],
-        "priority": "HIGH",
-        "estimated_improvement": "60-80% faster graph operations",
-    },
-    {
-        "issue": "String concatenation in loops",
-        "description": "Inefficient string building in iterative processes",
-        "solution": "Use StringIO or join() for string building",
-        "files_affected": ["local_cache.py", "context_manager.py"],
-        "priority": "MEDIUM",
-        "estimated_improvement": "20-40% faster string operations",
-    },
-    {
-        "issue": "Uncompiled regex patterns",
-        "description": "Regex compilation overhead in repeated operations",
-        "solution": "Pre-compile and cache regex patterns",
-        "files_affected": ["multiple"],
-        "priority": "MEDIUM",
-        "estimated_improvement": "15-25% faster text processing",
-    },
-    {
-        "issue": "Large monolithic files",
-        "description": "Files >1500 lines are hard to maintain and slow to load",
-        "solution": "Split into focused, smaller modules",
-        "files_affected": ["context_manager.py", "commands.py", "cli.py"],
-        "priority": "LOW",
-        "estimated_improvement": "Better maintainability, 10-20% faster imports",
-    },
-]
+# For backward compatibility
+DEFAULT_PERFORMANCE_CONFIG = get_default_performance_config()
 
 
 def get_performance_recommendations() -> List[Dict[str, Any]]:
-    """Get list of performance recommendations."""
-    return PERFORMANCE_RECOMMENDATIONS
+    """Get list of performance recommendations from unified config."""
+    unified_config = get_unified_config()
+    performance_config = unified_config.get_performance_config()
+    
+    # Return recommendations from YAML config or fallback to defaults
+    return performance_config.get("recommendations", [
+        {
+            "issue": "Excessive imports",
+            "description": "Files with >50 imports cause slow startup times",
+            "solution": "Implement lazy imports for non-critical components",
+            "files_affected": ["core_engine.py", "config_settings.py"],
+            "priority": "HIGH",
+            "estimated_improvement": "30-50% faster startup",
+        },
+        {
+            "issue": "String concatenation in loops",
+            "description": "Inefficient string building in iterative processes",
+            "solution": "Use StringIO or join() for string building",
+            "files_affected": ["local_cache.py", "context_manager.py"],
+            "priority": "MEDIUM",
+            "estimated_improvement": "20-40% faster string operations",
+        },
+    ])
 
 
 def generate_performance_report() -> str:
     """Generate a performance improvement report."""
+    recommendations = get_performance_recommendations()
+    
     report = ["# AI Assistant Performance Improvement Report"]
-    report.append(f"Generated with {len(PERFORMANCE_RECOMMENDATIONS)} recommendations")
+    report.append(f"Generated with {len(recommendations)} recommendations")
     report.append("")
 
-    for i, rec in enumerate(PERFORMANCE_RECOMMENDATIONS, 1):
+    for i, rec in enumerate(recommendations, 1):
         report.append(f"## {i}. {rec['issue']} ({rec['priority']} Priority)")
         report.append(f"**Description**: {rec['description']}")
         report.append(f"**Solution**: {rec['solution']}")
-        report.append(f"**Files affected**: {', '.join(rec['files_affected'])}")
+        
+        if 'files_affected' in rec:
+            report.append(f"**Files affected**: {', '.join(rec['files_affected'])}")
+        
         report.append(f"**Estimated improvement**: {rec['estimated_improvement']}")
         report.append("")
 

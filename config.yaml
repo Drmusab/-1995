@@ -631,3 +631,410 @@ paths:
   plugins_dir: "plugins/"
   configs_dir: "configs/"
   temp_dir: "data/temp/"
+
+# Dependency Injection Configuration
+dependency_injection:
+  # Component Lifecycle Management
+  lifecycle_scopes:
+    singleton: "singleton"
+    transient: "transient" 
+    scoped: "scoped"
+    lazy: "lazy"
+
+  # Component Registration
+  components:
+    # Core Services
+    core_services:
+      config_loader:
+        implementation: "src.core.config.yaml_loader.YamlConfigLoader"
+        lifecycle: "singleton"
+        factory_params:
+          environment: "${app.environment}"
+          config_dir: "."
+
+      event_bus:
+        implementation: "src.core.events.event_bus.EnhancedEventBus"
+        lifecycle: "singleton"
+
+      error_handler:
+        implementation: "src.core.error_handling.ErrorHandler"
+        lifecycle: "singleton"
+        factory_params:
+          max_retries: 3
+          retry_delays: [1, 2, 4]
+          enable_circuit_breaker: true
+
+      health_check:
+        implementation: "src.core.health_check.HealthCheck"
+        lifecycle: "singleton"
+        factory_params:
+          check_interval: 30.0
+          timeout: 5.0
+
+    # Memory Components
+    memory_components:
+      memory_manager:
+        implementation: "src.memory.core_memory.memory_manager.MemoryManager"
+        lifecycle: "singleton"
+
+      vector_store:
+        implementation: "src.memory.storage.vector_store.VectorStore"
+        lifecycle: "singleton"
+        factory_params:
+          store_type: "${memory.vector_store.backend}"
+          embedding_model: "${memory.semantic_memory.embedding_model}"
+          dimension: 384
+
+      working_memory:
+        implementation: "src.memory.core_memory.memory_types.WorkingMemory"
+        lifecycle: "singleton"
+        factory_params:
+          max_size: "${memory.working_memory.capacity}"
+          ttl: "${memory.working_memory.ttl_seconds}"
+
+      episodic_memory:
+        implementation: "src.memory.core_memory.memory_types.EpisodicMemory"
+        lifecycle: "singleton"
+        factory_params:
+          retention_days: "${memory.episodic_memory.retention_days}"
+
+      semantic_memory:
+        implementation: "src.memory.core_memory.memory_types.SemanticMemory"
+        lifecycle: "singleton"
+        factory_params:
+          similarity_threshold: "${memory.semantic_memory.similarity_threshold}"
+
+      context_manager:
+        implementation: "src.memory.operations.context_manager.ContextManager"
+        lifecycle: "singleton"
+
+    # Processing Components
+    processing_components:
+      tokenizer:
+        implementation: "src.processing.natural_language.tokenizer.EnhancedTokenizer"
+        lifecycle: "singleton"
+
+      intent_manager:
+        implementation: "src.processing.natural_language.intent_manager.EnhancedIntentManager"
+        lifecycle: "singleton"
+
+      language_chain:
+        implementation: "src.processing.natural_language.language_chain.LanguageChain"
+        lifecycle: "singleton"
+
+      sentiment_analyzer:
+        implementation: "src.processing.natural_language.sentiment_analyzer.SentimentAnalyzer"
+        lifecycle: "singleton"
+
+      entity_extractor:
+        implementation: "src.processing.natural_language.entity_extractor.EnhancedEntityExtractor"
+        lifecycle: "singleton"
+
+    # Assistant Components  
+    assistant_components:
+      component_manager:
+        implementation: "src.assistant.core.EnhancedComponentManager"
+        lifecycle: "singleton"
+
+      session_manager:
+        implementation: "src.assistant.core.EnhancedSessionManager"
+        lifecycle: "singleton"
+
+      workflow_orchestrator:
+        implementation: "src.assistant.core.WorkflowOrchestrator"
+        lifecycle: "singleton"
+
+      interaction_handler:
+        implementation: "src.assistant.core.InteractionHandler"
+        lifecycle: "singleton"
+
+      plugin_manager:
+        implementation: "src.assistant.core.EnhancedPluginManager"
+        lifecycle: "singleton"
+        enabled: "${core.plugins.enabled:true}"
+
+      core_engine:
+        implementation: "src.assistant.core.CoreAssistantEngine"
+        lifecycle: "singleton"
+
+    # Integration Components
+    integration_components:
+      model_router:
+        implementation: "src.integrations.llm.model_router.ModelRouter"
+        lifecycle: "singleton"
+
+      cache_strategy:
+        implementation: "src.integrations.cache.cache_strategy.CacheStrategy"
+        lifecycle: "singleton"
+        factory_params:
+          default_ttl: "${integrations.cache.default_ttl}"
+          enabled: "${integrations.cache.enabled}"
+
+      redis_cache:
+        implementation: "src.integrations.cache.redis_cache.RedisCache"
+        lifecycle: "singleton"
+        enabled: "${integrations.cache.redis.enabled}"
+        factory_params:
+          url: "redis://${integrations.cache.redis.host}:${integrations.cache.redis.port}/${integrations.cache.redis.db}"
+          max_connections: "${integrations.cache.redis.max_connections}"
+          socket_timeout: "${integrations.cache.redis.socket_timeout}"
+
+      database_manager:
+        implementation: "src.integrations.storage.database.DatabaseManager"
+        lifecycle: "singleton"
+        factory_params:
+          url: "${integrations.storage.database.url}"
+          pool_size: "${integrations.storage.database.pool_size}"
+          max_overflow: "${integrations.storage.database.max_overflow}"
+          echo: "${integrations.storage.database.echo}"
+
+    # Security Components
+    security_components:
+      authentication_manager:
+        implementation: "src.core.security.authentication.AuthenticationManager"
+        lifecycle: "singleton"
+        enabled: "${security.authentication.enabled}"
+        factory_params:
+          secret_key: "${api.rest.authentication.jwt_secret}"
+          jwt_algorithm: "HS256"
+          jwt_expiration: "${api.rest.authentication.token_expiry}"
+
+      authorization_manager:
+        implementation: "src.core.security.authorization.AuthorizationManager"
+        lifecycle: "singleton"
+        enabled: "${security.authorization.enabled}"
+
+      encryption_manager:
+        implementation: "src.core.security.encryption.EncryptionManager"
+        lifecycle: "singleton"
+        enabled: "${security.encryption.enabled}"
+        factory_params:
+          secret_key: "${api.rest.authentication.jwt_secret}"
+
+      security_sanitizer:
+        implementation: "src.core.security.sanitization.SecuritySanitizer"
+        lifecycle: "singleton"
+        enabled: "${security.sanitization.enabled}"
+
+    # Observability Components
+    observability_components:
+      metrics_collector:
+        implementation: "src.observability.monitoring.metrics.MetricsCollector"
+        lifecycle: "singleton"
+        enabled: "${observability.metrics.enabled}"
+        factory_params:
+          port: "${observability.metrics.port}"
+          path: "${observability.metrics.path}"
+
+      trace_manager:
+        implementation: "src.observability.monitoring.tracing.TraceManager"
+        lifecycle: "singleton"
+        enabled: "${observability.tracing.enabled}"
+        factory_params:
+          jaeger_endpoint: "${observability.tracing.agent_host}:${observability.tracing.agent_port}"
+          sampling_rate: "${observability.tracing.sampling_rate}"
+
+    # Skills Components
+    skills_components:
+      skill_factory:
+        implementation: "src.skills.skill_factory.SkillFactory"
+        lifecycle: "singleton"
+
+      skill_registry:
+        implementation: "src.skills.skill_registry.SkillRegistry"
+        lifecycle: "singleton"
+
+      skill_validator:
+        implementation: "src.skills.skill_validator.SkillValidator"
+        lifecycle: "singleton"
+
+    # Learning Components
+    learning_components:
+      continual_learner:
+        implementation: "src.learning.continual_learning.ContinualLearner"
+        lifecycle: "singleton"
+        enabled: "${learning.continual_learning.enabled}"
+        factory_params:
+          learning_rate: "${learning.continual_learning.learning_rate}"
+
+      preference_learner:
+        implementation: "src.learning.preference_learning.PreferenceLearner"
+        lifecycle: "singleton"
+        enabled: "${learning.preference_learning.enabled}"
+        factory_params:
+          preference_decay: "${learning.preference_learning.preference_decay}"
+
+      feedback_processor:
+        implementation: "src.learning.feedback_processor.FeedbackProcessor"
+        lifecycle: "singleton"
+        enabled: "${learning.feedback_processing.enabled}"
+
+      model_adapter:
+        implementation: "src.learning.model_adaptation.ModelAdapter"
+        lifecycle: "singleton"
+        enabled: "${learning.model_adaptation.enabled}"
+
+# Validation Configuration
+validation:
+  # Validation Levels
+  levels:
+    strict: "strict"
+    standard: "standard"  
+    permissive: "permissive"
+    custom: "custom"
+
+  # Default validation level
+  default_level: "standard"
+
+  # Validation Rules
+  rules:
+    # Core system validation rules
+    core_rules:
+      - rule_id: "global_001"
+        name: "Required Configuration Sections"
+        description: "Ensure all required configuration sections are present"
+        section: "core"
+        validation_type: "syntax"
+        severity: "critical"
+        enabled: true
+        required_keys: ["core", "api", "observability"]
+
+      - rule_id: "core_001"
+        name: "Core Configuration Validation"
+        description: "Validate core system configuration"
+        section: "core"
+        validation_type: "semantic"
+        severity: "error"
+        enabled: true
+        conditions:
+          max_concurrent_requests:
+            min: 1
+            max: 100
+          default_timeout_seconds:
+            min: 1.0
+            max: 300.0
+
+    # Security validation rules
+    security_rules:
+      - rule_id: "security_001"
+        name: "Production Security Requirements"
+        description: "Enforce security requirements in production environment"
+        section: "security"
+        validation_type: "security"
+        severity: "critical"
+        enabled: true
+        apply_to_environments: ["production"]
+        conditions:
+          authentication:
+            enabled: true
+          authorization:
+            enabled: true
+          encryption:
+            enabled: true
+
+      - rule_id: "security_002"
+        name: "JWT Secret Validation"
+        description: "Ensure JWT secret is strong enough"
+        section: "api"
+        validation_type: "security"
+        severity: "critical"
+        enabled: true
+        conditions:
+          rest:
+            authentication:
+              jwt_secret:
+                min_length: 32
+
+    # Performance validation rules
+    performance_rules:
+      - rule_id: "performance_001"
+        name: "Resource Limits Validation"
+        description: "Validate resource limits are within acceptable ranges"
+        section: "performance"
+        validation_type: "performance"
+        severity: "warning"
+        enabled: true
+        conditions:
+          max_memory_usage_gb:
+            max: 16.0
+          max_concurrent_requests:
+            max: 200
+
+      - rule_id: "performance_002"
+        name: "Database Pool Validation"
+        description: "Validate database pool settings"
+        section: "integrations"
+        validation_type: "performance"
+        severity: "warning"
+        enabled: true
+        conditions:
+          storage:
+            database:
+              pool_size:
+                min: 5
+                max: 50
+
+  # Schema Validation
+  schemas:
+    # Enable JSON schema validation
+    enabled: true
+    
+    # Schema definitions (can be external files)
+    definitions:
+      core_schema: "schemas/core.json"
+      api_schema: "schemas/api.json"
+      security_schema: "schemas/security.json"
+      integrations_schema: "schemas/integrations.json"
+
+# Performance Monitoring Configuration  
+performance_monitoring:
+  # Performance Thresholds
+  thresholds:
+    response_time_warning: 2.0  # seconds
+    response_time_critical: 5.0  # seconds
+    memory_usage_warning: 512.0  # MB
+    memory_usage_critical: 1024.0  # MB
+    cpu_usage_warning: 70.0  # percentage
+    cpu_usage_critical: 90.0  # percentage
+    cache_hit_rate_warning: 80.0  # percentage
+    cache_hit_rate_critical: 60.0  # percentage
+    error_rate_warning: 1.0  # percentage
+    error_rate_critical: 5.0  # percentage
+
+  # Optimization Settings
+  optimizations:
+    enable_lazy_loading: true
+    lazy_load_threshold: 50
+    enable_component_caching: true
+    cache_ttl_seconds: 3600
+    max_cache_size: 1000
+    enable_batch_processing: true
+    batch_size: 100
+    batch_timeout_ms: 100
+    enable_string_pooling: true
+    string_builder_initial_size: 1024
+    enable_loop_unrolling: true
+    max_nested_loop_depth: 3
+    enable_async_batching: true
+    async_batch_size: 50
+    concurrent_request_limit: 10
+
+  # Monitoring Settings
+  monitoring_enabled: true
+  profiling_enabled: false
+  metrics_collection_interval: 60  # seconds
+  performance_logging: true
+
+  # Performance Recommendations
+  recommendations:
+    - issue: "Excessive imports"
+      description: "Files with >50 imports cause slow startup times"
+      solution: "Implement lazy imports for non-critical components"
+      priority: "HIGH"
+      estimated_improvement: "30-50% faster startup"
+
+    - issue: "String concatenation in loops"
+      description: "Inefficient string building in iterative processes"
+      solution: "Use StringIO or join() for string building"
+      priority: "MEDIUM"
+      estimated_improvement: "20-40% faster string operations"
