@@ -823,26 +823,26 @@ class ConfigLoader:
 
     async def _load_default_configurations(self) -> None:
         """Load default configuration sources."""
-        # Default configuration paths
+        # Default configuration paths - Updated to use consolidated YAML files
         default_sources = [
             (
                 "base_config",
                 ConfigSource.FILE,
-                "configs/base.yaml",
+                "config.yaml",
                 ConfigFormat.YAML,
                 ConfigPriority.LOW,
             ),
             (
                 "env_config",
                 ConfigSource.FILE,
-                f"configs/environments/{self.environment}.yaml",
+                f"config.{self.environment}.yaml",
                 ConfigFormat.YAML,
                 ConfigPriority.NORMAL,
             ),
             (
                 "local_config",
                 ConfigSource.FILE,
-                "configs/local.yaml",
+                "config.local.yaml",
                 ConfigFormat.YAML,
                 ConfigPriority.HIGH,
             ),

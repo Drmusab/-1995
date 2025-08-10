@@ -27,6 +27,14 @@ import asyncio
 
 from src.core.config.loader import ConfigLoader
 
+# Import YAML configuration system
+try:
+    from src.core.config.yaml_loader import get_config, get_config_section, YamlConfigLoader
+    YAML_CONFIG_AVAILABLE = True
+except ImportError:
+    YAML_CONFIG_AVAILABLE = False
+    YamlConfigLoader = None
+
 # Core imports
 from src.core.dependency_injection import Container, LifecycleScope
 from src.core.error_handling import ErrorHandler
@@ -297,7 +305,7 @@ class BaseSettings:
     This class provides the foundational configuration and dependency injection
     setup for the entire AI assistant system, including:
 
-    - Core system configuration
+    - Core system configuration loaded from YAML files
     - Component registration and lifecycle management
     - Service dependency resolution
     - Environment-specific settings
@@ -316,10 +324,19 @@ class BaseSettings:
         self.environment = environment
         self.logger = get_logger(__name__)
 
-        # Core settings
-        self.app_name = "AI Assistant"
-        self.app_version = "1.0.0"
-        self.app_description = "Advanced AI Assistant with Multimodal Capabilities"
+        # Initialize YAML configuration loader if available
+        if YAML_CONFIG_AVAILABLE and YamlConfigLoader:
+            self.yaml_loader = YamlConfigLoader(environment.value)
+            self.yaml_config = self.yaml_loader.load()
+        else:
+            self.yaml_loader = None
+            self.yaml_config = {}
+
+        # Core settings from YAML or defaults
+        app_config = self.yaml_config.get("app", {})
+        self.app_name = app_config.get("name", "AI Assistant")
+        self.app_version = app_config.get("version", "1.0.0")
+        self.app_description = app_config.get("description", "Advanced AI Assistant with Multimodal Capabilities")
 
         # System information
         self.system_info = self._get_system_info()
@@ -327,15 +344,15 @@ class BaseSettings:
         # Load environment variables
         self._load_environment_variables()
 
-        # Initialize configurations
-        self.database = DatabaseConfig()
-        self.cache = CacheConfig()
-        self.security = SecurityConfig()
-        self.monitoring = MonitoringConfig()
-        self.processing = ProcessingConfig()
-        self.memory = MemoryConfig()
-        self.learning = LearningConfig()
-        self.plugins = PluginConfig()
+        # Initialize configurations from YAML
+        self.database = self._create_database_config()
+        self.cache = self._create_cache_config()
+        self.security = self._create_security_config()
+        self.monitoring = self._create_monitoring_config()
+        self.processing = self._create_processing_config()
+        self.memory = self._create_memory_config()
+        self.learning = self._create_learning_config()
+        self.plugins = self._create_plugins_config()
 
         # Initialize dependency injection container
         self.container = Container()
@@ -352,7 +369,164 @@ class BaseSettings:
         self._register_learning_systems()
         self._register_integrations()
 
-        self.logger.info(f"BaseSettings initialized for {environment.value} environment")
+        self.logger.info(f"BaseSettings initialized for {environment.value} environment using YAML configuration")
+
+    def _create_database_config(self) -> DatabaseConfig:
+        """Create database configuration from YAML."""
+        if self.yaml_config:
+            storage_config = self.yaml_config.get("integrations", {}).get("storage", {})
+            db_config = storage_config.get("database", {})
+        else:
+            db_config = {}
+        
+        return DatabaseConfig(
+            url=db_config.get("url", "sqlite:///data/assistant.db"),
+            pool_size=db_config.get("pool_size", 10),
+            max_overflow=db_config.get("max_overflow", 20),
+            pool_pre_ping=True,
+            pool_recycle=db_config.get("pool_recycle", 300),
+            echo=db_config.get("echo", False),
+            echo_pool=False,
+            migration_dir="migrations",
+            backup_enabled=True,
+            backup_interval=3600,
+        )
+
+    def _create_cache_config(self) -> CacheConfig:
+        """Create cache configuration from YAML."""
+        cache_config = self.yaml_config.get("integrations", {}).get("cache", {})
+        redis_config = cache_config.get("redis", {})
+        
+        # Build Redis URL from components
+        redis_url = f"redis://{redis_config.get('host', 'localhost')}:{redis_config.get('port', 6379)}/{redis_config.get('db', 0)}"
+        
+        return CacheConfig(
+            redis_url=redis_url,
+            default_ttl=cache_config.get("default_ttl", 3600),
+            max_connections=redis_config.get("max_connections", 10),
+            socket_timeout=redis_config.get("socket_timeout", 5.0),
+            socket_connect_timeout=redis_config.get("socket_connect_timeout", 5.0),
+            retry_on_timeout=redis_config.get("retry_on_timeout", True),
+            health_check_interval=redis_config.get("health_check_interval", 30.0),
+            enabled=cache_config.get("enabled", True),
+        )
+
+    def _create_security_config(self) -> SecurityConfig:
+        """Create security configuration from YAML."""
+        security_config = self.yaml_config.get("security", {})
+        auth_config = security_config.get("authentication", {})
+        api_auth_config = self.yaml_config.get("api", {}).get("rest", {}).get("authentication", {})
+        
+        return SecurityConfig(
+            secret_key=api_auth_config.get("jwt_secret", str(uuid.uuid4())),
+            encryption_enabled=security_config.get("encryption", {}).get("enabled", True),
+            authentication_required=auth_config.get("enabled", True),
+            authorization_enabled=security_config.get("authorization", {}).get("enabled", True),
+            session_timeout=auth_config.get("session_timeout", 3600),
+            max_login_attempts=auth_config.get("max_login_attempts", 5),
+            password_min_length=8,
+            jwt_algorithm="HS256",
+            jwt_expiration=api_auth_config.get("token_expiry", 3600),
+            sanitization_enabled=security_config.get("sanitization", {}).get("enabled", True),
+            audit_logging=security_config.get("audit", {}).get("enabled", True),
+        )
+
+    def _create_monitoring_config(self) -> MonitoringConfig:
+        """Create monitoring configuration from YAML."""
+        observability_config = self.yaml_config.get("observability", {})
+        metrics_config = observability_config.get("metrics", {})
+        tracing_config = observability_config.get("tracing", {})
+        health_config = observability_config.get("health_checks", {})
+        
+        return MonitoringConfig(
+            metrics_enabled=metrics_config.get("enabled", True),
+            tracing_enabled=tracing_config.get("enabled", True),
+            profiling_enabled=observability_config.get("profiling", {}).get("enabled", False),
+            health_check_interval=health_config.get("interval", 30.0),
+            metrics_port=metrics_config.get("port", 9090),
+            metrics_path=metrics_config.get("path", "/metrics"),
+            jaeger_endpoint=tracing_config.get("jaeger_endpoint"),
+            prometheus_pushgateway=None,
+            log_sampling_rate=tracing_config.get("sampling_rate", 1.0),
+        )
+
+    def _create_processing_config(self) -> ProcessingConfig:
+        """Create processing configuration from YAML."""
+        core_config = self.yaml_config.get("core", {}).get("engine", {})
+        processing_config = self.yaml_config.get("processing", {})
+        
+        return ProcessingConfig(
+            enable_speech_processing=core_config.get("enable_speech_processing", True),
+            enable_vision_processing=core_config.get("enable_vision_processing", True),
+            enable_multimodal_fusion=core_config.get("enable_multimodal_fusion", True),
+            enable_reasoning=core_config.get("enable_reasoning", True),
+            enable_learning=core_config.get("enable_learning", True),
+            max_concurrent_requests=core_config.get("max_concurrent_requests", 10),
+            default_timeout=core_config.get("default_timeout_seconds", 30.0),
+            request_queue_size=100,
+            default_quality=core_config.get("default_quality_level", "balanced"),
+            adaptive_quality=core_config.get("enable_adaptive_quality", True),
+            default_voice="neural",
+            speech_model=processing_config.get("speech", {}).get("whisper_model", "base"),
+            tts_model="tacotron2",
+            vision_model="clip-vit-base",
+            ocr_enabled=True,
+            face_recognition_enabled=False,
+        )
+
+    def _create_memory_config(self) -> MemoryConfig:
+        """Create memory configuration from YAML."""
+        memory_config = self.yaml_config.get("memory", {})
+        working_memory = memory_config.get("working_memory", {})
+        context_config = memory_config.get("context", {})
+        semantic_memory = memory_config.get("semantic_memory", {})
+        
+        return MemoryConfig(
+            working_memory_size=working_memory.get("capacity", 1000),
+            context_window_size=context_config.get("max_context_size", 4096),
+            episodic_memory_retention=memory_config.get("episodic_memory", {}).get("retention_days", 30),
+            semantic_memory_threshold=semantic_memory.get("similarity_threshold", 0.7),
+            consolidation_interval=memory_config.get("episodic_memory", {}).get("consolidation_interval", 3600),
+            vector_store_type=memory_config.get("vector_store", {}).get("backend", "faiss"),
+            embedding_model=semantic_memory.get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2"),
+            memory_compression=working_memory.get("compression", True),
+        )
+
+    def _create_learning_config(self) -> LearningConfig:
+        """Create learning configuration from YAML."""
+        learning_config = self.yaml_config.get("learning", {})
+        continual_learning = learning_config.get("continual_learning", {})
+        preference_learning = learning_config.get("preference_learning", {})
+        feedback_processing = learning_config.get("feedback_processing", {})
+        model_adaptation = learning_config.get("model_adaptation", {})
+        
+        return LearningConfig(
+            continual_learning_enabled=continual_learning.get("enabled", True),
+            preference_learning_enabled=preference_learning.get("enabled", True),
+            feedback_processing_enabled=feedback_processing.get("enabled", True),
+            model_adaptation_enabled=model_adaptation.get("enabled", True),
+            learning_rate=continual_learning.get("learning_rate", 0.001),
+            adaptation_threshold=0.1,
+            feedback_weight=0.5,
+            preference_weight=preference_learning.get("preference_decay", 0.3),
+            learning_update_interval=300,
+            model_save_interval=3600,
+        )
+
+    def _create_plugins_config(self) -> PluginConfig:
+        """Create plugins configuration from YAML."""
+        plugins_config = self.yaml_config.get("core", {}).get("plugins", {})
+        
+        return PluginConfig(
+            enabled=True,
+            auto_discovery=plugins_config.get("auto_discovery", True),
+            hot_reload=plugins_config.get("hot_reload", False),
+            security_validation=plugins_config.get("security_validation", True),
+            max_plugins=plugins_config.get("max_plugins", 100),
+            plugin_directories=plugins_config.get("directories", ["plugins/", "src/plugins/", "data/plugins/"]),
+            sandbox_enabled=plugins_config.get("sandbox_enabled", True),
+            plugin_timeout=plugins_config.get("plugin_timeout", 30.0),
+        )
 
     def _get_system_info(self) -> Dict[str, Any]:
         """Get system information."""
@@ -370,32 +544,25 @@ class BaseSettings:
 
     def _load_environment_variables(self) -> None:
         """Load configuration from environment variables."""
-        # Database
-        self.database.url = os.getenv("DATABASE_URL", self.database.url)
-
-        # Cache
-        self.cache.redis_url = os.getenv("REDIS_URL", self.cache.redis_url)
-
-        # Security
-        if secret_key := os.getenv("SECRET_KEY"):
-            self.security.secret_key = secret_key
-
-        # Processing
-        self.processing.max_concurrent_requests = int(
-            os.getenv("MAX_CONCURRENT_REQUESTS", self.processing.max_concurrent_requests)
-        )
-
+        # The YAML loader handles environment variable interpolation automatically
+        # This method now provides additional environment-specific overrides
+        
         # Environment-specific overrides
         if self.environment == Environment.PRODUCTION:
-            self.database.echo = False
-            self.monitoring.profiling_enabled = False
-            self.plugins.hot_reload = False
-            self.security.authentication_required = True
+            # Production overrides from environment
+            if os.getenv("DATABASE_URL"):
+                # Update YAML config with environment override
+                if "integrations" not in self.yaml_config:
+                    self.yaml_config["integrations"] = {}
+                if "storage" not in self.yaml_config["integrations"]:
+                    self.yaml_config["integrations"]["storage"] = {}
+                if "database" not in self.yaml_config["integrations"]["storage"]:
+                    self.yaml_config["integrations"]["storage"]["database"] = {}
+                self.yaml_config["integrations"]["storage"]["database"]["url"] = os.getenv("DATABASE_URL")
+                
         elif self.environment == Environment.DEVELOPMENT:
-            self.database.echo = True
-            self.monitoring.profiling_enabled = True
-            self.plugins.hot_reload = True
-            self.security.authentication_required = False
+            # Development overrides
+            pass  # Development settings are in config.dev.yaml
 
     def _setup_logging(self) -> None:
         """Setup logging configuration."""
@@ -819,14 +986,20 @@ class BaseSettings:
 
     def get_config_dict(self) -> Dict[str, Any]:
         """Get complete configuration as dictionary."""
-        return {
+        # Return the YAML configuration with some computed values
+        config_dict = self.yaml_config.copy()
+        
+        # Add computed system information
+        config_dict["system"] = self.system_info
+        
+        # Add legacy configuration structure for backward compatibility
+        config_dict.update({
             "app": {
                 "name": self.app_name,
                 "version": self.app_version,
                 "description": self.app_description,
                 "environment": self.environment.value,
             },
-            "system": self.system_info,
             "database": self.database.__dict__,
             "cache": self.cache.__dict__,
             "security": {k: v for k, v in self.security.__dict__.items() if k != "secret_key"},
@@ -835,7 +1008,9 @@ class BaseSettings:
             "memory": self.memory.__dict__,
             "learning": self.learning.__dict__,
             "plugins": self.plugins.__dict__,
-        }
+        })
+        
+        return config_dict
 
     def validate_configuration(self) -> List[str]:
         """
@@ -892,44 +1067,18 @@ def create_development_settings() -> BaseSettings:
 
 def create_testing_settings() -> BaseSettings:
     """Create testing environment settings."""
-    settings = BaseSettings(Environment.TESTING)
-
-    # Testing-specific overrides
-    settings.database.url = "sqlite:///:memory:"
-    settings.cache.enabled = False
-    settings.monitoring.profiling_enabled = False
-    settings.security.authentication_required = False
-    settings.plugins.enabled = False
-
-    return settings
+    # Testing settings will use config.testing.yaml if it exists, otherwise defaults
+    return BaseSettings(Environment.TESTING)
 
 
 def create_staging_settings() -> BaseSettings:
     """Create staging environment settings."""
-    settings = BaseSettings(Environment.STAGING)
-
-    # Staging-specific overrides
-    settings.monitoring.profiling_enabled = True
-    settings.security.authentication_required = True
-    settings.plugins.hot_reload = False
-
-    return settings
+    return BaseSettings(Environment.STAGING)
 
 
 def create_production_settings() -> BaseSettings:
     """Create production environment settings."""
-    settings = BaseSettings(Environment.PRODUCTION)
-
-    # Production-specific overrides
-    settings.database.echo = False
-    settings.monitoring.profiling_enabled = False
-    settings.plugins.hot_reload = False
-    settings.plugins.security_validation = True
-    settings.security.authentication_required = True
-    settings.security.authorization_enabled = True
-    settings.security.audit_logging = True
-
-    return settings
+    return BaseSettings(Environment.PRODUCTION)
 
 
 # Global settings factory
@@ -938,20 +1087,20 @@ def get_settings(environment: Optional[str] = None) -> BaseSettings:
     Get settings for the specified environment.
 
     Args:
-        environment: Environment name (defaults to ENV environment variable)
+        environment: Environment name (defaults to ENVIRONMENT environment variable)
 
     Returns:
         BaseSettings instance for the environment
     """
     if environment is None:
-        environment = os.getenv("ENV", "development").lower()
+        environment = os.getenv("ENVIRONMENT", "development").lower()
 
-    factories = {
-        "development": create_development_settings,
-        "testing": create_testing_settings,
-        "staging": create_staging_settings,
-        "production": create_production_settings,
+    env_mapping = {
+        "development": Environment.DEVELOPMENT,
+        "testing": Environment.TESTING,
+        "staging": Environment.STAGING,
+        "production": Environment.PRODUCTION,
     }
 
-    factory = factories.get(environment, create_development_settings)
-    return factory()
+    env_enum = env_mapping.get(environment, Environment.DEVELOPMENT)
+    return BaseSettings(env_enum)

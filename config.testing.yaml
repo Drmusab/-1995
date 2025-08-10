@@ -1,0 +1,328 @@
+# AI Assistant - Testing Environment Configuration
+# Author: Drmusab
+# This file overrides base configuration settings for testing environment
+
+# Application settings for testing
+app:
+  environment: "testing"
+
+# Core system overrides for testing
+core:
+  engine:
+    max_concurrent_requests: 2  # Very low for testing
+    default_timeout_seconds: 10.0  # Fast timeouts for testing
+    enable_profiling: false
+    gc_interval_seconds: 30
+
+  component_manager:
+    shutdown_timeout: 5.0  # Fast shutdown for testing
+    hot_reload_enabled: false
+    component_isolation: true
+
+  workflow:
+    max_execution_time: 30.0  # Short timeouts for testing
+    max_step_retries: 1  # Single retry for testing
+    max_concurrent_workflows: 1  # Single workflow for testing
+    enable_workflow_debugging: false
+    workflow_visualization: false
+
+  sessions:
+    storage_type: "memory"  # Memory only for testing
+    enable_clustering: false  # Disabled for testing
+    max_idle_time: 300.0  # 5 minutes
+    max_session_time: 1800.0  # 30 minutes
+    auto_save_interval: 60.0  # 1 minute
+    encryption_enabled: false  # Disabled for testing
+    session_debugging: false
+
+  interactions:
+    max_history: 10  # Very small for testing
+    interaction_debugging: false
+
+  plugins:
+    enabled: false  # Disabled for testing
+    auto_discovery: false
+    hot_reload: false
+    security_validation: false
+    allow_unsafe_plugins: false
+    enable_plugin_debugging: false
+
+# Memory system overrides for testing
+memory:
+  working_memory:
+    capacity: 100  # Small for testing
+    persistence: false  # Memory only
+    compression: false
+
+  episodic_memory:
+    storage_backend: "memory"  # Memory only for testing
+    max_episodes: 100
+    auto_summarization: false
+
+  semantic_memory:
+    max_memories: 1000  # Small for testing
+
+  vector_store:
+    backend: "memory"  # In-memory for testing
+    backup_enabled: false
+
+  context:
+    max_context_size: 512  # Very small for testing
+
+# Learning system overrides for testing
+learning:
+  continual_learning:
+    enabled: false  # Disabled for testing
+    
+  preference_learning:
+    enabled: false  # Disabled for testing
+    
+  feedback_processing:
+    enabled: false  # Disabled for testing
+    
+  model_adaptation:
+    enabled: false  # Disabled for testing
+
+# Processing overrides for testing
+processing:
+  speech:
+    whisper_model: "tiny"  # Fastest model for testing
+    device: "cpu"
+    speaker_recognition: false
+    emotion_detection: false
+
+  vision:
+    device: "cpu"
+    batch_size: 1
+    quality_optimization: false
+
+  nlp:
+    device: "cpu"
+    batch_size: 1
+
+  multimodal:
+    temporal_modeling: false
+
+# Skills overrides for testing
+skills:
+  enabled: false  # Disabled for testing
+  skill_validation: false
+  hot_reload: false
+  execution_timeout: 10.0
+  max_concurrent_skills: 1
+  skill_debugging: false
+
+  builtin_skills:
+    enabled: false
+    
+  custom_skills:
+    enabled: false
+
+# Integration overrides for testing
+integrations:
+  llm:
+    default_provider: "mock"  # Use mock for testing
+    providers:
+      mock:
+        enabled: true
+        response_delay: 0.1  # Fast responses for testing
+        error_rate: 0.0  # No errors in tests by default
+      
+      openai:
+        enabled: false  # Disabled for testing
+      
+      anthropic:
+        enabled: false  # Disabled for testing
+      
+      ollama:
+        enabled: false  # Disabled for testing
+
+  storage:
+    database:
+      url: "sqlite:///:memory:"  # In-memory SQLite for testing
+      pool_size: 1
+      echo: false  # No SQL logging in tests
+      auto_migrate: true
+
+    file_storage:
+      backend: "memory"  # In-memory for testing
+      max_file_size: "1MB"
+
+    blob_storage:
+      backend: "memory"  # In-memory for testing
+
+  cache:
+    backend: "local"  # Local only for testing
+    redis:
+      enabled: false  # Disabled for testing
+    
+    local:
+      max_size_mb: 10  # Very small for testing
+
+    enabled: false  # Caching disabled for predictable tests
+
+  external_apis:
+    web_search:
+      provider: "mock"
+      enabled: false  # Disabled for testing
+    
+    weather:
+      provider: "mock"
+      enabled: false  # Disabled for testing
+    
+    calendar:
+      provider: "mock" 
+      enabled: false  # Disabled for testing
+    
+    notifications:
+      provider: "mock"
+      enabled: false  # Disabled for testing
+
+# API overrides for testing
+api:
+  rest:
+    host: "127.0.0.1"
+    port: 0  # Random port for testing
+    debug: false  # Disabled for testing
+    reload: false  # Disabled for testing
+    workers: 1  # Single worker for testing
+
+    cors:
+      enabled: false  # Disabled for testing
+
+    rate_limiting:
+      enabled: false  # Disabled for testing
+
+    authentication:
+      enabled: false  # Disabled for testing
+
+  websocket:
+    host: "127.0.0.1"
+    port: 0  # Random port for testing
+    max_connections: 10
+    authentication: false
+
+  graphql:
+    enabled: false  # Disabled for testing
+    playground: false
+    introspection: false
+    debug: false
+
+  grpc:
+    enabled: false  # Disabled for testing
+
+# Security overrides for testing (minimal)
+security:
+  authentication:
+    enabled: false  # Disabled for testing
+    
+  authorization:
+    enabled: false  # Disabled for testing
+    
+  encryption:
+    enabled: false  # Disabled for testing
+    
+  sanitization:
+    enabled: false  # Disabled for testing (but should be tested separately)
+    
+  audit:
+    enabled: false  # Disabled for testing
+
+# Observability overrides for testing
+observability:
+  logging:
+    level: "WARNING"  # Only warnings and errors in tests
+    format: "console"
+    handlers: ["console"]  # Console only for testing
+    file_rotation: false
+    structured_logging: false
+
+    component_levels:
+      # Set all components to WARNING for tests
+      core_engine: "WARNING"
+      workflow_orchestrator: "WARNING"
+      session_manager: "WARNING"
+      interaction_handler: "WARNING"
+      plugin_manager: "WARNING"
+      memory_manager: "WARNING"
+      skill_factory: "WARNING"
+
+  metrics:
+    enabled: false  # Disabled for testing
+    
+  tracing:
+    enabled: false  # Disabled for testing
+    
+  profiling:
+    enabled: false  # Disabled for testing
+    
+  health_checks:
+    enabled: false  # Disabled for testing
+
+# Performance overrides for testing (minimal)
+performance:
+  max_memory_usage_gb: 0.5  # Very low for testing
+  max_concurrent_requests: 2
+  max_concurrent_workflows: 1
+  max_concurrent_sessions: 10
+
+  thread_pool_size: 2
+  async_pool_size: 5
+  io_thread_pool_size: 1
+
+  cache_warmup_enabled: false
+  cache_preload_common_responses: false
+  vector_cache_size: 10
+  response_cache_size: 10
+
+# Infrastructure overrides for testing
+infrastructure:
+  deployment:
+    platform: "local"
+    replicas: 1
+
+  load_balancer:
+    enabled: false
+
+  auto_scaling:
+    enabled: false
+
+# Backup overrides for testing
+backup:
+  enabled: false  # Disabled for testing
+
+# Testing-specific configuration
+testing:
+  # Test isolation
+  isolation:
+    enabled: true
+    cleanup_after_test: true
+    reset_state: true
+    
+  # Test data
+  test_data:
+    use_fixtures: true
+    generate_synthetic: false
+    cleanup_data: true
+    
+  # Mock configuration
+  mocking:
+    external_apis: true
+    llm_providers: true
+    storage_backends: false  # Use real in-memory storage
+    cache_backends: true
+    
+  # Performance testing
+  performance:
+    enabled: false
+    timeout_multiplier: 0.1  # Faster timeouts for testing
+    
+  # Coverage tracking
+  coverage:
+    enabled: true
+    min_coverage: 80
+    
+# File paths for testing
+paths:
+  test_data_dir: "tests/fixtures/"
+  temp_dir: "/tmp/ai-assistant-tests/"
