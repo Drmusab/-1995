@@ -26,9 +26,7 @@ from enum import Enum
 from pathlib import Path
 from typing import (
     Any,
-    AsyncGenerator,
     Callable,
-    Coroutine,
     Dict,
     Generic,
     List,
@@ -43,7 +41,7 @@ import aiohttp
 import asyncio
 import asyncpg
 import redis.exceptions
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from src.core.dependency_injection import Container
 

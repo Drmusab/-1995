@@ -9,7 +9,6 @@ until they are actually needed, significantly improving startup time.
 
 import importlib
 import threading
-import weakref
 from functools import wraps
 from typing import Any, Dict, Optional, Set, Union
 

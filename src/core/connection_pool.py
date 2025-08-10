@@ -10,10 +10,9 @@ the overhead of creating and destroying connections for external services.
 import asyncio
 import logging
 import time
-import weakref
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union, AsyncContextManager
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
 import aiohttp
