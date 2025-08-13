@@ -211,7 +211,14 @@ class CommandRegistry:
         return self.commands.copy()
 
     def get_command_by_name_or_alias(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get command info by name or alias."""
+        """Get command info by name or alias.
+        
+        Args:
+            name: Command name or alias
+            
+        Returns:
+            Command info dict or None if not found
+        """
         # Check direct command name first
         if name in self.commands:
             cmd_info = self.commands[name].copy()
@@ -225,19 +232,6 @@ class CommandRegistry:
             cmd_info['name'] = command_name
             return cmd_info
         
-        return None
-
-        Returns:
-            Command handler or None if not found
-        """
-        # Check for alias
-        if name in self.aliases:
-            name = self.aliases[name]
-
-        # Get command
-        command = self.commands.get(name)
-        if command:
-            return command["handler"]
         return None
 
     def get_command_help(self, name: str) -> Optional[str]:
