@@ -9,16 +9,13 @@ including skill discovery, versioning, dependency resolution, and lifecycle mana
 
 import importlib
 import inspect
-import json
-import time
-import uuid
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, List, Optional, Set, Type
 
 import asyncio
 
@@ -27,7 +24,7 @@ from src.core.config.loader import ConfigLoader
 from src.core.dependency_injection import Container
 from src.core.error_handling import ErrorHandler, handle_exceptions
 from src.core.events.event_bus import EventBus
-from src.core.events.event_types import BaseEvent, EventCategory, EventPriority, EventSeverity
+from src.core.events.event_types import BaseEvent, EventCategory
 from src.core.health_check import HealthCheck
 from src.observability.logging.config import get_logger
 

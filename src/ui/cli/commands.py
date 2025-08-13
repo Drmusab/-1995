@@ -11,14 +11,8 @@ well-structured commands with appropriate argument handling and documentation.
 import argparse
 import json
 import logging
-import os
-import shutil
-import signal
 import sys
-import textwrap
 import time
-import traceback
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -33,7 +27,6 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.table import Table
-from rich.tree import Tree
 
 from src.assistant.core import EnhancedComponentManager as ComponentManager
 

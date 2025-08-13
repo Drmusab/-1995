@@ -92,7 +92,7 @@ class MemoryResponse(BaseModel):
 # Note-taking API models
 class NoteStartRequest(BaseModel):
     """Request to start note recording."""
-    
+
     user_id: Optional[str] = Field(None, description="User ID")
     session_id: Optional[str] = Field(None, description="Session ID")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
@@ -100,7 +100,7 @@ class NoteStartRequest(BaseModel):
 
 class NoteStartResponse(BaseModel):
     """Response for note recording start."""
-    
+
     note_id: str = Field(..., description="Note ID")
     status: str = Field(..., description="Recording status")
     message: str = Field(..., description="Status message")
@@ -109,7 +109,7 @@ class NoteStartResponse(BaseModel):
 
 class NoteStopResponse(BaseModel):
     """Response for note recording stop."""
-    
+
     note_id: str = Field(..., description="Note ID")
     status: str = Field(..., description="Processing status")
     summary: Dict[str, Any] = Field(..., description="Note summary")
@@ -118,7 +118,7 @@ class NoteStopResponse(BaseModel):
 
 class NoteResponse(BaseModel):
     """Note data response."""
-    
+
     metadata: Dict[str, Any] = Field(..., description="Note metadata")
     content: Dict[str, Any] = Field(..., description="Note content")
     audio_path: Optional[str] = Field(None, description="Audio file path")
@@ -126,7 +126,7 @@ class NoteResponse(BaseModel):
 
 class NoteSearchResponse(BaseModel):
     """Note search response."""
-    
+
     notes: List[Dict[str, Any]] = Field(..., description="Matching notes")
     total_count: int = Field(..., description="Total matching notes")
     query_time: float = Field(..., description="Search time in seconds")
@@ -134,14 +134,14 @@ class NoteSearchResponse(BaseModel):
 
 class NoteExportRequest(BaseModel):
     """Note export request."""
-    
+
     format: str = Field("markdown", description="Export format")
     include_audio: bool = Field(True, description="Include audio reference")
 
 
 class NoteExportResponse(BaseModel):
     """Note export response."""
-    
+
     note_id: str = Field(..., description="Note ID")
     export_path: str = Field(..., description="Export file path")
     format: str = Field(..., description="Export format")
@@ -546,15 +546,15 @@ class APIEndpoints:
             try:
                 if not self.note_taker_skill:
                     raise HTTPException(status_code=503, detail="Note taking service not available")
-                
+
                 result = await self.note_taker_skill.start_recording(
                     user_id=request.user_id or current_user,
                     session_id=request.session_id,
                     metadata=request.metadata
                 )
-                
+
                 return NoteStartResponse(**result)
-                
+
             except Exception as e:
                 self.logger.error(f"Start recording error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to start recording: {str(e)}")
@@ -568,11 +568,11 @@ class APIEndpoints:
             try:
                 if not self.note_taker_skill:
                     raise HTTPException(status_code=503, detail="Note taking service not available")
-                
+
                 result = await self.note_taker_skill.stop_recording(note_id)
-                
+
                 return NoteStopResponse(**result)
-                
+
             except ValueError as e:
                 raise HTTPException(status_code=404, detail=str(e))
             except Exception as e:
@@ -588,11 +588,11 @@ class APIEndpoints:
             try:
                 if not self.note_taker_skill:
                     raise HTTPException(status_code=503, detail="Note taking service not available")
-                
+
                 result = await self.note_taker_skill.get_note(note_id)
-                
+
                 return NoteResponse(**result)
-                
+
             except ValueError as e:
                 raise HTTPException(status_code=404, detail=str(e))
             except Exception as e:
@@ -612,12 +612,12 @@ class APIEndpoints:
             try:
                 if not self.note_taker_skill:
                     raise HTTPException(status_code=503, detail="Note taking service not available")
-                
+
                 start_time = datetime.now(timezone.utc)
-                
+
                 # Parse tags
                 tag_list = tags.split(',') if tags else None
-                
+
                 notes = await self.note_taker_skill.search_notes(
                     query=query,
                     category=category,
@@ -625,15 +625,15 @@ class APIEndpoints:
                     language=language,
                     limit=limit
                 )
-                
+
                 query_time = (datetime.now(timezone.utc) - start_time).total_seconds()
-                
+
                 return NoteSearchResponse(
                     notes=notes,
                     total_count=len(notes),
                     query_time=query_time
                 )
-                
+
             except Exception as e:
                 self.logger.error(f"Search notes error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to search notes: {str(e)}")
@@ -648,15 +648,15 @@ class APIEndpoints:
             try:
                 if not self.note_taker_skill:
                     raise HTTPException(status_code=503, detail="Note taking service not available")
-                
+
                 result = await self.note_taker_skill.export_note(
                     note_id=note_id,
                     format=request.format,
                     include_audio=request.include_audio
                 )
-                
+
                 return NoteExportResponse(**result)
-                
+
             except ValueError as e:
                 if "not found" in str(e):
                     raise HTTPException(status_code=404, detail=str(e))
@@ -674,9 +674,9 @@ class APIEndpoints:
             try:
                 if not self.note_taker_skill:
                     raise HTTPException(status_code=503, detail="Note taking service not available")
-                
+
                 return await self.note_taker_skill.get_categories()
-                
+
             except Exception as e:
                 self.logger.error(f"Get categories error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to get categories: {str(e)}")
@@ -689,9 +689,9 @@ class APIEndpoints:
             try:
                 if not self.note_taker_skill:
                     raise HTTPException(status_code=503, detail="Note taking service not available")
-                
+
                 return await self.note_taker_skill.get_statistics()
-                
+
             except Exception as e:
                 self.logger.error(f"Get statistics error: {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
