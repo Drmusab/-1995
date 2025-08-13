@@ -899,7 +899,7 @@ class AssistantCLI:
             # Component statuses - use efficient batch processing
             components = status.get("components", {})
             component_rows = []
-            
+
             for component_name, component_status in components.items():
                 if component_status is None:
                     continue
@@ -938,7 +938,7 @@ class AssistantCLI:
                     builder.append_format("- {}: unknown\n", component_name)
 
             print(builder.build())
-    
+
     def _format_component_details(self, component_name: str, component_status: Dict[str, Any]) -> str:
         """Format component details efficiently."""
         if component_name == "component_manager":

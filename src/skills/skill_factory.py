@@ -9,19 +9,15 @@ composition, monitoring, and hot-reload capabilities.
 """
 
 import importlib
-import inspect
 import json
 import time
 import uuid
-import weakref
-from abc import ABC, abstractmethod
 from collections import defaultdict, deque
-from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, List, Optional
 
 import asyncio
 
@@ -55,15 +51,11 @@ from src.observability.monitoring.tracing import TraceManager
 
 # Skills
 from src.skills.skill_registry import (
-    SkillCapability,
-    SkillInterface,
-    SkillMetadata,
-    SkillRegistration,
     SkillRegistry,
     SkillState,
     SkillType,
 )
-from src.skills.skill_validator import SkillValidator, ValidationReport
+from src.skills.skill_validator import SkillValidator
 
 
 class SkillExecutionMode(Enum):

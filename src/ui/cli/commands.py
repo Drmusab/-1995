@@ -11,14 +11,8 @@ well-structured commands with appropriate argument handling and documentation.
 import argparse
 import json
 import logging
-import os
-import shutil
-import signal
 import sys
-import textwrap
 import time
-import traceback
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -33,7 +27,6 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.table import Table
-from rich.tree import Tree
 
 from src.assistant.core import EnhancedComponentManager as ComponentManager
 
@@ -211,7 +204,14 @@ class CommandRegistry:
         return self.commands.copy()
 
     def get_command_by_name_or_alias(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get command info by name or alias."""
+        """Get command info by name or alias.
+        
+        Args:
+            name: Command name or alias
+            
+        Returns:
+            Command info dict or None if not found
+        """
         # Check direct command name first
         if name in self.commands:
             cmd_info = self.commands[name].copy()
@@ -225,19 +225,6 @@ class CommandRegistry:
             cmd_info['name'] = command_name
             return cmd_info
         
-        return None
-
-        Returns:
-            Command handler or None if not found
-        """
-        # Check for alias
-        if name in self.aliases:
-            name = self.aliases[name]
-
-        # Get command
-        command = self.commands.get(name)
-        if command:
-            return command["handler"]
         return None
 
     def get_command_help(self, name: str) -> Optional[str]:

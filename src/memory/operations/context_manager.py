@@ -660,7 +660,7 @@ class MemoryContextManager:
         # Add to context window
         context = self._contexts[session_id]
         if not context.window.add_element(element):
-            self.logger.debug(f"Failed to add element to context window: window full")
+            self.logger.debug("Failed to add element to context window: window full")
             return None
 
         # Update context

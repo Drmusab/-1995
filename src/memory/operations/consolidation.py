@@ -411,7 +411,7 @@ class MemoryConsolidator:
                     source_memories.append(memory)
 
             if not source_memories:
-                self.logger.warning(f"No source memories found for semantic extraction")
+                self.logger.warning("No source memories found for semantic extraction")
                 return []
 
             # Extract semantic facts
@@ -503,7 +503,7 @@ class MemoryConsolidator:
                     memories.append(memory)
 
             if not memories:
-                self.logger.warning(f"No memories found for relationship building")
+                self.logger.warning("No memories found for relationship building")
                 return 0
 
             # Create relationship graph
@@ -1017,7 +1017,7 @@ class MemoryConsolidator:
 
         # Skip if no memories to consolidate
         if not source_memories:
-            self.logger.info(f"No source memories found to consolidate")
+            self.logger.info("No source memories found to consolidate")
             return {"memory_ids": [], "semantic_facts": [], "relationships": 0}
 
         # Group memories by context for better consolidation
