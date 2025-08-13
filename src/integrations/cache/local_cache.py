@@ -1133,7 +1133,7 @@ class LocalCache(Generic[K, V]):
                         tags={"cache": self.name},
                     )
                     self.metrics.set(
-                        f"cache_average_access_time_ms",
+                        "cache_average_access_time_ms",
                         stats.average_access_time_ms,
                         tags={"cache": self.name},
                     )

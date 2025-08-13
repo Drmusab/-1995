@@ -11,31 +11,25 @@ session with rich formatting, command handling, and context awareness.
 import json
 import logging
 import os
-import re
 import readline
 import shlex
 import signal
 import sys
-import time
 import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional
 
 import asyncio
 
 # Rich terminal UI components
 from rich.console import Console
-from rich.live import Live
 from rich.markdown import Markdown
-from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
 from rich.syntax import Syntax
 from rich.table import Table
-from rich.text import Text
 
 # Assistant imports
 from src.assistant.core import InteractionHandler
@@ -49,8 +43,6 @@ from src.core.events.event_types import (
     AssistantMessageSent,
     ErrorOccurred,
     InteractionCompleted,
-    SessionClosed,
-    SessionCreated,
     UserMessageReceived,
 )
 
@@ -365,7 +357,7 @@ class InteractiveSession:
         # Handle SIGTERM
         signal.signal(signal.SIGTERM, self._handle_terminate)
 
-    def _handle_interrupt(self, sig, frame) -> None:
+    def _handle_interrupt(self, _sig, _frame) -> None:
         """
         Handle interrupt signal (Ctrl+C).
 
@@ -385,7 +377,7 @@ class InteractiveSession:
             # If input fails, just exit
             self._cleanup_and_exit()
 
-    def _handle_terminate(self, sig, frame) -> None:
+    def _handle_terminate(self, _sig, _frame) -> None:
         """
         Handle terminate signal.
 
