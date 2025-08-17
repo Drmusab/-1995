@@ -33,8 +33,11 @@ cp .env.example .env
 # OPENAI_API_KEY=your_key_here
 ```
 
-### Step 3: Run
+### Step 3: Validate & Run
 ```bash
+# Validate installation (recommended)
+python validate_and_demo.py
+
 # Start interactive assistant
 PYTHONPATH=/path/to/-1995 python -m src.cli
 
@@ -87,6 +90,15 @@ python -m src.cli --enable-vision
 ```
 
 ## 🔧 Troubleshooting
+
+### Validate Your Installation
+```bash
+# Run the validation script to check everything is working
+python validate_and_demo.py
+
+# Run full demo with advanced features
+python validate_and_demo.py --full-demo
+```
 
 ### Can't find modules?
 ```bash
