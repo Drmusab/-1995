@@ -15,6 +15,8 @@ Advanced AI Assistant with multimodal processing, workflow orchestration, and ex
 
 ## Quick Start
 
+> 📋 **New to the AI Assistant?** Check out our [Quick Start Guide](docs/QUICK_START.md) for a 5-minute setup!
+
 ### Installation
 
 1. Clone the repository:
@@ -32,6 +34,13 @@ pip install -e .
 ```bash
 ai-assistant
 ```
+
+### 📚 Documentation
+
+- **[Quick Start Guide](docs/QUICK_START.md)** - Get running in 5 minutes
+- **[Comprehensive Build & Usage Guide](docs/COMPREHENSIVE_BUILD_AND_USAGE_GUIDE.md)** - Complete setup and usage instructions
+- **[Requirements Analysis](docs/REQUIREMENTS_ANALYSIS.md)** - Detailed system requirements and dependencies
+- **[Architecture Documentation](docs/architecture/)** - System design and technical details
 
 ### CLI Usage
 
