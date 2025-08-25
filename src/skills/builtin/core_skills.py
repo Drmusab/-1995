@@ -79,6 +79,7 @@ class SkillCategory(Enum):
     UTILITY = "utility"  # System and utility functions
     PERSONALIZATION = "personalization"  # User-specific capabilities
     INTERACTION = "interaction"  # Conversation and interaction flow
+    COACHING = "coaching"  # Coaching and personal development
 
 
 class SkillPriority(Enum):
