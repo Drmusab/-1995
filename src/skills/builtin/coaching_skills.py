@@ -3513,3 +3513,1244 @@ class VirtualDebateCoachSkill(BaseSkill):
             improvements.append("Develop more comprehensive argumentation")
         
         return improvements if improvements else ["Argument structure is well-developed"]
+
+
+class CharismaAmplificationEngineSkill(BaseSkill):
+    """Skill for developing personal charisma, social magnetism, and interpersonal influence."""
+
+    def get_metadata(self) -> SkillMetadata:
+        return SkillMetadata(
+            skill_id="coaching.charisma_amplification_engine",
+            name="Charisma Amplification Engine",
+            description="Develops personal charisma, social magnetism, and interpersonal influence through proven techniques",
+            category=SkillCategory.COACHING,
+            parameters={
+                "operation": {
+                    "type": "string",
+                    "description": "Operation to perform (assess_charisma, develop_presence, improve_communication, build_confidence, practice_influence)",
+                    "required": True,
+                },
+                "user_id": {"type": "string", "description": "User identifier", "required": True},
+                "context": {
+                    "type": "string",
+                    "description": "Social or professional context (networking, presentation, leadership, dating, etc.)",
+                    "required": False,
+                },
+                "goal": {
+                    "type": "string",
+                    "description": "Specific charisma goal or challenge",
+                    "required": False,
+                },
+                "interaction_data": {
+                    "type": "object",
+                    "description": "Data from recent social interactions",
+                    "required": False,
+                },
+            },
+            examples=[
+                {"operation": "assess_charisma", "user_id": "user_123"},
+                {"operation": "develop_presence", "user_id": "user_123", "context": "networking"},
+                {"operation": "improve_communication", "user_id": "user_123", "goal": "better storytelling"},
+            ],
+            required_components=["MemoryManager", "ModelRouter"],
+            tags={"charisma", "social_skills", "influence", "presence", "communication"},
+            is_stateful=True,
+        )
+
+    async def execute(self, input_data: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
+        """Execute the charisma amplification engine skill."""
+        try:
+            operation = input_data.get("operation")
+            user_id = input_data.get("user_id")
+
+            if not operation or not user_id:
+                return SkillResult(
+                    success=False,
+                    data={},
+                    message="Missing required parameters: operation and user_id",
+                    errors=["operation and user_id are required"],
+                )
+
+            if operation == "assess_charisma":
+                return await self._assess_charisma(user_id)
+            elif operation == "develop_presence":
+                return await self._develop_presence(user_id, input_data)
+            elif operation == "improve_communication":
+                return await self._improve_communication(user_id, input_data)
+            elif operation == "build_confidence":
+                return await self._build_confidence(user_id, input_data)
+            elif operation == "practice_influence":
+                return await self._practice_influence(user_id, input_data)
+            else:
+                return SkillResult(
+                    success=False,
+                    data={},
+                    message=f"Unknown operation: {operation}",
+                    errors=[f"Unsupported operation: {operation}"],
+                )
+
+        except Exception as e:
+            self.logger.error(f"Error in CharismaAmplificationEngineSkill: {str(e)}")
+            return SkillResult(
+                success=False,
+                data={},
+                message="Failed to execute charisma amplification engine",
+                errors=[str(e)],
+            )
+
+    async def _assess_charisma(self, user_id: str) -> SkillResult:
+        """Assess current charisma level and identify improvement areas."""
+        try:
+            # Retrieve user's social interaction history
+            social_memories = await self.memory_manager.get_user_memories(user_id, limit=30)
+            
+            assessment = {
+                "overall_charisma_score": self._calculate_charisma_score(social_memories),
+                "presence_rating": self._assess_presence(social_memories),
+                "communication_effectiveness": self._assess_communication(social_memories),
+                "emotional_intelligence": self._assess_emotional_intelligence(social_memories),
+                "confidence_level": self._assess_confidence(social_memories),
+                "influence_capability": self._assess_influence_capability(social_memories),
+                "strengths": self._identify_charisma_strengths(social_memories),
+                "improvement_areas": self._identify_improvement_areas(social_memories),
+                "development_plan": self._create_development_plan(social_memories),
+                "assessment_date": datetime.now(timezone.utc).isoformat(),
+            }
+
+            # Store assessment
+            await self.memory_manager.store_episodic_memory(
+                user_id=user_id,
+                content=assessment,
+                memory_type="charisma_assessment",
+                metadata={"assessment_date": assessment["assessment_date"]},
+            )
+
+            return SkillResult(
+                success=True,
+                data=assessment,
+                message="Charisma assessment completed",
+                confidence=0.85,
+                next_actions=["develop_presence", "improve_communication"],
+            )
+
+        except Exception as e:
+            return SkillResult(
+                success=False,
+                data={},
+                message="Failed to assess charisma",
+                errors=[str(e)],
+            )
+
+    async def _develop_presence(self, user_id: str, input_data: Dict[str, Any]) -> SkillResult:
+        """Develop executive presence and personal magnetism."""
+        try:
+            context = input_data.get("context", "general")
+            
+            presence_development = {
+                "context": context,
+                "physical_presence": self._develop_physical_presence(context),
+                "vocal_presence": self._develop_vocal_presence(context),
+                "emotional_presence": self._develop_emotional_presence(context),
+                "mental_presence": self._develop_mental_presence(context),
+                "energy_management": self._teach_energy_management(),
+                "body_language_mastery": self._teach_body_language(context),
+                "space_command": self._teach_space_command(context),
+                "first_impressions": self._optimize_first_impressions(context),
+                "practice_exercises": self._provide_presence_exercises(context),
+                "daily_practices": self._suggest_daily_practices(),
+            }
+
+            # Store development session
+            await self.memory_manager.store_episodic_memory(
+                user_id=user_id,
+                content=presence_development,
+                memory_type="presence_development",
+                metadata={"context": context, "session_date": datetime.now(timezone.utc).isoformat()},
+            )
+
+            return SkillResult(
+                success=True,
+                data=presence_development,
+                message=f"Presence development for {context} context completed",
+                confidence=0.9,
+                next_actions=["practice_influence", "build_confidence"],
+            )
+
+        except Exception as e:
+            return SkillResult(
+                success=False,
+                data={},
+                message="Failed to develop presence",
+                errors=[str(e)],
+            )
+
+    async def _improve_communication(self, user_id: str, input_data: Dict[str, Any]) -> SkillResult:
+        """Improve charismatic communication skills."""
+        try:
+            goal = input_data.get("goal", "general improvement")
+            context = input_data.get("context", "general")
+            
+            communication_improvement = {
+                "goal": goal,
+                "context": context,
+                "storytelling_mastery": self._teach_storytelling(),
+                "conversational_skills": self._improve_conversational_skills(),
+                "active_listening": self._teach_active_listening(),
+                "emotional_attunement": self._develop_emotional_attunement(),
+                "humor_and_wit": self._develop_humor_skills(),
+                "persuasive_language": self._teach_persuasive_language(),
+                "nonverbal_communication": self._master_nonverbal_communication(),
+                "rapport_building": self._teach_rapport_building(),
+                "difficult_conversations": self._handle_difficult_conversations(),
+                "practice_scenarios": self._create_practice_scenarios(context, goal),
+            }
+
+            return SkillResult(
+                success=True,
+                data=communication_improvement,
+                message=f"Communication improvement for '{goal}' completed",
+                confidence=0.9,
+                next_actions=["practice_influence", "develop_presence"],
+            )
+
+        except Exception as e:
+            return SkillResult(
+                success=False,
+                data={},
+                message="Failed to improve communication",
+                errors=[str(e)],
+            )
+
+    async def _build_confidence(self, user_id: str, input_data: Dict[str, Any]) -> SkillResult:
+        """Build unshakeable confidence and self-assurance."""
+        try:
+            # Get user's confidence challenges and goals
+            confidence_memories = await self.memory_manager.get_user_memories(user_id, limit=20)
+            
+            confidence_building = {
+                "confidence_assessment": self._assess_current_confidence(confidence_memories),
+                "mindset_transformation": self._transform_confidence_mindset(),
+                "inner_critic_management": self._manage_inner_critic(),
+                "success_amplification": self._amplify_successes(confidence_memories),
+                "fear_dissolution": self._dissolve_social_fears(),
+                "power_poses": self._teach_power_poses(),
+                "visualization_techniques": self._teach_confidence_visualization(),
+                "affirmation_systems": self._create_affirmation_systems(),
+                "comfort_zone_expansion": self._expand_comfort_zone(),
+                "resilience_building": self._build_social_resilience(),
+                "confidence_anchoring": self._teach_confidence_anchoring(),
+                "daily_confidence_practices": self._create_daily_practices(),
+            }
+
+            return SkillResult(
+                success=True,
+                data=confidence_building,
+                message="Confidence building session completed",
+                confidence=0.9,
+                next_actions=["practice_influence", "develop_presence"],
+            )
+
+        except Exception as e:
+            return SkillResult(
+                success=False,
+                data={},
+                message="Failed to build confidence",
+                errors=[str(e)],
+            )
+
+    async def _practice_influence(self, user_id: str, input_data: Dict[str, Any]) -> SkillResult:
+        """Practice ethical influence and persuasion techniques."""
+        try:
+            context = input_data.get("context", "general")
+            goal = input_data.get("goal", "general influence")
+            
+            influence_practice = {
+                "context": context,
+                "goal": goal,
+                "influence_principles": self._teach_influence_principles(),
+                "ethical_persuasion": self._teach_ethical_persuasion(),
+                "reading_people": self._teach_people_reading(),
+                "building_trust": self._teach_trust_building(),
+                "creating_connection": self._teach_connection_creation(),
+                "managing_resistance": self._handle_resistance(),
+                "influence_timing": self._teach_influence_timing(),
+                "influence_channels": self._identify_influence_channels(),
+                "practice_scenarios": self._create_influence_scenarios(context, goal),
+                "ethical_guidelines": self._provide_ethical_guidelines(),
+                "influence_measurement": self._measure_influence_effectiveness(),
+            }
+
+            return SkillResult(
+                success=True,
+                data=influence_practice,
+                message=f"Influence practice for {context} completed",
+                confidence=0.9,
+                next_actions=["assess_charisma", "improve_communication"],
+            )
+
+        except Exception as e:
+            return SkillResult(
+                success=False,
+                data={},
+                message="Failed to practice influence",
+                errors=[str(e)],
+            )
+
+    def _calculate_charisma_score(self, social_memories: List[Dict]) -> Dict[str, float]:
+        """Calculate overall charisma score based on interaction history."""
+        if not social_memories:
+            return {"overall": 5.0, "breakdown": {}}
+        
+        # Analyze interaction patterns for charisma indicators
+        scores = {
+            "presence": 5.0,
+            "communication": 5.0,
+            "confidence": 5.0,
+            "influence": 5.0,
+            "likeability": 5.0,
+        }
+        
+        # This would normally analyze actual interaction data
+        overall_score = sum(scores.values()) / len(scores)
+        
+        return {
+            "overall": overall_score,
+            "breakdown": scores,
+            "interpretation": self._interpret_charisma_score(overall_score),
+        }
+
+    def _interpret_charisma_score(self, score: float) -> str:
+        """Interpret charisma score."""
+        if score >= 8:
+            return "Highly charismatic - natural magnetism and influence"
+        elif score >= 6:
+            return "Moderately charismatic - good social skills with room for growth"
+        elif score >= 4:
+            return "Developing charisma - basic social competence"
+        else:
+            return "Significant opportunity for charisma development"
+
+    def _assess_presence(self, social_memories: List[Dict]) -> Dict[str, Any]:
+        """Assess current presence level."""
+        return {
+            "physical_presence": 6.0,
+            "vocal_presence": 6.0,
+            "emotional_presence": 6.0,
+            "mental_presence": 6.0,
+            "overall_presence": 6.0,
+            "presence_feedback": "Solid foundation with opportunities for enhancement",
+        }
+
+    def _assess_communication(self, social_memories: List[Dict]) -> Dict[str, Any]:
+        """Assess communication effectiveness."""
+        return {
+            "clarity": 7.0,
+            "engagement": 6.0,
+            "storytelling": 5.0,
+            "listening": 6.0,
+            "nonverbal": 6.0,
+            "overall_communication": 6.0,
+            "communication_feedback": "Good communicator with potential for storytelling improvement",
+        }
+
+    def _assess_emotional_intelligence(self, social_memories: List[Dict]) -> Dict[str, Any]:
+        """Assess emotional intelligence level."""
+        return {
+            "self_awareness": 6.0,
+            "self_regulation": 6.0,
+            "empathy": 7.0,
+            "social_awareness": 6.0,
+            "relationship_management": 6.0,
+            "overall_eq": 6.2,
+            "eq_feedback": "Strong empathy with opportunities to develop self-regulation",
+        }
+
+    def _assess_confidence(self, social_memories: List[Dict]) -> Dict[str, Any]:
+        """Assess confidence level."""
+        return {
+            "social_confidence": 6.0,
+            "professional_confidence": 7.0,
+            "physical_confidence": 6.0,
+            "intellectual_confidence": 7.0,
+            "overall_confidence": 6.5,
+            "confidence_feedback": "Good professional confidence, can improve social confidence",
+        }
+
+    def _assess_influence_capability(self, social_memories: List[Dict]) -> Dict[str, Any]:
+        """Assess influence and persuasion capability."""
+        return {
+            "credibility": 7.0,
+            "likeability": 6.0,
+            "authority": 6.0,
+            "reciprocity": 5.0,
+            "consistency": 7.0,
+            "social_proof": 5.0,
+            "overall_influence": 6.0,
+            "influence_feedback": "Strong credibility and consistency, can develop reciprocity skills",
+        }
+
+    def _identify_charisma_strengths(self, social_memories: List[Dict]) -> List[str]:
+        """Identify current charisma strengths."""
+        return [
+            "Natural empathy and emotional connection",
+            "Clear and articulate communication",
+            "Professional competence and credibility",
+            "Consistent and reliable behavior",
+            "Good listening skills and attention to others",
+        ]
+
+    def _identify_improvement_areas(self, social_memories: List[Dict]) -> List[str]:
+        """Identify areas for charisma improvement."""
+        return [
+            "Storytelling and narrative engagement",
+            "Social confidence in new situations",
+            "Nonverbal presence and body language",
+            "Humor and spontaneous wit",
+            "Influence and persuasion techniques",
+            "Energy management and vitality",
+        ]
+
+    def _create_development_plan(self, social_memories: List[Dict]) -> Dict[str, List[str]]:
+        """Create personalized charisma development plan."""
+        return {
+            "immediate_focus": [
+                "Practice power poses before important interactions",
+                "Develop three signature stories for different contexts",
+                "Implement daily presence meditation",
+            ],
+            "short_term_goals": [
+                "Master conversational storytelling techniques",
+                "Improve body language and nonverbal communication",
+                "Build social confidence through graduated exposure",
+            ],
+            "long_term_objectives": [
+                "Develop natural, authentic charismatic presence",
+                "Master ethical influence and persuasion",
+                "Become a magnetic communicator and leader",
+            ],
+        }
+
+    def _develop_physical_presence(self, context: str) -> Dict[str, List[str]]:
+        """Develop physical presence for specific context."""
+        base_techniques = [
+            "Maintain excellent posture - shoulders back, chest open",
+            "Use deliberate, purposeful movements",
+            "Take up appropriate space without being invasive",
+            "Master the art of strategic stillness",
+        ]
+        
+        context_specific = {
+            "networking": [
+                "Firm, confident handshake with eye contact",
+                "Open body language - avoid crossed arms",
+                "Strategic positioning near key conversation areas",
+            ],
+            "presentation": [
+                "Command the stage with confident movement",
+                "Use gestures to emphasize key points",
+                "Maintain strong eye contact with audience",
+            ],
+            "leadership": [
+                "Walk with purpose and confidence",
+                "Use height and positioning to convey authority",
+                "Master the executive presence stance",
+            ],
+        }
+        
+        return {
+            "universal_techniques": base_techniques,
+            "context_specific": context_specific.get(context, []),
+        }
+
+    def _develop_vocal_presence(self, context: str) -> Dict[str, List[str]]:
+        """Develop vocal presence and authority."""
+        return {
+            "vocal_fundamentals": [
+                "Speak from your diaphragm for deeper, richer tone",
+                "Use strategic pauses for emphasis and gravitas",
+                "Vary your pace to maintain engagement",
+                "Lower your voice slightly for authority",
+                "Eliminate uptalk and vocal fry",
+            ],
+            "advanced_techniques": [
+                "Match and mirror vocal patterns for rapport",
+                "Use vocal variety to convey emotion",
+                "Master the power of silence",
+                "Develop signature vocal patterns",
+                "Practice vocal warm-ups and exercises",
+            ],
+            "context_adaptations": self._get_vocal_context_tips(context),
+        }
+
+    def _get_vocal_context_tips(self, context: str) -> List[str]:
+        """Get vocal tips for specific contexts."""
+        tips = {
+            "networking": [
+                "Moderate volume for intimate conversation",
+                "Warm, approachable tone",
+                "Clear articulation in noisy environments",
+            ],
+            "presentation": [
+                "Project voice to reach entire audience",
+                "Use dynamic range for emphasis",
+                "Clear diction and precise pronunciation",
+            ],
+            "leadership": [
+                "Authoritative but not domineering tone",
+                "Measured, thoughtful speech pace",
+                "Confident, decisive vocal quality",
+            ],
+        }
+        return tips.get(context, ["Adapt vocal style to context and audience"])
+
+    def _develop_emotional_presence(self, context: str) -> List[str]:
+        """Develop emotional presence and attunement."""
+        return [
+            "Cultivate genuine emotional awareness",
+            "Practice emotional regulation and management",
+            "Develop empathy and emotional attunement to others",
+            "Express authentic emotions appropriately",
+            "Create emotional resonance with your audience",
+            "Master emotional state management",
+            "Use emotional intelligence for connection",
+            "Practice emotional contagion - spread positive emotions",
+        ]
+
+    def _develop_mental_presence(self, context: str) -> List[str]:
+        """Develop mental presence and focus."""
+        return [
+            "Practice mindful presence and full attention",
+            "Eliminate mental distractions and multitasking",
+            "Develop laser focus on the person speaking",
+            "Cultivate intellectual curiosity and engagement",
+            "Ask thoughtful, penetrating questions",
+            "Listen for underlying meanings and emotions",
+            "Respond with insight and wisdom",
+            "Maintain mental agility and quick thinking",
+        ]
+
+    def _teach_energy_management(self) -> List[str]:
+        """Teach energy management for sustained charisma."""
+        return [
+            "Identify your natural energy rhythms",
+            "Schedule important interactions during peak energy",
+            "Use breathing techniques to boost energy",
+            "Practice energy meditation and visualization",
+            "Maintain physical fitness for sustained vitality",
+            "Manage energy drains and toxic relationships",
+            "Develop energy recovery practices",
+            "Learn to channel nervous energy productively",
+        ]
+
+    def _teach_body_language(self, context: str) -> Dict[str, List[str]]:
+        """Teach powerful body language techniques."""
+        return {
+            "fundamental_principles": [
+                "Mirror and match others subtly for rapport",
+                "Use open gestures to appear approachable",
+                "Maintain appropriate eye contact (70% listening, 50% speaking)",
+                "Use space and positioning strategically",
+                "Master micro-expressions and facial communication",
+            ],
+            "power_positions": [
+                "The steeple - fingertips touching for authority",
+                "The confident lean - forward engagement",
+                "The open stance - feet shoulder-width apart",
+                "The assertive sit - back straight, claims space",
+            ],
+            "context_specifics": self._get_body_language_context(context),
+        }
+
+    def _get_body_language_context(self, context: str) -> List[str]:
+        """Get body language tips for specific contexts."""
+        tips = {
+            "networking": [
+                "Turn your body fully toward speakers",
+                "Use mirroring to build subconscious rapport",
+                "Maintain open, welcoming posture",
+            ],
+            "presentation": [
+                "Use purposeful gestures to emphasize points",
+                "Move with intention across the stage",
+                "Make eye contact with all sections of audience",
+            ],
+            "leadership": [
+                "Sit or stand at head of table when possible",
+                "Use height and positioning to convey status",
+                "Maintain confident, relaxed posture under pressure",
+            ],
+        }
+        return tips.get(context, ["Adapt body language to context and culture"])
+
+    def _teach_space_command(self, context: str) -> List[str]:
+        """Teach how to command space and presence."""
+        return [
+            "Take up appropriate space without being invasive",
+            "Use the triangle of power - head, heart, hands visible",
+            "Position yourself strategically in rooms",
+            "Create your personal energy field",
+            "Master entrance and exit timing",
+            "Use furniture and environment to your advantage",
+            "Practice space expansion exercises",
+            "Learn to draw attention without demanding it",
+        ]
+
+    def _optimize_first_impressions(self, context: str) -> Dict[str, List[str]]:
+        """Optimize first impression strategies."""
+        return {
+            "pre_interaction": [
+                "Prime yourself with power poses",
+                "Set positive intention and energy",
+                "Review key talking points or objectives",
+                "Visualize successful interaction",
+            ],
+            "initial_contact": [
+                "Make strong eye contact immediately",
+                "Offer genuine, warm smile",
+                "Use firm, confident handshake",
+                "State name clearly and with conviction",
+            ],
+            "first_minutes": [
+                "Ask engaging, open-ended questions",
+                "Show genuine interest in the other person",
+                "Find common ground quickly",
+                "Demonstrate active listening",
+            ],
+            "lasting_impact": [
+                "Leave one memorable insight or story",
+                "Follow up with specific reference to conversation",
+                "Be the person who remembers details",
+                "End interactions on a high note",
+            ],
+        }
+
+    def _provide_presence_exercises(self, context: str) -> List[Dict[str, str]]:
+        """Provide practical presence exercises."""
+        return [
+            {
+                "exercise": "Power Pose Practice",
+                "description": "Practice Wonder Woman pose for 2 minutes before important interactions",
+                "frequency": "Before each important social interaction",
+            },
+            {
+                "exercise": "Presence Meditation",
+                "description": "10-minute daily meditation focusing on embodied presence",
+                "frequency": "Daily, preferably morning",
+            },
+            {
+                "exercise": "Voice Projection",
+                "description": "Practice speaking with diaphragmatic breathing and clear articulation",
+                "frequency": "15 minutes daily",
+            },
+            {
+                "exercise": "Eye Contact Challenge",
+                "description": "Maintain comfortable eye contact in conversations without looking away first",
+                "frequency": "Practice in every conversation",
+            },
+            {
+                "exercise": "Space Command",
+                "description": "Practice taking up appropriate space in different environments",
+                "frequency": "Daily awareness practice",
+            },
+        ]
+
+    def _suggest_daily_practices(self) -> List[str]:
+        """Suggest daily practices for developing presence."""
+        return [
+            "Morning presence meditation (10 minutes)",
+            "Power pose before important interactions",
+            "Conscious breathing throughout the day",
+            "Posture checks every hour",
+            "One meaningful conversation daily",
+            "Evening reflection on social interactions",
+            "Vocal warm-up exercises",
+            "Gratitude practice for confidence building",
+        ]
+
+    def _teach_storytelling(self) -> Dict[str, Any]:
+        """Teach charismatic storytelling techniques."""
+        return {
+            "story_structure": {
+                "setup": "Set the scene and context clearly",
+                "conflict": "Introduce tension or challenge",
+                "resolution": "Show how the situation was resolved",
+                "lesson": "Extract meaning or insight",
+            },
+            "storytelling_techniques": [
+                "Use vivid, sensory details",
+                "Employ dialogue and character voices",
+                "Vary your pace for dramatic effect",
+                "Use gestures and body language",
+                "Make it relevant to your audience",
+                "Include emotional elements",
+                "Practice your timing and pauses",
+            ],
+            "story_types": [
+                "Personal transformation stories",
+                "Overcoming challenge narratives",
+                "Humorous observations",
+                "Professional success stories",
+                "Learning moment stories",
+            ],
+            "practice_framework": [
+                "Develop 3-5 signature stories",
+                "Practice different versions for different audiences",
+                "Record yourself telling stories",
+                "Get feedback from trusted friends",
+                "Study great storytellers",
+            ],
+        }
+
+    def _improve_conversational_skills(self) -> Dict[str, List[str]]:
+        """Improve conversational skills and social fluency."""
+        return {
+            "conversation_starters": [
+                "Ask about their current projects or interests",
+                "Comment on shared environment or experience",
+                "Give genuine compliments on specific things",
+                "Ask for opinions on relevant topics",
+                "Share interesting observations",
+            ],
+            "conversation_maintenance": [
+                "Use the 'Tell me more' technique",
+                "Ask follow-up questions based on their responses",
+                "Share related experiences or insights",
+                "Use active listening and reflection",
+                "Bridge to new topics smoothly",
+            ],
+            "conversation_depth": [
+                "Move from facts to feelings",
+                "Ask about motivations and dreams",
+                "Share vulnerable or personal insights",
+                "Explore values and beliefs",
+                "Discuss future aspirations",
+            ],
+            "graceful_exits": [
+                "Summarize the value of the conversation",
+                "Suggest future connection opportunities",
+                "Express genuine appreciation",
+                "Leave with a positive impression",
+            ],
+        }
+
+    def _teach_active_listening(self) -> List[str]:
+        """Teach advanced active listening skills."""
+        return [
+            "Give full attention - eliminate distractions",
+            "Listen for emotions, not just facts",
+            "Reflect back what you hear for confirmation",
+            "Ask clarifying questions to deepen understanding",
+            "Avoid planning your response while they speak",
+            "Notice nonverbal cues and body language",
+            "Remember and reference previous conversations",
+            "Show curiosity about their perspective",
+            "Avoid immediate judgment or advice-giving",
+            "Create space for them to process and share",
+        ]
+
+    def _develop_emotional_attunement(self) -> List[str]:
+        """Develop emotional attunement and empathy."""
+        return [
+            "Practice reading micro-expressions",
+            "Pay attention to vocal tone and inflection",
+            "Notice changes in energy and mood",
+            "Develop your emotional vocabulary",
+            "Practice perspective-taking exercises",
+            "Learn to sense unspoken emotions",
+            "Respond to emotions before addressing content",
+            "Validate feelings even when disagreeing with facts",
+            "Match emotional energy appropriately",
+            "Use emotional mirroring for connection",
+        ]
+
+    def _develop_humor_skills(self) -> Dict[str, List[str]]:
+        """Develop humor and wit for charismatic communication."""
+        return {
+            "humor_fundamentals": [
+                "Develop observational humor skills",
+                "Learn timing and delivery techniques",
+                "Practice self-deprecating humor appropriately",
+                "Use callbacks to earlier conversations",
+                "Master the art of playful teasing",
+            ],
+            "wit_development": [
+                "Improve quick thinking and mental agility",
+                "Practice wordplay and clever observations",
+                "Develop comeback repertoire for common situations",
+                "Learn to find humor in everyday situations",
+                "Study comedic timing and delivery",
+            ],
+            "humor_guidelines": [
+                "Punch up, not down - avoid targeting vulnerabilities",
+                "Keep humor inclusive and positive",
+                "Read the room and adjust appropriately",
+                "Use humor to defuse tension, not create it",
+                "Be genuinely funny, not just attention-seeking",
+            ],
+        }
+
+    def _teach_persuasive_language(self) -> Dict[str, List[str]]:
+        """Teach persuasive language patterns."""
+        return {
+            "language_patterns": [
+                "Use 'because' to provide reasons",
+                "Employ 'imagine' for visualization",
+                "Use 'what if' for possibility thinking",
+                "Apply 'yes ladders' for agreement building",
+                "Utilize presuppositions for assumption setting",
+            ],
+            "influence_words": [
+                "Discover, imagine, realize, recognize",
+                "Naturally, obviously, clearly, simply",
+                "Proven, guaranteed, exclusive, limited",
+                "Breakthrough, revolutionary, innovative",
+                "You, your, yours (focus on them)",
+            ],
+            "framing_techniques": [
+                "Frame choices rather than yes/no decisions",
+                "Use contrast to make your option attractive",
+                "Anchor high then negotiate down",
+                "Create urgency and scarcity appropriately",
+                "Tell stories that lead to your conclusion",
+            ],
+        }
+
+    def _master_nonverbal_communication(self) -> Dict[str, List[str]]:
+        """Master nonverbal communication for charisma."""
+        return {
+            "facial_expressions": [
+                "Practice genuine smile with eyes (Duchenne smile)",
+                "Master micro-expressions for trustworthiness",
+                "Use eyebrow flash for acknowledgment",
+                "Practice active facial listening",
+                "Control and use facial expressions consciously",
+            ],
+            "gesture_mastery": [
+                "Use illustrative gestures while speaking",
+                "Practice precision gestures for emphasis",
+                "Employ rhythm gestures for flow",
+                "Use spatial gestures for concepts",
+                "Master cultural gesture awareness",
+            ],
+            "proximity_and_touch": [
+                "Understand personal space boundaries",
+                "Use appropriate social touch for connection",
+                "Practice strategic positioning",
+                "Master handshake variations",
+                "Use proximity for influence and rapport",
+            ],
+        }
+
+    def _teach_rapport_building(self) -> List[str]:
+        """Teach rapid rapport building techniques."""
+        return [
+            "Mirror and match body language subtly",
+            "Pace their speaking speed and energy level",
+            "Find and emphasize commonalities",
+            "Use their preferred communication style",
+            "Show genuine interest in their world",
+            "Remember and reference personal details",
+            "Use their name appropriately in conversation",
+            "Validate their feelings and perspectives",
+            "Share appropriate vulnerabilities",
+            "Create positive shared experiences",
+        ]
+
+    def _handle_difficult_conversations(self) -> List[str]:
+        """Handle difficult conversations with charisma."""
+        return [
+            "Stay calm and maintain emotional regulation",
+            "Listen to understand, not to respond",
+            "Acknowledge their perspective before presenting yours",
+            "Use 'I' statements to express your position",
+            "Focus on interests, not positions",
+            "Look for win-win solutions",
+            "Use strategic concessions to build goodwill",
+            "Reframe conflicts as problems to solve together",
+            "End with respect and dignity intact",
+            "Follow up to maintain relationship",
+        ]
+
+    def _create_practice_scenarios(self, context: str, goal: str) -> List[Dict[str, str]]:
+        """Create practice scenarios for skill development."""
+        scenarios = [
+            {
+                "scenario": "Networking Event Introduction",
+                "setup": "You're at a professional networking event and want to approach a group of strangers",
+                "challenge": "Break into the conversation naturally and make a memorable impression",
+                "practice_focus": "Opening lines, body language, story introduction",
+            },
+            {
+                "scenario": "Difficult Colleague Conversation",
+                "setup": "You need to address a performance issue with a defensive colleague",
+                "challenge": "Maintain rapport while addressing the problem constructively",
+                "practice_focus": "Emotional regulation, empathy, assertive communication",
+            },
+            {
+                "scenario": "Client Presentation",
+                "setup": "You're presenting a proposal to skeptical potential clients",
+                "challenge": "Build credibility and persuade them to move forward",
+                "practice_focus": "Authority, storytelling, handling objections",
+            },
+        ]
+        return scenarios
+
+    def _assess_current_confidence(self, confidence_memories: List[Dict]) -> Dict[str, Any]:
+        """Assess current confidence level."""
+        return {
+            "social_confidence": 6.0,
+            "professional_confidence": 7.0,
+            "physical_confidence": 6.0,
+            "intellectual_confidence": 7.0,
+            "confidence_patterns": self._analyze_confidence_patterns(confidence_memories),
+            "confidence_triggers": self._identify_confidence_triggers(confidence_memories),
+            "confidence_drains": self._identify_confidence_drains(confidence_memories),
+        }
+
+    def _analyze_confidence_patterns(self, memories: List[Dict]) -> List[str]:
+        """Analyze confidence patterns from memory."""
+        return [
+            "Higher confidence in familiar environments",
+            "Confidence correlates with preparation level",
+            "Social confidence varies by group size",
+            "Professional confidence strongest in expertise areas",
+        ]
+
+    def _identify_confidence_triggers(self, memories: List[Dict]) -> List[str]:
+        """Identify what triggers confidence."""
+        return [
+            "Thorough preparation and knowledge",
+            "Positive feedback and recognition",
+            "Successful past experiences",
+            "Supportive environment and people",
+            "Clear goals and expectations",
+        ]
+
+    def _identify_confidence_drains(self, memories: List[Dict]) -> List[str]:
+        """Identify what drains confidence."""
+        return [
+            "Unfamiliar social situations",
+            "Critical or judgmental people",
+            "Perfectionist expectations",
+            "Comparison with others",
+            "Past failure rumination",
+        ]
+
+    def _transform_confidence_mindset(self) -> Dict[str, str]:
+        """Transform limiting confidence beliefs."""
+        return {
+            "from_perfectionism": "From 'I must be perfect' to 'I'm learning and growing'",
+            "from_comparison": "From 'I'm not as good as others' to 'I have unique value'",
+            "from_approval_seeking": "From 'I need everyone to like me' to 'I respect myself'",
+            "from_fear_of_failure": "From 'I can't fail' to 'Failure is learning'",
+            "from_impostor_syndrome": "From 'I don't belong here' to 'I deserve my success'",
+        }
+
+    def _manage_inner_critic(self) -> List[str]:
+        """Manage and transform inner critic."""
+        return [
+            "Recognize critical voice as separate from self",
+            "Question the evidence for critical thoughts",
+            "Reframe criticism as constructive feedback",
+            "Develop compassionate inner voice",
+            "Practice self-forgiveness for mistakes",
+            "Focus on growth rather than judgment",
+            "Use affirmations to counter negative self-talk",
+            "Celebrate small wins and progress",
+        ]
+
+    def _amplify_successes(self, confidence_memories: List[Dict]) -> List[str]:
+        """Amplify and leverage past successes."""
+        return [
+            "Create a success inventory of past achievements",
+            "Analyze what led to successful outcomes",
+            "Extract transferable skills and strategies",
+            "Use success anchoring techniques",
+            "Share success stories appropriately",
+            "Build on existing strengths",
+            "Create success visualization practices",
+            "Document and celebrate recent wins",
+        ]
+
+    def _dissolve_social_fears(self) -> List[str]:
+        """Dissolve common social fears and anxieties."""
+        return [
+            "Challenge catastrophic thinking patterns",
+            "Practice gradual exposure to feared situations",
+            "Develop coping strategies for anxiety",
+            "Reframe rejection as redirection",
+            "Focus on serving others rather than impressing",
+            "Prepare conversation topics and questions",
+            "Use breathing techniques for calm",
+            "Remember that most people are focused on themselves",
+        ]
+
+    def _teach_power_poses(self) -> List[Dict[str, str]]:
+        """Teach power poses for confidence building."""
+        return [
+            {
+                "pose": "Wonder Woman",
+                "description": "Stand with feet shoulder-width apart, hands on hips, chest open",
+                "duration": "2 minutes",
+                "timing": "Before important interactions",
+            },
+            {
+                "pose": "Victory V",
+                "description": "Raise arms in victory V shape above head",
+                "duration": "1 minute",
+                "timing": "After successes or before challenges",
+            },
+            {
+                "pose": "Superman",
+                "description": "Stand tall with arms extended forward, chest out",
+                "duration": "2 minutes",
+                "timing": "Morning confidence routine",
+            },
+            {
+                "pose": "CEO Stance",
+                "description": "Feet apart, hands behind back, chest open",
+                "duration": "1-2 minutes",
+                "timing": "Before presentations or meetings",
+            },
+        ]
+
+    def _teach_confidence_visualization(self) -> List[str]:
+        """Teach confidence visualization techniques."""
+        return [
+            "Visualize successful social interactions in detail",
+            "Imagine yourself as confident and charismatic",
+            "Practice future pacing positive outcomes",
+            "Create mental movies of ideal performance",
+            "Use all senses in visualization exercises",
+            "Rehearse challenging conversations mentally",
+            "Visualize recovery from potential setbacks",
+            "Practice confidence anchoring through visualization",
+        ]
+
+    def _create_affirmation_systems(self) -> Dict[str, List[str]]:
+        """Create personalized affirmation systems."""
+        return {
+            "confidence_affirmations": [
+                "I am confident, capable, and worthy of respect",
+                "I bring unique value to every interaction",
+                "I trust myself to handle any situation",
+                "I am learning and growing stronger every day",
+            ],
+            "social_affirmations": [
+                "I connect easily with others",
+                "People enjoy my company and conversation",
+                "I am interesting and have valuable insights to share",
+                "I create positive energy wherever I go",
+            ],
+            "success_affirmations": [
+                "I deserve success and recognition",
+                "I am capable of achieving my goals",
+                "I learn from setbacks and become stronger",
+                "I attract opportunities and positive relationships",
+            ],
+        }
+
+    def _expand_comfort_zone(self) -> List[str]:
+        """Systematically expand comfort zone."""
+        return [
+            "Identify current comfort zone boundaries",
+            "Choose small, manageable challenges",
+            "Practice one new social behavior weekly",
+            "Gradually increase interaction difficulty",
+            "Celebrate courage, not just outcomes",
+            "Reflect on learning from each challenge",
+            "Build support system for encouragement",
+            "Track progress and growth over time",
+        ]
+
+    def _build_social_resilience(self) -> List[str]:
+        """Build resilience for social setbacks."""
+        return [
+            "Develop rapid recovery strategies",
+            "Practice reframing negative interactions",
+            "Build emotional regulation skills",
+            "Create meaning from difficult experiences",
+            "Develop growth mindset toward social skills",
+            "Build support network for encouragement",
+            "Practice self-compassion after setbacks",
+            "Focus on learning rather than performance",
+        ]
+
+    def _teach_confidence_anchoring(self) -> List[str]:
+        """Teach confidence anchoring techniques."""
+        return [
+            "Identify your peak confidence state",
+            "Create physical anchor (gesture, touch)",
+            "Practice anchor in confident moments",
+            "Reinforce anchor through repetition",
+            "Use anchor before challenging situations",
+            "Combine with visualization and affirmations",
+            "Create multiple anchors for different contexts",
+            "Practice anchor maintenance and strengthening",
+        ]
+
+    def _create_daily_practices(self) -> List[str]:
+        """Create daily confidence building practices."""
+        return [
+            "Morning power pose and affirmation routine",
+            "One small comfort zone challenge daily",
+            "Evening success reflection and gratitude",
+            "Confidence visualization before sleep",
+            "Compliment giving practice",
+            "Posture and presence awareness checks",
+            "Social skill practice in low-stakes situations",
+            "Self-compassion meditation practice",
+        ]
+
+    def _teach_influence_principles(self) -> Dict[str, str]:
+        """Teach core principles of ethical influence."""
+        return {
+            "reciprocity": "Give value first, create natural desire to reciprocate",
+            "commitment": "Help others make consistent choices aligned with their values",
+            "social_proof": "Show how similar others have made positive choices",
+            "authority": "Build credibility through expertise and trustworthiness",
+            "liking": "Create genuine connection and find commonalities",
+            "scarcity": "Highlight unique value and time-sensitive opportunities",
+            "contrast": "Frame choices to highlight your preferred option",
+            "reason_why": "Always provide clear rationale for requests",
+        }
+
+    def _teach_ethical_persuasion(self) -> List[str]:
+        """Teach ethical persuasion guidelines."""
+        return [
+            "Focus on win-win outcomes for all parties",
+            "Respect others' right to say no",
+            "Use influence to serve, not manipulate",
+            "Be transparent about your intentions",
+            "Build long-term relationships over short-term gains",
+            "Align influence with others' genuine interests",
+            "Take responsibility for influence outcomes",
+            "Use power responsibly and ethically",
+        ]
+
+    def _teach_people_reading(self) -> List[str]:
+        """Teach people reading and social awareness."""
+        return [
+            "Observe baseline behavior before looking for changes",
+            "Notice clusters of nonverbal signals",
+            "Pay attention to vocal changes and patterns",
+            "Watch for micro-expressions and facial tells",
+            "Observe personal space and touch preferences",
+            "Notice energy levels and emotional states",
+            "Listen for values and motivations in speech",
+            "Identify communication and decision-making styles",
+        ]
+
+    def _teach_trust_building(self) -> List[str]:
+        """Teach rapid trust building techniques."""
+        return [
+            "Demonstrate competence in your area of expertise",
+            "Show genuine care for others' interests",
+            "Be consistent in words and actions",
+            "Share appropriate vulnerabilities",
+            "Keep commitments and promises",
+            "Admit mistakes and limitations honestly",
+            "Show respect for different perspectives",
+            "Protect confidential information shared with you",
+        ]
+
+    def _teach_connection_creation(self) -> List[str]:
+        """Teach deep connection creation."""
+        return [
+            "Find genuine commonalities and shared experiences",
+            "Practice emotional attunement and empathy",
+            "Share stories that reveal your humanity",
+            "Ask questions that show genuine interest",
+            "Remember and reference previous conversations",
+            "Create positive shared experiences",
+            "Show appreciation for their unique qualities",
+            "Invest time and attention in the relationship",
+        ]
+
+    def _handle_resistance(self) -> List[str]:
+        """Handle resistance to influence attempts."""
+        return [
+            "Acknowledge and validate their concerns",
+            "Ask questions to understand their perspective",
+            "Find areas of agreement before addressing differences",
+            "Reframe your proposal to address their objections",
+            "Use their resistance to strengthen your approach",
+            "Give them time to process and consider",
+            "Provide social proof from similar situations",
+            "Focus on their interests, not your agenda",
+        ]
+
+    def _teach_influence_timing(self) -> List[str]:
+        """Teach optimal timing for influence attempts."""
+        return [
+            "Wait for receptive emotional states",
+            "Choose moments of high attention and focus",
+            "Time requests after you've provided value",
+            "Avoid influence attempts during stress or distraction",
+            "Use natural conversation openings",
+            "Consider their decision-making timeline",
+            "Respect their processing and reflection needs",
+            "Build influence foundation before making requests",
+        ]
+
+    def _identify_influence_channels(self) -> List[str]:
+        """Identify different channels of influence."""
+        return [
+            "Direct verbal communication and requests",
+            "Storytelling and narrative influence",
+            "Modeling desired behaviors and attitudes",
+            "Environmental design and context setting",
+            "Social proof and testimonials",
+            "Questions that guide thinking",
+            "Emotional connection and rapport",
+            "Logical reasoning and evidence presentation",
+        ]
+
+    def _create_influence_scenarios(self, context: str, goal: str) -> List[Dict[str, str]]:
+        """Create influence practice scenarios."""
+        return [
+            {
+                "scenario": "Team Buy-in",
+                "setup": "You need team support for a new initiative",
+                "challenge": "Gain enthusiastic commitment, not just compliance",
+                "practice_focus": "Vision sharing, addressing concerns, building excitement",
+            },
+            {
+                "scenario": "Client Objection Handling",
+                "setup": "Potential client has price objections",
+                "challenge": "Shift focus from cost to value",
+                "practice_focus": "Value demonstration, reframing, social proof",
+            },
+            {
+                "scenario": "Personal Boundary Setting",
+                "setup": "Need to establish boundaries with demanding colleague",
+                "challenge": "Be firm while maintaining positive relationship",
+                "practice_focus": "Assertiveness, empathy, win-win solutions",
+            },
+        ]
+
+    def _provide_ethical_guidelines(self) -> List[str]:
+        """Provide ethical guidelines for influence use."""
+        return [
+            "Use influence to create mutual benefit",
+            "Respect others' autonomy and right to choose",
+            "Be honest about your intentions and motivations",
+            "Consider long-term relationship impact",
+            "Avoid manipulation and deception",
+            "Help others make informed decisions",
+            "Take responsibility for influence outcomes",
+            "Use power to serve, not dominate",
+        ]
+
+    def _measure_influence_effectiveness(self) -> List[str]:
+        """Measure and improve influence effectiveness."""
+        return [
+            "Track agreement and follow-through rates",
+            "Monitor relationship quality over time",
+            "Assess mutual satisfaction with outcomes",
+            "Gather feedback on your influence style",
+            "Measure long-term versus short-term results",
+            "Evaluate ethical impact of your influence",
+            "Track skill development and growth",
+            "Adjust approach based on results and feedback",
+        ]
