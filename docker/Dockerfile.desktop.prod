@@ -1,0 +1,23 @@
+# Production Dockerfile for Desktop Application
+FROM node:20-alpine AS base
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files first for better layer caching
+COPY apps/desktop/package*.json ./
+
+# Install dependencies using npm ci for reproducible builds
+RUN npm ci --only=production
+
+# Copy application source code
+COPY apps/desktop/ ./
+
+# Set production environment
+ENV NODE_ENV=production
+
+# Expose port if needed
+EXPOSE 3000
+
+# Start the application
+CMD ["npm", "start"]
