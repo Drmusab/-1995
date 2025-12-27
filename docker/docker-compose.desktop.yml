@@ -1,0 +1,29 @@
+version: '3.8'
+
+# Desktop Application Docker Compose Configuration
+# This can be included in the main docker-compose.prod.yml or run standalone
+
+services:
+  desktop-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.desktop.prod
+    image: desktop-app:${TAG:-latest}
+    container_name: desktop-app
+    restart: always
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "${DESKTOP_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - ai_network
+
+networks:
+  ai_network:
+    external: true
