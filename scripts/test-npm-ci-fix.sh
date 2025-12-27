@@ -78,9 +78,9 @@ echo ""
 
 echo "Step 7: Check that exact versions are installed"
 echo "-------------------------------------------------------------------"
-REACT_VERSION=$(npm list @types/react --depth=0 2>/dev/null | grep @types/react | awk -F@ '{print $NF}')
-REDUX_VERSION=$(npm list redux --depth=0 2>/dev/null | grep redux | awk -F@ '{print $NF}')
-YAML_VERSION=$(npm list yaml --depth=0 2>/dev/null | grep yaml | awk -F@ '{print $NF}')
+REACT_VERSION=$(npm list @types/react --depth=0 2>/dev/null | grep '@types/react' | sed 's/.*@types\/react@//' | awk '{print $1}')
+REDUX_VERSION=$(npm list redux --depth=0 2>/dev/null | grep 'redux@' | sed 's/.*redux@//' | awk '{print $1}')
+YAML_VERSION=$(npm list yaml --depth=0 2>/dev/null | grep 'yaml@' | sed 's/.*yaml@//' | awk '{print $1}')
 
 echo "Installed: @types/react@$REACT_VERSION (expected: 18.3.27)"
 echo "Installed: redux@$REDUX_VERSION (expected: 5.0.1)"
