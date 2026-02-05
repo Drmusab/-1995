@@ -1,0 +1,176 @@
+{
+  "name": "Memory-Enhanced AI Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "smart-chat",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "retrieveMemory",
+        "query": "={{$json[\"message\"]}}",
+        "sessionId": "={{$json[\"session_id\"] || \"default-session\"}}",
+        "maxResults": 5,
+        "similarityThreshold": 0.6
+      },
+      "name": "Retrieve Relevant Memories",
+      "type": "n8n-nodes-ai-assistant.aiAssistantMemory",
+      "typeVersion": 1,
+      "position": [
+        460,
+        200
+      ],
+      "credentials": {
+        "aiAssistantApi": {
+          "id": "1",
+          "name": "AI Assistant API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "sendMessage",
+        "message": "={{$json[\"message\"]}}",
+        "sessionId": "={{$json[\"session_id\"] || \"default-session\"}}",
+        "userId": "={{$json[\"user_id\"] || \"anonymous\"}}",
+        "context": "={{JSON.stringify({\"relevant_memories\": $node[\"Retrieve Relevant Memories\"].json[\"memories\"]})}}"
+      },
+      "name": "AI Assistant Chat",
+      "type": "n8n-nodes-ai-assistant.aiAssistantChat",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "aiAssistantApi": {
+          "id": "1",
+          "name": "AI Assistant API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"importance\"]}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Check if Important",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "storeFact",
+        "fact": "={{$json[\"text\"]}}",
+        "sessionId": "={{$json[\"session_id\"]}}",
+        "importance": "={{$json[\"importance\"] || 0.7}}",
+        "tags": "conversation,ai-response"
+      },
+      "name": "Store Important Information",
+      "type": "n8n-nodes-ai-assistant.aiAssistantMemory",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        200
+      ],
+      "credentials": {
+        "aiAssistantApi": {
+          "id": "1",
+          "name": "AI Assistant API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({\"response\": $json[\"text\"], \"session_id\": $json[\"session_id\"], \"confidence\": $json[\"confidence\"], \"memory_used\": $json[\"memory_enhanced\"]})}}"
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Relevant Memories",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Assistant Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Assistant Chat": {
+      "main": [
+        [
+          {
+            "node": "Check if Important",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Important": {
+      "main": [
+        [
+          {
+            "node": "Store Important Information",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Important Information": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

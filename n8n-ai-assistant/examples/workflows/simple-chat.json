@@ -1,0 +1,79 @@
+{
+  "name": "Simple AI Chat Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "ai-chat-webhook"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "sendMessage",
+        "message": "={{$json[\"message\"]}}",
+        "sessionId": "={{$json[\"session_id\"] || \"default-session\"}}",
+        "userId": "={{$json[\"user_id\"] || \"anonymous\"}}"
+      },
+      "name": "AI Assistant Chat",
+      "type": "n8n-nodes-ai-assistant.aiAssistantChat",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "aiAssistantApi": {
+          "id": "1",
+          "name": "AI Assistant API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({\"response\": $json[\"text\"], \"session_id\": $json[\"session_id\"], \"confidence\": $json[\"confidence\"]})}}"
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Assistant Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Assistant Chat": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
